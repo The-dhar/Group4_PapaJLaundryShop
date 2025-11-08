@@ -1,0 +1,143 @@
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 20px 25px;
+    border-radius: 15px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    margin: 20px;
+    position: relative;
+}
+
+.dashboard-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1e1e1e;
+    text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+
+/* Right side (Bell + Account Info) */
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.bell {
+    position: relative;
+}
+
+.bell-button {
+    background: #08518C;
+    border: none;
+    border-radius: 50%;
+    padding: 10px;
+    cursor: pointer;
+    color: white;
+    box-shadow: 0 5px 10px rgba(0, 0, 0, 0.4);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.bell-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(30, 136, 229, 0.5);
+}
+
+.notification-badge {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    background-color: #ff1744;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 2px 5px;
+    border-radius: 10px;
+    box-shadow: 0 0 5px rgba(255, 23, 68, 0.5);
+}
+
+
+/* Dropdown Style */
+
+.notification-dropdown {
+    position: absolute;
+    top: 50px;
+    right: 0;
+    width: 280px;
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    padding: 15px;
+    animation: dropdownFade 0.25s ease;
+    z-index: 1000;
+}
+
+@keyframes dropdownFade {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.dropdown-header {
+    font-size: 16px;
+    font-weight: 700;
+    color: #08518C;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #e3f2fd;
+    padding-bottom: 6px;
+}
+
+.notification-list {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.notification-item {
+    background: white;
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 8px;
+    font-size: 14px;
+    color: #333;
+    box-shadow: 0 4px 10px rgba(10, 10, 10, 0.2);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.notification-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(25, 118, 210, 0.3);
+}
+
+.notification-id {
+    font-weight: bold;
+    color: #1565c0;
+}
+
+
+/* Account Info */
+
+.account-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    line-height: 1.2;
+}
+
+.account-name {
+    font-weight: 600;
+    color: #222;
+    font-size: 15px;
+}
+
+.account-role {
+    font-size: 13px;
+    color: #666;
+}

@@ -1,0 +1,36 @@
+.laundry-card {
+    border: 1px solid #ddd;
+    padding: 10px;
+    border-radius: 10px;
+    width: 100%;
+    height: auto;
+    background: #E3F2FD;
+    transition: 0.3s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.laundry-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.laundry-card button {
+    margin-top: 10px;
+    background-color: #007bff;
+    border: none;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.small-card-icon {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+    margin-bottom: 8px;
+}
