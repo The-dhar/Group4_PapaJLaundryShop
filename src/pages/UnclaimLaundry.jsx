@@ -1,27 +1,25 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import DataTable from 'react-data-table-component';
 import DashboardLayout from '../components/dashboardlayout';
-import { BsEye, BsPencil } from 'react-icons/bs';
+import { BsEye, BsPencil, BsExclamationTriangle } from 'react-icons/bs';
 import { useTransactions } from '../context/transactionsContext';
+import Swal from 'sweetalert2';
 import '../styles/inventorystyle.css';
 
-const Inventorymanagement = () => {
-  const { 
-    transactions, 
-    markTransactionPaid, 
-    updateTransactionPaidAmount, 
-    deleteTransaction 
+const UnclaimLaundry = () => {
+  const {
+    transactions,
+    markTransactionPickedUp,
+    deleteTransaction,
   } = useTransactions();
 
   const [filterPayment, setFilterPayment] = useState('All');
-  const [filterInventory, setFilterInventory] = useState('All');
+  const [filterInventory, setFilterInventory] = useState('in_shop');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTxn, setSelectedTxn] = useState(null);
   const [viewMode, setViewMode] = useState('view');
-  const [paidAmountInput, setPaidAmountInput] = useState('');
-  const [penaltyInput, setPenaltyInput] = useState('');
 
-  // Check if past due (penalty rule)
+  // Check if due date is 7–30 days late
   const isPastDue = (dueDate) => {
     if (!dueDate) return false;
     const today = new Date();
@@ -31,10 +29,7 @@ const Inventorymanagement = () => {
     return diffDays >= 7 && diffDays <= 30;
   };
 
-  const calculatePenalty = (amount, dueDate) => {
-    return isPastDue(dueDate) ? amount * 0.05 : 0;
-  };
-
+  // Filter table data
   const filteredData = useMemo(() => {
     return transactions.filter((row) => {
       const matchesPayment = filterPayment === 'All' || row.payment_status === filterPayment;
@@ -46,25 +41,49 @@ const Inventorymanagement = () => {
     });
   }, [transactions, filterPayment, filterInventory, searchTerm]);
 
-  // Mark paid logic with fixed payment_method = Cash
-  const handleMarkPaid = () => {
+  // Alert overdue items
+  useEffect(() => {
+    if (transactions.length > 0) {
+      const overdueItems = transactions.filter(
+        (row) => isPastDue(row.due_date) && row.inventory_status === 'in_shop'
+      );
+      if (overdueItems.length > 0) {
+        const receiptList = overdueItems.map((item) => item.receipt).join(', ');
+      Swal.fire({
+  title: "⚠️ Overdue Laundry Alert",
+  html: `
+    <div style="text-align:left; font-size:15px; line-height:1.6;">
+      <b>${overdueItems.length}</b> item${overdueItems.length !== 1 ? "s are" : " is"} past due 
+      (<b>7–30 days overdue</b>) and still in the shop.<br><br>
+
+      <b>Receipt ID(s):</b><br>
+      ${receiptList}<br><br>
+
+      Please check these items in the <b>Unclaimed</b> table.
+    </div>
+  `,
+  icon: "warning",
+  width: 420,
+  confirmButtonText: "Okay",
+  confirmButtonColor: "#d9534f",
+  background: "#fff8e6",
+  color: "#333",
+   customClass: {
+    popup: 'swal-border'  // Add custom class
+  }
+});
+      }
+    }
+  }, [transactions.length]);
+
+  // Picked up handler
+  const handleMarkPickedUp = () => {
     if (!selectedTxn) return;
-    const paidAmount = Number(paidAmountInput) || 0;
-    const penalty = Number(penaltyInput) || 0;
-
-    updateTransactionPaidAmount(
-      selectedTxn.id,
-      paidAmount,
-      penalty,
-      "Cash" // FORCE CASH ALWAYS
-    );
-
-    markTransactionPaid(selectedTxn.id);
+    markTransactionPickedUp(selectedTxn.id);
     setSelectedTxn(null);
-    setPaidAmountInput('');
-    setPenaltyInput('');
   };
 
+  // Table columns
   const columns = [
     { name: 'Receipt ID', selector: (row) => row.receipt, sortable: true },
     { name: 'Customer', selector: (row) => row.customer_name },
@@ -83,6 +102,17 @@ const Inventorymanagement = () => {
     },
     { name: 'Amount', selector: (row) => `₱${row.amount.toFixed(2)}` },
     {
+      name: 'Due Date',
+      cell: (row) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span>{row.due_date}</span>
+          {isPastDue(row.due_date) && (
+            <BsExclamationTriangle className="overdue-alert-icon" title="Past Due: 7-30 days overdue" />
+          )}
+        </div>
+      ),
+    },
+    {
       name: 'Action',
       cell: (row) => (
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -91,28 +121,17 @@ const Inventorymanagement = () => {
             title="View"
             onClick={() => {
               setViewMode('view');
-              setSelectedTxn({
-                ...row,
-                payment_method: "Cash" // force cash on view
-              });
-              setPaidAmountInput('');
-              setPenaltyInput('');
+              setSelectedTxn(row);
             }}
           >
             <BsEye />
           </button>
-
           <button
             className="inventory-action-btn edit"
-            title="Mark Paid/Picked Up"
+            title="Mark Picked Up"
             onClick={() => {
               setViewMode('edit');
-              setSelectedTxn({
-                ...row,
-                payment_method: "Cash" // force cash on edit
-              });
-              setPaidAmountInput(String(row.paid_amount || ''));
-              setPenaltyInput(String(calculatePenalty(row.amount, row.due_date)));
+              setSelectedTxn(row);
             }}
           >
             <BsPencil />
@@ -124,12 +143,10 @@ const Inventorymanagement = () => {
 
   return (
     <DashboardLayout>
-      <div className="inventory-page">
-        <div className="table-container">
-          <div className="background-table">
-            
-            {/* Search + Filters */}
-            <div className="search-filter-row">
+      <div className="unclaimed-page">
+        <div className="unclaimed-table-container">
+          <div className="unclaimed-background-table">
+            <div className="unclaimed-search-filter-row">
               <input
                 type="text"
                 placeholder="Search receipt or customer..."
@@ -148,8 +165,7 @@ const Inventorymanagement = () => {
               </select>
             </div>
 
-            {/* TABLE */}
-            <div className="table-wrapper">
+            <div className="unclaimed-table-wrapper">
               <DataTable
                 columns={columns}
                 data={filteredData}
@@ -157,20 +173,28 @@ const Inventorymanagement = () => {
                 pagination
                 paginationPerPage={10}
                 paginationRowsPerPageOptions={[5, 10, 20, 50]}
+                conditionalRowStyles={[
+                  {
+                    when: (row) => isPastDue(row.due_date) && row.inventory_status === 'in_shop',
+                    style: {
+                      backgroundColor: '#fecaca',
+                      borderLeft: '4px solid #dc2626',
+                    },
+                    classNames: ['overdue-row'],
+                  },
+                ]}
               />
             </div>
           </div>
         </div>
       </div>
 
-      {/* MODAL */}
       {selectedTxn && (
         <div className="inventory-modal">
           <div className="inventory-modal-content">
             <h3>Receipt: {selectedTxn.receipt}</h3>
             <p><strong>Customer:</strong> {selectedTxn.customer_name}</p>
             <p><strong>Address:</strong> {selectedTxn.customer_address}</p>
-
             <p><strong>Services:</strong></p>
             <ul>
               {selectedTxn.services.map((svc) => (
@@ -179,56 +203,25 @@ const Inventorymanagement = () => {
                 </li>
               ))}
             </ul>
-
             <p><strong>Total Weight:</strong> {selectedTxn.weight} kg</p>
             <p><strong>Total Amount:</strong> ₱{selectedTxn.amount.toFixed(2)}</p>
-
-            {/* ALWAYS CASH */}
-            <p><strong>Payment Method:</strong> Cash</p>
-
+            <p><strong>Payment Method:</strong> {selectedTxn.payment_method || '—'}</p>
             <p><strong>Paid Amount:</strong> ₱{(Number(selectedTxn.paid_amount) || 0).toFixed(2)}</p>
+            <p><strong>Due Date:</strong> {selectedTxn.due_date}</p>
             <p><strong>Payment Status:</strong> {selectedTxn.payment_status}</p>
             <p><strong>Inventory Status:</strong> {selectedTxn.inventory_status}</p>
 
-            {/* EDIT MODE */}
-            {viewMode === 'edit' && (
-              <div className="paid-amount-section">
-                <label><strong>Amount Paid:</strong></label>
-                <input
-                  type="number"
-                  className="paid-amount-input"
-                  placeholder="Enter amount paid"
-                  value={paidAmountInput}
-                  onChange={(e) => setPaidAmountInput(e.target.value)}
-                />
-
-                <label><strong>Penalty:</strong></label>
-                <input
-                  type="number"
-                  className="penalty-input"
-                  value={penaltyInput}
-                  onChange={(e) => setPenaltyInput(e.target.value)}
-                />
-
-                {paidAmountInput && (
-                  <p className="change-balance">
-                    {Number(paidAmountInput) >= (selectedTxn.amount + Number(penaltyInput)) ? (
-                      <>Change: ₱{(Number(paidAmountInput) - selectedTxn.amount - Number(penaltyInput)).toFixed(2)}</>
-                    ) : (
-                      <>Balance: ₱{(selectedTxn.amount + Number(penaltyInput) - Number(paidAmountInput)).toFixed(2)}</>
-                    )}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* MODAL BUTTONS */}
             <div className="modal-actions">
-              <button onClick={() => setSelectedTxn(null)} className="modal-btn secondary">Close</button>
+              <button onClick={() => setSelectedTxn(null)} className="modal-btn secondary">
+                Close
+              </button>
 
               {viewMode === 'view' && (
                 <button
-                  onClick={() => { deleteTransaction(selectedTxn.id); setSelectedTxn(null); }}
+                  onClick={() => {
+                    deleteTransaction(selectedTxn.id);
+                    setSelectedTxn(null);
+                  }}
                   className="modal-btn cancel"
                 >
                   Delete Transaction
@@ -237,11 +230,13 @@ const Inventorymanagement = () => {
 
               {viewMode === 'edit' && (
                 <button
-                  onClick={handleMarkPaid}
-                  disabled={selectedTxn.payment_status === 'paid'}
+                  onClick={handleMarkPickedUp}
+                  disabled={
+                    selectedTxn.inventory_status === 'picked_up' || selectedTxn.payment_status !== 'paid'
+                  }
                   className="modal-btn primary"
                 >
-                  Mark as Paid
+                  Mark as Picked Up
                 </button>
               )}
             </div>
@@ -252,4 +247,4 @@ const Inventorymanagement = () => {
   );
 };
 
-export default Inventorymanagement;
+export default UnclaimLaundry;

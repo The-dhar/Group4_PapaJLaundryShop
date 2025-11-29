@@ -1,45 +1,78 @@
 /* ====== Page Background ====== */
 
 
-/* ====== Page Background ====== */
+/* ====== Overdue Alert Banner ====== */
 
-.table-container {
-    min-height: 100vh;
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.inventory-header {
+    background: white;
+    border-radius: 20px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.inventory-header h2 {
+    margin: 0;
+}
+
+.inventory-header p {
+    margin: 8px 0 16px;
+    color: #475467;
+}
+
+.role-toggle {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.role-toggle select {
+    padding: 8px 14px;
+    border-radius: 12px;
+}
+
+.table-container,
+.unclaimed-table-container {
+    min-height: auto;
     padding: 20px;
     display: flex;
     justify-content: center;
     align-items: flex-start;
-    overflow: hidden;
-    /* prevent double scrollbar */
+    box-sizing: border-box;
 }
 
 
 /* ====== Inner White Box ====== */
 
-.background-table {
+.background-table,
+.unclaimed-background-table {
     width: 100%;
-    max-width: 1400px;
     background: white;
     border-radius: 20px;
     padding: 30px;
     transition: all 0.3s ease;
     display: flex;
     flex-direction: column;
-    height: 90vh;
-    /* fixed height for one scroll */
-    overflow: hidden;
-    /* contain scroll inside */
-}
-
-.background-table:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 25px 70px rgba(0, 0, 0, 0.35);
+    height: auto;
+    box-sizing: border-box;
 }
 
 
 /* ====== Search and Filter Section ====== */
 
-.search-filter-row {
+.search-filter-row,
+.unclaimed-search-filter-row {
     display: flex;
     align-items: center;
     gap: 15px;
@@ -47,7 +80,8 @@
     width: 100%;
 }
 
-.search-filter-row input[type='text'] {
+.search-filter-row input[type='text'],
+.unclaimed-search-filter-row input[type='text'] {
     flex: 1;
     min-width: 300px;
     border: 2px solid #e5e7eb;
@@ -59,7 +93,8 @@
     padding: 14px 24px;
 }
 
-.search-filter-row select {
+.search-filter-row select,
+.unclaimed-search-filter-row select {
     padding: 14px 20px;
     border: 2px solid #e5e7eb;
     border-radius: 30px;
@@ -71,7 +106,9 @@
 }
 
 .search-filter-row input[type='text']:focus,
-.search-filter-row select:focus {
+.search-filter-row select:focus,
+.unclaimed-search-filter-row input[type='text']:focus,
+.unclaimed-search-filter-row select:focus {
     border-color: #667eea;
     box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
 }
@@ -79,13 +116,22 @@
 
 /* ====== Table Container ====== */
 
-.table-wrapper {
+.table-wrapper,
+.unclaimed-table-wrapper {
     flex: 1;
-    overflow-y: auto;
-    /* only one scroll */
     border: 1px solid #e5e7eb;
     border-radius: 15px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    /* Horizontal scroll ON (mobile) */
+    overflow-x: auto;
+    /* Vertical scroll OFF */
+    overflow-y: visible !important;
+    scrollbar-width: none;
+}
+
+.table-wrapper::-webkit-scrollbar,
+.unclaimed-table-wrapper::-webkit-scrollbar {
+    display: none;
 }
 
 
@@ -118,9 +164,34 @@
 
 /* ====== Overdue Rows ====== */
 
-.rdt_TableRow.overdue {
-    background-color: #fff5f5;
-    border-left: 4px solid #dc3545;
+.rdt_TableRow.overdue-row {
+    background-color: #fecaca !important;
+    border-left: 4px solid #dc2626;
+}
+
+.rdt_TableRow.overdue-row:hover {
+    background-color: #fca5a5 !important;
+}
+
+.rdt_TableRow.overdue-row .rdt_TableCell {
+    background-color: transparent !important;
+}
+
+.overdue-alert-icon {
+    color: #dc2626;
+    font-size: 18px;
+    margin-left: 8px;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
 }
 
 
@@ -132,12 +203,300 @@
     font-size: 14px !important;
 }
 
+.status-pill {
+    text-transform: capitalize;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 12px;
+}
 
-/* ====== Footer (Optional) ====== */
+.status-paid {
+    background: #dcfce7;
+    color: #15803d;
+}
 
-.background-footer {
-    margin-top: 10px;
+.status-unpaid {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.status-in_shop {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.status-picked_up {
+    background: #ede9fe;
+    color: #5b21b6;
+}
+
+.inventory-view-btn {
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: none;
+    background: #6366f1;
+    color: white;
+    cursor: pointer;
+}
+
+
+/* ====== Modal ====== */
+
+.inventory-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.inventory-modal-content {
+    background: white;
+    border-radius: 20px;
+    max-width: 640px;
+    width: 100%;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.inventory-modal-content ul {
+    padding-left: 20px;
+    margin: 8px 0;
+}
+
+
+/* ====== Status Row ====== */
+
+.status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+
+/* ====== Logs ====== */
+
+.log-list {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 12px;
+}
+
+.modal-section {
+    border-top: 1px solid #f1f5f9;
+    padding-top: 12px;
+}
+
+.log-item {
+    border-bottom: 1px solid #f1f5f9;
+    padding: 8px 0;
+}
+
+.log-item:last-child {
+    border-bottom: none;
+}
+
+
+/* Modal Buttons */
+
+.modal-actions {
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.modal-btn {
+    flex: 1;
+    padding: 12px 16px;
+    font-weight: 600;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
     text-align: center;
+}
+
+.modal-btn.primary {
+    background: #2563eb;
+    color: white;
+}
+
+.modal-btn.secondary {
+    background: #e5e7eb;
+    color: #111;
+}
+
+.modal-btn.cancel {
+    background: #FF3B30;
+    color: white;
+}
+
+.modal-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #9ca3af;
+}
+
+
+/* ====== Action Icons ====== */
+
+.inventory-action-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+    transition: color 0.3s ease, transform 0.2s ease;
+    color: #007bff;
+}
+
+.inventory-action-btn.edit {
+    color: #28a745;
+}
+
+.inventory-action-btn:hover:not(:disabled) {
+    transform: scale(1.2);
+}
+
+.inventory-action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
     color: #6c757d;
+}
+
+
+/* ====== Paid Amount Section ====== */
+
+.paid-amount-section {
+    margin: 15px 0;
+    padding: 12px;
+    background-color: #f0f4f8;
+    border-left: 4px solid #667eea;
+    border-radius: 6px;
+}
+
+.paid-amount-section label {
+    display: block;
+    margin-bottom: 8px;
+    color: #333;
+}
+
+.paid-amount-input {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid #e5e7eb;
+    border-radius: 6px;
     font-size: 14px;
+    outline: none;
+    transition: border-color 0.3s ease;
+}
+
+.paid-amount-input:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.change-balance {
+    margin-top: 8px;
+    padding: 8px;
+    background-color: #e8f4f8;
+    border-radius: 4px;
+    color: #075985;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+
+/* ====== REMOVE ALL VERTICAL SCROLLBARS ====== */
+
+.rdt_TableBody {
+    overflow-y: visible !important;
+    overflow-x: visible !important;
+}
+
+.rdt_Table {
+    overflow-y: visible !important;
+    overflow-x: visible !important;
+}
+
+.rdt_Table::-webkit-scrollbar,
+.rdt_TableBody::-webkit-scrollbar {
+    display: none !important;
+}
+
+
+/* ============================
+   📱 MOBILE RESPONSIVE STYLES
+   ============================ */
+
+@media (max-width: 768px) {
+    .inventory-header {
+        padding: 20px;
+    }
+    .background-table,
+    .unclaimed-background-table {
+        padding: 20px;
+    }
+    /* Stack filter row */
+    .search-filter-row,
+    .unclaimed-search-filter-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .search-filter-row input,
+    .search-filter-row select,
+    .unclaimed-search-filter-row input,
+    .unclaimed-search-filter-row select {
+        width: 100%;
+        min-width: unset;
+    }
+    /* Mobile wrapper */
+    .table-wrapper,
+    .unclaimed-table-wrapper {
+        width: 100%;
+        overflow-x: auto;
+        overflow-y: visible !important;
+    }
+    .rdt_TableCell {
+        font-size: 12px !important;
+        padding: 10px 6px !important;
+    }
+    .rdt_TableHeadRow {
+        font-size: 11px !important;
+    }
+    /* Modal mobile */
+    .inventory-modal-content {
+        width: 90%;
+        border-radius: 16px;
+        padding: 16px;
+    }
+    /* Modal buttons stack */
+    .modal-actions {
+        flex-direction: column;
+    }
+    .modal-btn {
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .inventory-header h2 {
+        font-size: 20px;
+    }
+    .inventory-header p {
+        font-size: 14px;
+    }
+    .status-pill {
+        font-size: 10px;
+        padding: 4px 8px;
+    }
+    .inventory-action-btn {
+        font-size: 16px;
+    }
 }

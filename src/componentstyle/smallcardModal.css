@@ -178,26 +178,27 @@
     font-size: 14px;
     font-weight: 600;
     transition: all 0.2s;
+    width: 100%;
 }
 
 .modal-btn-cancel {
-    background-color: #64b5f6;
-    color: white;
+    background-color: #c8cdd1;
+    color: black;
 }
 
 .modal-btn-cancel:hover {
-    background-color: #42a5f5;
+    background-color: #8f9498;
     transform: translateY(-1px);
     box-shadow: 0 2px 8px rgba(100, 181, 246, 0.3);
 }
 
 .modal-btn-add {
-    background-color: #1976d2;
+    background-color: #03712b;
     color: white;
 }
 
 .modal-btn-add:hover {
-    background-color: #1565c0;
+    background-color: #036025;
     transform: translateY(-1px);
     box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
 }

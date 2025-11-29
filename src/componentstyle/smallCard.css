@@ -4,13 +4,25 @@
     border-radius: 10px;
     width: 100%;
     height: auto;
-    background: #E3F2FD;
+    background: #87b5d5;
     transition: 0.3s;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     text-align: center;
+    all: unset;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border: 1px solid #ddd;
+    padding: 15px;
+    border-radius: 12px;
+    cursor: pointer;
+}
+
+.laundry-card * {
+    all: revert;
 }
 
 .laundry-card:hover {
@@ -20,7 +32,6 @@
 
 .laundry-card button {
     margin-top: 10px;
-    background-color: #007bff;
     border: none;
     color: white;
     padding: 8px 12px;
@@ -29,8 +40,24 @@
 }
 
 .small-card-icon {
-    width: 40px;
-    height: 40px;
-    object-fit: contain;
-    margin-bottom: 8px;
+    width: 50px;
+    height: 50px;
+    margin-bottom: 10px;
+}
+
+.laundry-name {
+    font-size: 15px;
+    font-weight: 600;
+    margin-top: 5px;
+}
+
+.laundry-price {
+    font-size: 17px;
+    font-weight: bold;
+    margin-top: 3px;
+}
+
+.laundry-unit {
+    font-size: 10px;
+    opacity: 0.7;
 }

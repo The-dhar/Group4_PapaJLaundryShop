@@ -1,13 +1,15 @@
 /* ====== Receipt Page Background ====== */
 
 .receipt-container {
-    min-height: 100vh;
+    min-height: 100%;
+    width: 100%;
     padding: 20px;
     display: flex;
     justify-content: center;
     align-items: flex-start;
-    overflow: hidden;
-    /* avoid double scrollbar */
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
 }
 
 
@@ -15,21 +17,52 @@
 
 .receipt-background {
     width: 100%;
-    max-width: 1000px;
     background: white;
     border-radius: 20px;
     padding: 30px;
     transition: all 0.3s ease;
     display: flex;
     flex-direction: column;
-    height: 90vh;
+    height: auto;
     overflow: hidden;
-    /* scroll stays inside */
+    box-sizing: border-box;
 }
 
-.receipt-background:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 25px 70px rgba(0, 0, 0, 0.35);
+.status-pill {
+    text-transform: capitalize;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.status-picked_up {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.status-in_shop {
+    background: #e0f2fe;
+    color: #075985;
+}
+
+.receipt-warning {
+    color: #b91c1c;
+    font-weight: 600;
+    margin-top: 8px;
+}
+
+.receipt-header {
+    margin-bottom: 12px;
+}
+
+.receipt-header h2 {
+    margin: 0;
+}
+
+.receipt-header p {
+    margin: 6px 0 0;
+    color: #475467;
 }
 
 
@@ -77,10 +110,10 @@
 
 .receipt-table-wrapper {
     flex: 1;
-    overflow-y: auto;
     border: 1px solid #e5e7eb;
     border-radius: 15px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    width: 100%;
 }
 
 
@@ -163,7 +196,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.45);
+    background-color: rgba(0, 0, 0, 0.5);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -172,24 +205,37 @@
 
 .receipt-modal-content {
     background: white;
-    padding: 25px 30px;
+    padding: 20px 24px;
     border-radius: 15px;
-    width: 400px;
+    width: 360px;
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow-y: auto;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
     animation: fadeIn 0.3s ease;
+    position: relative;
 }
 
 .receipt-modal-content h3 {
-    margin-bottom: 15px;
-    color: #333;
-    font-size: 20px;
-    text-align: center;
+    display: none;
 }
 
 .receipt-modal-content p {
+    margin: 4px 0;
+    font-size: 12px;
+    color: #333;
+}
+
+.receipt-modal-content ul {
     margin: 8px 0;
+    padding-left: 20px;
+    list-style-type: disc;
+}
+
+.receipt-modal-content li {
+    margin: 4px 0;
     font-size: 14px;
-    color: #444;
+    color: #555;
 }
 
 .receipt-modal-content input[type="number"] {
@@ -217,7 +263,7 @@
 }
 
 .receipt-btn-save {
-    background-color: #08518C;
+    background-color: #28A745;
     color: white;
     border: none;
     padding: 10px 18px;
@@ -225,14 +271,19 @@
     cursor: pointer;
     font-size: 14px;
     transition: 0.3s;
+}
+
+.receipt-btn-save:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .receipt-btn-save:hover {
-    background-color: #08518C;
+    background-color: #058723;
 }
 
-.receipt-btn-cancel {
-    background-color: #6c757d;
+.receipt-btn-delete {
+    background-color: #FF3B30;
     color: white;
     border: none;
     padding: 10px 18px;
@@ -242,8 +293,116 @@
     transition: 0.3s;
 }
 
-.receipt-btn-cancel:hover {
-    background-color: #5a6268;
+.receipt-btn-delete:hover {
+    background-color: #b90e05;
+}
+
+.receipt-btn-cancel {
+    background-color: #e5e7eb;
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: 0.3s;
+}
+
+.receipt-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+
+/* ====== Thermal Receipt Layout ====== */
+
+.thermal-receipt {
+    width: 260px;
+    margin: 0 auto;
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+    color: #000;
+    border-top: 1px dashed #000;
+    border-bottom: 1px dashed #000;
+    padding: 8px 0;
+}
+
+.tr-header {
+    text-align: center;
+    margin-bottom: 6px;
+}
+
+.tr-shop-name {
+    font-size: 14px;
+    font-weight: 700;
+    margin: 0 0 2px 0;
+}
+
+.tr-shop-line {
+    margin: 0;
+}
+
+.tr-divider {
+    border-bottom: 1px solid #000;
+    margin: 6px 0;
+}
+
+.tr-divider.dotted {
+    border-bottom-style: dashed;
+}
+
+.tr-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin: 2px 0;
+}
+
+.tr-meta {
+    font-size: 10px;
+}
+
+.tr-head {
+    border-bottom: 1px solid #000;
+    padding-bottom: 2px;
+    margin-bottom: 2px;
+    font-weight: 700;
+}
+
+.tr-item {
+    flex: 2;
+}
+
+.tr-qty {
+    flex: 0.5;
+    text-align: right;
+}
+
+.tr-amount {
+    flex: 1;
+    text-align: right;
+}
+
+.tr-item-row {
+    font-size: 11px;
+}
+
+.tr-subtext {
+    display: block;
+    font-size: 9px;
+}
+
+.tr-total {
+    font-weight: 700;
+    margin-top: 4px;
+}
+
+.tr-footer {
+    text-align: center;
+    margin-top: 6px;
+    font-size: 9px;
 }
 
 
@@ -267,5 +426,20 @@
     margin-top: 10px;
     text-align: center;
     color: #6c757d;
-    font-size: 14px;
+    font-size: 5px;
+}
+
+.receipt-close-x {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: transparent;
+    border: none;
+    font-size: 20px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.receipt-close-x:hover {
+    color: red;
 }

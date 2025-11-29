@@ -1,28 +1,28 @@
 import React, { useEffect, useState } from "react";
 
 import "../componentstyle/smallcardModal.css";
+import '../componentstyle/customerModalstylesheet.css';
 
 const CustomerModal = ({ isOpen, onClose, onSave, initial }) => {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
-  const [phone, setPhone] = useState("");
 
   useEffect(() => {
     if (isOpen) {
       setName(initial?.name || "");
       setAddress(initial?.address || "");
-      setPhone(initial?.phone || "");
+    
     }
   }, [isOpen, initial]);
 
   if (!isOpen) return null;
 
   const handleSave = () => {
-    if (!name || !address || !phone) {
+    if (!name || !address) {
       alert("Please fill all customer fields.");
       return;
     }
-    onSave({ name, address, phone });
+    onSave({ name, address,});
     onClose();
   };
 
@@ -53,22 +53,12 @@ const CustomerModal = ({ isOpen, onClose, onSave, initial }) => {
               placeholder="Street, City"
             />
           </div>
-          <div className="modal-input-group">
-            <label className="modal-label">Phone</label>
-            <input
-              type="text"
-              className="modal-kilos-input"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="09xx xxx xxxx"
-            />
-          </div>
         </div>
         <div className="modal-footer">
-          <button className="modal-btn modal-btn-cancel" onClick={onClose}>
+          <button className="modal-btn cancel-btn" onClick={onClose}>
             Cancel
           </button>
-          <button className="modal-btn modal-btn-add" onClick={handleSave}>
+          <button className="modal-btn add-btn" onClick={handleSave}>
             Save
           </button>
         </div>

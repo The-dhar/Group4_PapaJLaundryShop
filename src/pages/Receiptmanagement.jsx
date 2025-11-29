@@ -1,182 +1,424 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import DataTable from 'react-data-table-component';
-import { BsEye, BsPencilSquare } from "react-icons/bs";
+import { BsEye, BsPencil } from 'react-icons/bs';
 import DashboardLayout from '../components/dashboardlayout';
+import { useTransactions } from '../context/transactionsContext';
 import '../styles/receiptstyle.css';
+import { jsPDF } from 'jspdf';
 
 const Receiptmanagement = () => {
+  const { transactions, deleteTransaction } = useTransactions();
+
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('All');
-  const [filterLaundry, setFilterLaundry] = useState('All');
+  const [filterInventory, setFilterInventory] = useState('All');
   const [selectedReceipt, setSelectedReceipt] = useState(null);
-  const [editReceipt, setEditReceipt] = useState(null);
-  const [penaltyFee, setPenaltyFee] = useState('');
+  const [viewMode, setViewMode] = useState('view'); // 'view' or 'edit'
 
-  const closeModal = () => setSelectedReceipt(null);
-  const closeEditModal = () => setEditReceipt(null);
+  // Filter for paid items (ready for viewing, or already picked_up ready for printing)
+  const readyReceipts = useMemo(
+    () => transactions.filter((txn) => txn.payment_status === 'paid' || txn.payment_status === 'unpaid'),
+    [transactions]
+  );
 
-  const handleView = (row) => setSelectedReceipt(row);
-  const handleEditStatus = (row) => setEditReceipt(row);
-
-  const handleSavePenalty = () => {
-    setTableData((prevData) =>
-      prevData.map((item) =>
-        item.receipt === editReceipt.receipt
-          ? { ...item, penaltyFee: penaltyFee || 0 }
-          : item
-      )
-    );
-    setEditReceipt(null);
-    setPenaltyFee('');
-  };
+  const filteredData = useMemo(() => {
+    return readyReceipts.filter((row) => {
+      const matchesInventory =
+        filterInventory === 'All' || row.inventory_status === filterInventory;
+      const matchesSearch =
+        row.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        row.receipt.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesInventory && matchesSearch;
+    });
+  }, [readyReceipts, searchTerm, filterInventory]);
 
   const columns = [
-    { name: 'Receipt ID', selector: row => row.receipt },
-    { name: 'Name', selector: row => row.name },
-    { name: 'Item Type', selector: row => row.item },
-    { name: 'Laundry Type', selector: row => row.laundryType },
-    { name: 'Quantity', selector: row => row.quantity },
-    { name: 'Price', selector: row => row.price },
-    { name: 'Payment Status', selector: row => row.paymentStatus },
-    { name: 'Laundry Status', selector: row => row.laundryStatus },
-    { name: 'Penalty', selector: row => row.penaltyFee },
-    { name: 'Date', selector: row => row.duedate },
+    { name: 'Receipt ID', selector: (row) => row.receipt, sortable: true },
+    { name: 'Customer', selector: (row) => row.customer_name },
+    { name: 'Service', selector: (row) => row.receipt_items?.[0]?.laundryType || 'N/A' },
+    {
+      name: 'Payment',
+      cell: (row) => (
+        <span className={`status-pill status-${row.payment_status}`}>{row.payment_status}</span>
+      ),
+    },
+    {
+      name: 'Status',
+      cell: (row) => (
+        <span className={`status-pill status-${row.inventory_status}`}>{row.inventory_status}</span>
+      ),
+    },
+    { name: 'Amount', selector: (row) => `₱${row.amount.toFixed(2)}` },
+    { name: 'Due Date', selector: (row) => row.due_date },
     {
       name: 'Action',
       cell: (row) => (
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '8px' }}>
           <button
-            onClick={() => handleView(row)}
             className="receipt-action-btn view"
+            title="View Receipt"
+            onClick={() => {
+              setViewMode('view');
+              setSelectedReceipt(row);
+            }}
           >
             <BsEye />
           </button>
           <button
-            onClick={() => handleEditStatus(row)}
             className="receipt-action-btn edit"
+            title="Print/Delete Receipt"
+            onClick={() => {
+              setViewMode('edit');
+              setSelectedReceipt(row);
+            }}
           >
-            <BsPencilSquare />
+            <BsPencil />
           </button>
         </div>
       ),
     },
   ];
 
-  const [tableData, setTableData] = useState([
-    {receipt: 'RCPT-01933',name: 'Johnny',item: 'Blanket',laundryType: 'Wash-and-fold',quantity: '1',price: '₱100',paymentStatus: 'Paid',penaltyFee: '₱0',laundryStatus: 'In-shop',duedate: '11/8/2025',},
-    {receipt: 'RCPT-01334',name: 'Ana Marie',item: 'Clothes',laundryType: 'Wash-and-fold',price: '₱100',quantity: '1',paymentStatus: 'Unpaid',penaltyFee: '₱0',laundryStatus: 'In-shop',duedate: '11/8/2025',},
-    { receipt: 'RCPT-03245', name: 'Ashley', item: 'Pants', laundryType: 'Dry-cleaning', quantity: '1', price: '₱100', paymentStatus: 'Paid', penaltyFee: '₱0', laundryStatus: 'Picked Up', duedate: '11/8/2025' },
-    { receipt: 'RCPT-19934', name: 'Kai Curtis', item: 'Curtains', laundryType: 'Wash-and-fold', quantity: '1', price: '₱100', paymentStatus: 'Paid', penaltyFee: '₱0', laundryStatus: 'In-shop', duedate: '11/11/2025' },
-    { receipt: 'RCPT-10209', name: 'Skylar', item: 'Comforter', laundryType: 'Wash-and-fold', quantity: '1', price: '₱100', paymentStatus: 'Unpaid', penaltyFee: '₱50', laundryStatus: 'In-shop', duedate: '11/1/2025' },
-    { receipt: 'RCPT-13843', name: 'Rowan Ismael', item: 'Blanket', laundryType: 'Dry-cleaning', quantity: '1', price: '₱100', paymentStatus: 'Paid', penaltyFee: '₱0', laundryStatus: 'Picked Up', duedate: '11/8/2025' },
-    { receipt: 'RCPT-23343', name: 'Benjamin', item: 'Blanket', laundryType: 'Wash-and-fold', quantity: '1', price: '₱100', paymentStatus: 'Paid', penaltyFee: '₱0', laundryStatus: 'In-shop', duedate: '11/8/2025' },
-    { receipt: 'RCPT-34909', name: 'Luna', item: 'Mix-Clothes', laundryType: 'Wash-and-fold', quantity: '1', price: '₱100', paymentStatus: 'Paid', penaltyFee: '₱0', laundryStatus: 'Picked Up', duedate: '11/8/2025' },
-    { receipt: 'RCPT-23913', name: 'Johnny', item: 'Blanket', laundryType: 'Dry-cleaning', quantity: '1', price: '₱100', paymentStatus: 'Unpaid', penaltyFee: '₱0', laundryStatus: 'In-shop', duedate: '11/8/2025' },
-    { receipt: 'RCP-09001', name: 'Johnny', item: 'Clothes', laundryType: 'Wash-and-fold', quantity: '1', price: '₱100', paymentStatus: 'Paid', penaltyFee: '₱0', laundryStatus: 'In-shop', duedate: '11/8/2025' },
-    { receipt: 'RCPT-13462', name: 'Johnny', item: 'Blanket', laundryType: 'Wash-and-fold', quantity: '1', price: '₱100', paymentStatus: 'Paid', penaltyFee: '₱0', laundryStatus: 'In-shop', duedate: '11/8/2025' },
-    { receipt: 'RCPT-92039', name: 'Johnny', item: 'Clothes', laundryType: 'Dry-cleaning', quantity: '1', price: '₱100', paymentStatus: 'Paid', penaltyFee: '₱0', laundryStatus: 'In-shop', duedate: '11/8/2025' },
-]);
-  
+  // Generate 58mm thermal-style PDF for the selected receipt
+  const handlePrint = () => {
+    if (!selectedReceipt) return;
 
-  const filteredData = tableData.filter((row) => {
-    const matchesStatus =
-      filterStatus === 'All' ||
-      row.paymentStatus.toLowerCase() === filterStatus.toLowerCase();
-    const matchesLaundry =
-      filterLaundry === 'All' ||
-      row.laundryStatus.toLowerCase() === filterLaundry.toLowerCase();
-    const matchesSearch =
-      row.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      row.item.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      row.receipt.toLowerCase().includes(searchTerm.toLowerCase());
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: [58, 200], // 58mm thermal width
+    });
 
-    return matchesStatus && matchesLaundry && matchesSearch;
-  });
+    let y = 6;
+    const centerX = 29; // half of 58mm
+
+    const services = Array.isArray(selectedReceipt.services)
+      ? selectedReceipt.services
+      : [];
+
+    const subtotalValue = services.reduce(
+      (sum, s) => sum + (s.total || 0),
+      0
+    );
+
+    // HEADER
+    doc.setFont('courier', 'bold');
+    doc.setFontSize(10);
+    doc.text("Papa J's Laundry Shop", centerX, y, { align: 'center' });
+    y += 4;
+
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(8);
+    doc.text('123 Sample Street, Barangay, City', centerX, y, {
+      align: 'center',
+    });
+    y += 3;
+    doc.text('Contact: 09xx-xxx-xxxx', centerX, y, { align: 'center' });
+    y += 3;
+    doc.text('TIN: 123-456-789', centerX, y, { align: 'center' });
+    y += 3;
+
+    doc.line(2, y, 56, y);
+    y += 3;
+
+    // META
+    doc.text(`Receipt: ${selectedReceipt.receipt}`, 2, y);
+    if (selectedReceipt.due_date) {
+      doc.text(String(selectedReceipt.due_date), 56, y, { align: 'right' });
+    }
+    y += 4;
+
+    doc.text(`Customer: ${selectedReceipt.customer_name}`, 2, y);
+    y += 4;
+    if (selectedReceipt.customer_address) {
+      doc.text(`Address: ${selectedReceipt.customer_address}`, 2, y);
+      y += 4;
+    }
+
+    doc.line(2, y, 56, y);
+    y += 3;
+
+    // SERVICES HEADER
+    doc.setFont('courier', 'bold');
+    doc.text('Srv', 2, y);
+    doc.text('Kg', 30, y, { align: 'center' });
+    doc.text('Amt', 56, y, { align: 'right' });
+    y += 3;
+    doc.line(2, y, 56, y);
+    y += 3;
+
+    // SERVICES LIST
+    doc.setFont('courier', 'normal');
+    services.forEach((svc) => {
+      const name = svc.serviceName || '';
+      const rate = svc.rate ?? 0;
+      const kilos = svc.kilos ?? 0;
+      const total = svc.total ?? 0;
+
+      doc.text(name.substring(0, 16), 2, y);
+      doc.text(String(kilos), 30, y, { align: 'center' });
+      doc.text(`₱${total.toFixed(2)}`, 56, y, { align: 'right' });
+      y += 3;
+
+      doc.setFontSize(7);
+      doc.text(`@ ₱${rate.toFixed(2)}`, 2, y);
+      doc.setFontSize(8);
+      y += 3;
+    });
+
+    doc.line(2, y, 56, y);
+    y += 3;
+
+    // TOTALS
+    doc.text('Subtotal', 2, y);
+    doc.text(`₱${subtotalValue.toFixed(2)}`, 56, y, { align: 'right' });
+    y += 3;
+
+    if (selectedReceipt.extra_charge_type === 'discount') {
+      doc.text('Discount', 2, y);
+      doc.text(
+        `-₱${(selectedReceipt.discount_amount || 0).toFixed(2)}`,
+        56,
+        y,
+        { align: 'right' }
+      );
+      y += 3;
+    }
+
+    if (selectedReceipt.extra_charge_type === 'express') {
+      doc.text('Express', 2, y);
+      doc.text('+₱100.00', 56, y, { align: 'right' });
+      y += 3;
+    }
+
+    doc.setFont('courier', 'bold');
+    doc.text('Total', 2, y);
+    doc.text(`₱${selectedTotal.toFixed(2)}`, 56, y, { align: 'right' });
+    y += 4;
+
+    doc.setFont('courier', 'normal');
+    doc.line(2, y, 56, y);
+    y += 3;
+
+    // PAYMENT INFO
+    doc.text('Payment:', 2, y);
+    doc.text(selectedReceipt.payment_method || '—', 56, y, {
+      align: 'right',
+    });
+    y += 3;
+
+    doc.text('Paid:', 2, y);
+    doc.text(`₱${selectedPaid.toFixed(2)}`, 56, y, { align: 'right' });
+    y += 3;
+
+    if (selectedPaid > 0) {
+      const label = selectedDiff >= 0 ? 'Change:' : 'Balance:';
+      doc.text(label, 2, y);
+      doc.text(`₱${Math.abs(selectedDiff).toFixed(2)}`, 56, y, {
+        align: 'right',
+      });
+      y += 3;
+    }
+
+    doc.text('Status:', 2, y);
+    doc.text(String(selectedReceipt.inventory_status || ''), 56, y, {
+      align: 'right',
+    });
+    y += 4;
+
+    doc.line(2, y, 56, y);
+    y += 4;
+
+    // FOOTER
+    doc.setFontSize(7);
+    doc.text('Thank you for choosing', centerX, y, { align: 'center' });
+    y += 3;
+    doc.text("Papa J's Laundry Shop!", centerX, y, { align: 'center' });
+
+    const blobUrl = doc.output('bloburl');
+    window.open(blobUrl);
+  };
+
+  const handleDeleteReceipt = () => {
+    if (selectedReceipt && window.confirm(`Delete Receipt ${selectedReceipt.receipt}?`)) {
+      deleteTransaction(selectedReceipt.id);
+      setSelectedReceipt(null);
+    }
+  };
+
+  // compute paid / diff for selected receipt (safe defaults)
+  const selectedPaid = selectedReceipt ? Number(selectedReceipt.paid_amount || 0) : 0;
+  const selectedTotal = selectedReceipt ? Number(selectedReceipt.amount || 0) : 0;
+  const selectedDiff = selectedPaid - selectedTotal;
 
   return (
     <DashboardLayout>
       <div className="receipt-container">
         <div className="receipt-background">
-          {/* === Filters === */}
           <div className="receipt-filter-row">
             <input
               type="text"
-              placeholder="Search by receipt number, customer name..."
+              placeholder="Search receipt or customer..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
-            <select
-              onChange={(e) => setFilterStatus(e.target.value)}
-              value={filterStatus}
+            <select 
+              value={filterInventory} 
+              onChange={(e) => setFilterInventory(e.target.value)}
+              style={{ marginLeft: '10px' }}
             >
-              <option value="All">All Payments</option>
-              <option value="Paid">Paid</option>
-              <option value="Unpaid">Unpaid</option>
-            </select>
-            <select
-              value={filterLaundry}
-              onChange={(e) => setFilterLaundry(e.target.value)}
-            >
-              <option value="All">All Laundry Status</option>
-              <option value="In-shop">In-shop</option>
-              <option value="Pick-up">Pick-up</option>
+              <option value="All">All Inventory</option>
+              <option value="in_shop">In Shop</option>
+              <option value="picked_up">Picked Up</option>
             </select>
           </div>
 
-          {/* === Table === */}
           <div className="receipt-table-wrapper">
             <DataTable
               columns={columns}
               data={filteredData}
               highlightOnHover
-              fixedHeader
-              fixedHeaderScrollHeight="95vh"
+              pagination
+                paginationPerPage={10} // show 10 rows per page by default
+                paginationRowsPerPageOptions={[5, 10, 20, 50]} // optional dropdown options
+              noDataComponent="No receipts found. Create one in POs first."
             />
           </div>
         </div>
       </div>
 
-      {/* === View Modal === */}
       {selectedReceipt && (
         <div className="receipt-modal">
           <div className="receipt-modal-content">
-            <h3>Receipt Details</h3>
-            <p><strong>Receipt ID:</strong> {selectedReceipt.receipt}</p>
-            <p><strong>Name:</strong> {selectedReceipt.name}</p>
-            <p><strong>Item:</strong> {selectedReceipt.item}</p>
-            <p><strong>Laundry Type:</strong> {selectedReceipt.laundryType}</p>
-            <p><strong>Quantity:</strong> {selectedReceipt.quantity}</p>
-            <p><strong>Price:</strong> {selectedReceipt.price}</p>
-            <p><strong>Penalty:</strong> {selectedReceipt.penaltyFee}</p>
-            <p><strong>Payment Status:</strong> {selectedReceipt.paymentStatus}</p>
-            <p><strong>Laundry Status:</strong> {selectedReceipt.laundryStatus}</p>
-            <button onClick={closeModal} className="receipt-btn-cancel">
-              Close
+            <button 
+              className="receipt-close-x"
+              onClick={() => setSelectedReceipt(null)}
+            >
+              ✕
             </button>
-          </div>
-        </div>
-      )}
+            <div className="thermal-receipt">
+              <div className="tr-header">
+                <h3 className="tr-shop-name">Papa J's Laundry Shop</h3>
+                <p className="tr-shop-line">123 Sample Street, Barangay, City</p>
+                <p className="tr-shop-line">Contact: 09xx-xxx-xxxx</p>
+                <p className="tr-shop-line">TIN: 123-456-789</p>
+                <div className="tr-divider" />
+                <div className="tr-row tr-meta">
+                  <span>Receipt: {selectedReceipt.receipt}</span>
+                  <span>{selectedReceipt.due_date}</span>
+                </div>
+                <div className="tr-row tr-meta">
+                  <span>Customer: {selectedReceipt.customer_name}</span>
+                </div>
+                {selectedReceipt.customer_address && (
+                  <div className="tr-row tr-meta">
+                    <span>Address: {selectedReceipt.customer_address}</span>
+                  </div>
+                )}
+                <div className="tr-divider" />
+              </div>
 
-      {/* === Edit Modal === */}
-      {editReceipt && (
-        <div className="receipt-modal">
-          <div className="receipt-modal-content">
-            <h3>Update Receipt Status</h3>
-            <p><strong>Receipt ID:</strong> {editReceipt.receipt}</p>
-            <label>Penalty Fee:</label>
-            <input
-              type="number"
-              value={penaltyFee}
-              onChange={(e) => setPenaltyFee(e.target.value)}
-              placeholder="Enter penalty fee"
-            />
-            <div className="receipt-modal-buttons">
-              <button onClick={handleSavePenalty} className="receipt-btn-save">
-                Save
-              </button>
-              <button onClick={closeEditModal} className="receipt-btn-cancel">
-                Cancel
-              </button>
+              <div className="tr-body">
+                <div className="tr-row tr-head">
+                  <span className="tr-item">Service</span>
+                  <span className="tr-qty">Kg</span>
+                  <span className="tr-amount">Amount</span>
+                </div>
+
+                {selectedReceipt.services.map((svc) => (
+                  <div className="tr-row tr-item-row" key={svc.id}>
+                    <span className="tr-item">
+                      {svc.serviceName}
+                      <span className="tr-subtext">@ ₱{svc.rate.toFixed(2)}</span>
+                    </span>
+                    <span className="tr-qty">{svc.kilos}</span>
+                    <span className="tr-amount">₱{svc.total.toFixed(2)}</span>
+                  </div>
+                ))}
+
+                <div className="tr-divider" />
+
+                <div className="tr-row">
+                  <span>Subtotal</span>
+                  <span>
+                    ₱
+                    {selectedReceipt.services
+                      .reduce((sum, s) => sum + s.total, 0)
+                      .toFixed(2)}
+                  </span>
+                </div>
+
+                {selectedReceipt.extra_charge_type === 'discount' && (
+                  <div className="tr-row">
+                    <span>Discount</span>
+                    <span>-₱{selectedReceipt.discount_amount.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {selectedReceipt.extra_charge_type === 'express' && (
+                  <div className="tr-row">
+                    <span>Express Charge</span>
+                    <span>+₱100.00</span>
+                  </div>
+                )}
+
+                <div className="tr-row tr-total">
+                  <span>Total</span>
+                  <span>₱{selectedTotal.toFixed(2)}</span>
+                </div>
+
+                <div className="tr-divider dotted" />
+
+                <div className="tr-row">
+                  <span>Payment Method</span>
+                  <span>{selectedReceipt.payment_method || '—'}</span>
+                </div>
+                <div className="tr-row">
+                  <span>Paid</span>
+                  <span>₱{selectedPaid.toFixed(2)}</span>
+                </div>
+
+                {selectedPaid > 0 && (
+                  <div className="tr-row">
+                    <span>{selectedDiff >= 0 ? 'Change' : 'Balance'}</span>
+                    <span>
+                      ₱
+                      {Math.abs(selectedDiff).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
+                <div className="tr-row">
+                  <span>Status</span>
+                  <span>{selectedReceipt.inventory_status}</span>
+                </div>
+
+                <div className="tr-footer">
+                  <p>Thank you for choosing My Laundry Shop!</p>
+                  <p>Please keep this receipt for your records.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="receipt-modal-actions">
+              {viewMode === 'edit' && (
+                <>
+                  <button
+                    onClick={handlePrint}
+                    className="receipt-btn-save"
+                    disabled={selectedReceipt.inventory_status !== 'picked_up'}
+                  >
+                    {selectedReceipt.inventory_status === 'picked_up'
+                      ? 'Print Receipt'
+                      : 'Print (Mark Picked Up First)'}
+                  </button>
+                  <button
+                    onClick={handleDeleteReceipt}
+                    className="receipt-btn-delete"
+                  >
+                    Delete Receipt
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

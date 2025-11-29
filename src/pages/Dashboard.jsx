@@ -35,9 +35,9 @@ const Dashboard = () => {
   const chartData = viewType === 'week' ? weekData : monthData;
   
   const transactions = [
-    { id: 'RCPT-00123', customer: 'Juan Dela Cruz', amount: '1,250.00', date: 'Oct 20, 2025', status: 'Completed' },
-    { id: 'RCPT-00124', customer: 'Maria Santos', amount: '870.00', date: 'Oct 21, 2025', status: 'Pending' },
-    { id: 'RCPT-00125', customer: 'Jose Ramirez', amount: '1,050.00', date: 'Oct 22, 2025', status: 'Completed' },
+    { id: 'RCPT-00123', customer: 'Juan Dela Cruz', amount: '1,250.00', date: 'Oct 20, 2025', status: 'Paid' },
+    { id: 'RCPT-00124', customer: 'Maria Santos', amount: '870.00', date: 'Oct 21, 2025', status: 'Unpaid' },
+    { id: 'RCPT-00125', customer: 'Jose Ramirez', amount: '1,050.00', date: 'Oct 22, 2025', status: 'Paid' },
   ];
   
     return (

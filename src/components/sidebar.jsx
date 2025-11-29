@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { BsGrid1X2Fill, BsCart3, BsBoxSeam, BsReceiptCutoff, BsDoorOpen } from 'react-icons/bs';
+import { BsGrid1X2Fill, BsCart3, BsBoxSeam, BsReceiptCutoff, BsDoorOpen,BsCashStack, Image  } from 'react-icons/bs';
 import '../componentstyle/sidebarstyle.css';
 
 const Sidebar = () => {
@@ -27,9 +27,15 @@ const Sidebar = () => {
                 </li>
                 <li className='sidebar-list-items'>
                     <Link to="/Inventory">
-                        <BsBoxSeam className='icon'/>
-                        Inventory Management
+                        <BsCashStack  className='icon'/>
+                        Transaction Management
                     </Link>
+                </li>
+                 <li className='sidebar-list-items'>
+                    <a href="/Unclaimed">
+                        <BsBoxSeam className='icon'/>
+                        Unclaimed Items
+                    </a>
                 </li>
                 <li className='sidebar-list-items'>
                     <a href="/Receipt">

@@ -63,9 +63,6 @@ export default function SignUpPage() {
               Log In
             </button>
            </form>
-            <p className="login-text">
-           Dont Have an Branch Account? <a href="signUp" className="signup-link">Create here</a>
-            </p>
           </form>
         </div>
       </div>

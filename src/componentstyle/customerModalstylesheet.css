@@ -180,28 +180,53 @@
     transition: all 0.2s;
 }
 
-.modal-btn-cancel {
-    background-color: #64b5f6;
+.cancel-btn {
+    background-color: #FF3B30;
     color: white;
 }
 
-.modal-btn-cancel:hover {
-    background-color: #42a5f5;
+.cancel-btn:hover {
+    background-color: #b90e05;
     transform: translateY(-1px);
     box-shadow: 0 2px 8px rgba(100, 181, 246, 0.3);
 }
 
-.modal-btn-add {
-    background-color: #1976d2;
+.add-btn {
+    background-color: #03712b;
     color: white;
 }
 
-.modal-btn-add:hover {
-    background-color: #1565c0;
+.add-btn:hover {
+    background-color: #024f1f;
     transform: translateY(-1px);
     box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
 }
 
 .modal-btn:active {
     transform: translateY(0);
+}
+
+
+/* stronger selectors for modal footer buttons to avoid being overridden */
+
+.modal-footer .cancel-btn {
+    background-color: #c8cdd1;
+    color: white;
+}
+
+.modal-footer .cancel-btn:hover {
+    background-color: #9ea1a4;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(100, 181, 246, 0.3);
+}
+
+.modal-footer .add-btn {
+    background-color: #03712b;
+    color: white;
+}
+
+.modal-footer .add-btn:hover {
+    background-color: #024f1f;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
 }

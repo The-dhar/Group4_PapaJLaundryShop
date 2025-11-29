@@ -66,11 +66,11 @@ body {
 }
 
 .form-input::placeholder {
-    color: #909090;
+    color: #1976d2;
 }
 
 .form-input:focus {
-    border-color: #000000;
+    border-color: #1976d2;
 }
 
 .login-button {
