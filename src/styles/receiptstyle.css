@@ -173,6 +173,10 @@
     cursor: pointer;
     font-size: 18px;
     transition: color 0.3s ease, transform 0.2s ease;
+    padding: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .receipt-action-btn.view {
@@ -185,6 +189,10 @@
 
 .receipt-action-btn:hover {
     transform: scale(1.2);
+}
+
+.receipt-action-btn:active {
+    transform: scale(1.1);
 }
 
 
@@ -256,21 +264,28 @@
 /* ====== Modal Buttons ====== */
 
 .receipt-modal-buttons {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 20px;
-    gap: 10px;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    border: none;
+    transition: 0.3s;
+    color: white;
+    display: inline-block;
+    min-width: 100px;
 }
 
 .receipt-btn-save {
     background-color: #28A745;
-    color: white;
-    border: none;
     padding: 10px 18px;
     border-radius: 8px;
-    cursor: pointer;
     font-size: 14px;
+    cursor: pointer;
+    border: none;
     transition: 0.3s;
+    color: white;
+    display: inline-block;
+    min-width: 100px;
 }
 
 .receipt-btn-save:disabled {
@@ -278,7 +293,7 @@
     cursor: not-allowed;
 }
 
-.receipt-btn-save:hover {
+.receipt-btn-save:hover:not(:disabled) {
     background-color: #058723;
 }
 
@@ -291,6 +306,7 @@
     cursor: pointer;
     font-size: 14px;
     transition: 0.3s;
+    min-width: 100px;
 }
 
 .receipt-btn-delete:hover {
@@ -299,13 +315,18 @@
 
 .receipt-btn-cancel {
     background-color: #e5e7eb;
-    color: white;
+    color: #333;
     border: none;
     padding: 10px 18px;
     border-radius: 8px;
     cursor: pointer;
     font-size: 14px;
     transition: 0.3s;
+    min-width: 100px;
+}
+
+.receipt-btn-cancel:hover {
+    background-color: #d1d5db;
 }
 
 .receipt-modal-actions {
@@ -438,8 +459,42 @@
     font-size: 20px;
     font-weight: bold;
     cursor: pointer;
+    color: #666;
 }
 
 .receipt-close-x:hover {
     color: red;
+}
+
+
+/* Receipt Picked Up Button */
+
+.receipt-btn-pickup {
+    background-color: #28a745;
+    /* Green color to indicate success */
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    /* space if you add an icon */
+}
+
+.receipt-btn-pickup:hover {
+    background-color: #218838;
+    /* Darker green on hover */
+    transform: translateY(-2px);
+    /* slight lift effect */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.receipt-btn-pickup:active {
+    transform: translateY(0);
+    box-shadow: none;
 }

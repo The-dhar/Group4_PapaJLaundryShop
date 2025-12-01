@@ -1,42 +1,11 @@
 /* ============================
-   📦 INVENTORY STYLES
+   📋 UNCLAIMED ITEMS STYLES
    ============================ */
 
 
-/* ====== Inventory Header ====== */
+/* ====== Unclaimed Table Container ====== */
 
-.inventory-header {
-    background: white;
-    border-radius: 20px;
-    padding: 24px;
-    margin-bottom: 20px;
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
-}
-
-.inventory-header h2 {
-    margin: 0;
-}
-
-.inventory-header p {
-    margin: 8px 0 16px;
-    color: #475467;
-}
-
-.role-toggle {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-}
-
-.role-toggle select {
-    padding: 8px 14px;
-    border-radius: 12px;
-}
-
-
-/* ====== Inventory Table Container ====== */
-
-.table-container {
+.unclaimed-table-container {
     min-height: auto;
     padding: 20px;
     display: flex;
@@ -46,9 +15,9 @@
 }
 
 
-/* ====== Inventory White Box ====== */
+/* ====== Unclaimed White Box ====== */
 
-.background-table {
+.unclaimed-background-table {
     width: 100%;
     background: white;
     border-radius: 20px;
@@ -61,9 +30,9 @@
 }
 
 
-/* ====== Inventory Search and Filter ====== */
+/* ====== Unclaimed Search and Filter ====== */
 
-.search-filter-row {
+.unclaimed-search-filter-row {
     display: flex;
     align-items: center;
     gap: 15px;
@@ -71,7 +40,7 @@
     width: 100%;
 }
 
-.search-filter-row input[type='text'] {
+.unclaimed-search-filter-row input[type='text'] {
     flex: 1;
     min-width: 300px;
     border: 2px solid #e5e7eb;
@@ -83,7 +52,7 @@
     padding: 14px 24px;
 }
 
-.search-filter-row select {
+.unclaimed-search-filter-row select {
     padding: 14px 20px;
     border: 2px solid #e5e7eb;
     border-radius: 30px;
@@ -94,16 +63,16 @@
     transition: all 0.3s ease;
 }
 
-.search-filter-row input[type='text']:focus,
-.search-filter-row select:focus {
+.unclaimed-search-filter-row input[type='text']:focus,
+.unclaimed-search-filter-row select:focus {
     border-color: #667eea;
     box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
 }
 
 
-/* ====== Inventory Table Wrapper ====== */
+/* ====== Unclaimed Table Wrapper ====== */
 
-.table-wrapper {
+.unclaimed-table-wrapper {
     flex: 1;
     border: 1px solid #e5e7eb;
     border-radius: 15px;
@@ -113,12 +82,12 @@
     scrollbar-width: none;
 }
 
-.table-wrapper::-webkit-scrollbar {
+.unclaimed-table-wrapper::-webkit-scrollbar {
     display: none;
 }
 
 
-/* ====== DataTable Styles (Inventory) ====== */
+/* ====== DataTable Styles (Unclaimed) ====== */
 
 .rdt_TableHeadRow {
     background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
@@ -251,13 +220,11 @@
     background: none;
     border: none;
     cursor: pointer;
+    display: flex;
+    align-items: center;
     font-size: 18px;
     transition: color 0.3s ease, transform 0.2s ease;
     color: #007bff;
-}
-
-.inventory-action-btn.edit {
-    color: #28a745;
 }
 
 .inventory-action-btn:hover:not(:disabled) {
@@ -386,69 +353,24 @@
 }
 
 
-/* ====== Paid Amount Section ====== */
-
-.paid-amount-section {
-    margin: 15px 0;
-    padding: 12px;
-    background-color: #f0f4f8;
-    border-left: 4px solid #667eea;
-    border-radius: 6px;
-}
-
-.paid-amount-section label {
-    display: block;
-    margin-bottom: 8px;
-    color: #333;
-}
-
-.paid-amount-input {
-    width: 100%;
-    padding: 10px;
-    border: 2px solid #e5e7eb;
-    border-radius: 6px;
-    font-size: 14px;
-    outline: none;
-    transition: border-color 0.3s ease;
-}
-
-.paid-amount-input:focus {
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-.change-balance {
-    margin-top: 8px;
-    padding: 8px;
-    background-color: #e8f4f8;
-    border-radius: 4px;
-    color: #075985;
-    font-weight: 600;
-    font-size: 13px;
-}
-
-
 /* ============================
    📱 MOBILE RESPONSIVE
    ============================ */
 
 @media (max-width: 768px) {
-    .inventory-header {
+    .unclaimed-background-table {
         padding: 20px;
     }
-    .background-table {
-        padding: 20px;
-    }
-    .search-filter-row {
+    .unclaimed-search-filter-row {
         flex-direction: column;
         align-items: stretch;
     }
-    .search-filter-row input,
-    .search-filter-row select {
+    .unclaimed-search-filter-row input,
+    .unclaimed-search-filter-row select {
         width: 100%;
         min-width: unset;
     }
-    .table-wrapper {
+    .unclaimed-table-wrapper {
         width: 100%;
         overflow-x: auto;
         overflow-y: visible !important;
@@ -474,12 +396,6 @@
 }
 
 @media (max-width: 480px) {
-    .inventory-header h2 {
-        font-size: 20px;
-    }
-    .inventory-header p {
-        font-size: 14px;
-    }
     .status-pill {
         font-size: 10px;
         padding: 4px 8px;

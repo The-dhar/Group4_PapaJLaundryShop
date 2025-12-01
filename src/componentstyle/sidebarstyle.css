@@ -4,17 +4,17 @@
     background: linear-gradient(180deg, #ffffff 0%, #e3f2fd 100%);
     color: #0a0a0a;
     height: 100vh;
-    width: 280px;
+    width: 250px;
+    /* Desktop default width */
     position: fixed;
     left: 0;
     top: 0;
     overflow-y: auto;
-    transition: all 0.3s ease-in-out;
+    transition: transform 0.3s ease-in-out, width 0.3s ease-in-out;
     z-index: 1000;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    /* Push logout to bottom */
     box-shadow: 4px 0 12px rgba(0, 0, 0, 0.15), inset 0 0 10px rgba(255, 255, 255, 0.4);
     border-right: 1px solid rgba(0, 0, 0, 0.05);
 }
@@ -66,19 +66,16 @@
 .sidebar-list-items {
     margin: 5px 0;
     text-align: start;
-    /* Center items horizontally */
 }
 
 .sidebar-list-items a {
     display: flex;
     align-items: start;
     justify-content: start;
-    /* Centers icons + text */
     padding: 16px;
     color: #212121;
     text-decoration: none;
     font-size: 15px;
-    /* Bigger text */
     font-weight: 500;
     border-left: 4px solid transparent;
     transition: all 0.3s ease;
@@ -124,11 +121,10 @@
 
 .sidebar-list-items:last-child a {
     background: #fff;
-    color: linear-gradient(90deg, #90caf9, #e3f2fd);
+    color: #90caf9;
     font-weight: 600;
     border-left-color: #90caf9;
     box-shadow: inset 0 0 6px rgba(244, 67, 54, 0.2);
-    transition: all 0.3s ease;
 }
 
 .sidebar-list-items:last-child a:hover {
@@ -148,28 +144,46 @@
 }
 
 
+/* Sidebar Open/Close Classes */
+
+#sidebar.closed {
+    transform: translateX(-300px);
+    /* matches desktop width */
+}
+
+#sidebar.open {
+    transform: translateX(0);
+}
+
+
 /* Responsive Adjustments */
 
 @media (max-width: 992px) {
     #sidebar {
-        width: 220px;
+        width: 250px;
+    }
+    #sidebar.closed {
+        transform: translateX(-250px);
     }
     .sidebar-brand {
         font-size: 20px;
     }
     .sidebar-list-items a {
-        font-size: 15px;
+        font-size: 14px;
         padding: 12px 14px;
     }
 }
 
 @media (max-width: 768px) {
     #sidebar {
-        left: -250px;
         width: 220px;
+        left: -220px;
+    }
+    #sidebar.closed {
+        transform: translateX(-220px);
     }
     #sidebar.active {
-        left: 0;
+        transform: translateX(0);
     }
     body.sidebar-open::before {
         content: "";

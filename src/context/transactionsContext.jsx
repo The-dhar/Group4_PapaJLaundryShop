@@ -254,26 +254,56 @@ export const TransactionsProvider = ({ children }) => {
     setTransactions((prev) => prev.filter((txn) => txn.id !== txnId));
   };
 
- // Update paid amount + penalty + balance for a transaction
-const updateTransactionPaidAmount = (txnId, paidAmount, penalty) => {
-  setTransactions((prev) =>
-    prev.map((txn) => {
-      if (txn.id === txnId) {
-        const totalWithPenalty = txn.amount + (penalty || 0);
-        const balance = totalWithPenalty - paidAmount;
+  // Update paid amount + penalty + balance for a transaction
+  const updateTransactionPaidAmount = (txnId, paidAmount, penalty) => {
+    setTransactions((prev) =>
+      prev.map((txn) => {
+        if (txn.id === txnId) {
+          const totalWithPenalty = txn.amount + (penalty || 0);
+          const balance = totalWithPenalty - paidAmount;
 
-        return {
-          ...txn,
-          paid_amount: paidAmount,
-          penalty: penalty,
-          total_payment: totalWithPenalty,
-          balance: balance < 0 ? 0 : balance,
-        };
-      }
-      return txn;
-    })
-  );
-};
+          return {
+            ...txn,
+            paid_amount: paidAmount,
+            penalty: penalty,
+            total_payment: totalWithPenalty,
+            balance: balance < 0 ? 0 : balance,
+          };
+        }
+        return txn;
+      })
+    );
+  };
+
+  // General update transaction function
+  const updateTransaction = (id, updates) => {
+    setTransactions((prev) =>
+      prev.map((txn) => {
+        if (txn.id === id) {
+          const updated = { ...txn, ...updates };
+          
+          // If inventory_status is being updated, also update receipt_items
+          if (updates.inventory_status && Array.isArray(updated.receipt_items)) {
+            updated.receipt_items = updated.receipt_items.map((item) => ({
+              ...item,
+              laundryStatus: updates.inventory_status,
+            }));
+          }
+
+          // If payment_status is being updated, also update receipt_items
+          if (updates.payment_status && Array.isArray(updated.receipt_items)) {
+            updated.receipt_items = updated.receipt_items.map((item) => ({
+              ...item,
+              paymentStatus: updates.payment_status,
+            }));
+          }
+
+          return updated;
+        }
+        return txn;
+      })
+    );
+  };
 
   const value = useMemo(
     () => ({
@@ -283,6 +313,7 @@ const updateTransactionPaidAmount = (txnId, paidAmount, penalty) => {
       markTransactionPickedUp,
       deleteTransaction,
       updateTransactionPaidAmount,
+      updateTransaction, // ← ADDED THIS!
     }),
     [transactions]
   );
@@ -301,5 +332,3 @@ export const useTransactions = () => {
   }
   return context;
 };
-
-

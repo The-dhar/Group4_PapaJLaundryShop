@@ -1,23 +1,18 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import DataTable from 'react-data-table-component';
 import DashboardLayout from '../components/dashboardlayout';
-import { BsEye, BsPencil, BsExclamationTriangle } from 'react-icons/bs';
+import { BsEye, BsExclamationTriangle } from 'react-icons/bs';
 import { useTransactions } from '../context/transactionsContext';
 import Swal from 'sweetalert2';
-import '../styles/inventorystyle.css';
+import '../styles/unclaimedstyle.css';
 
 const UnclaimLaundry = () => {
-  const {
-    transactions,
-    markTransactionPickedUp,
-    deleteTransaction,
-  } = useTransactions();
+  const { transactions } = useTransactions();
 
   const [filterPayment, setFilterPayment] = useState('All');
   const [filterInventory, setFilterInventory] = useState('in_shop');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTxn, setSelectedTxn] = useState(null);
-  const [viewMode, setViewMode] = useState('view');
 
   // Check if due date is 7–30 days late
   const isPastDue = (dueDate) => {
@@ -49,39 +44,30 @@ const UnclaimLaundry = () => {
       );
       if (overdueItems.length > 0) {
         const receiptList = overdueItems.map((item) => item.receipt).join(', ');
-      Swal.fire({
-  title: "⚠️ Overdue Laundry Alert",
-  html: `
-    <div style="text-align:left; font-size:15px; line-height:1.6;">
-      <b>${overdueItems.length}</b> item${overdueItems.length !== 1 ? "s are" : " is"} past due 
-      (<b>7–30 days overdue</b>) and still in the shop.<br><br>
+        Swal.fire({
+          title: "⚠️ Overdue Laundry Alert",
+          html: `
+            <div style="text-align:left; font-size:15px; line-height:1.6;">
+              <b>${overdueItems.length}</b> item${overdueItems.length !== 1 ? "s are" : " is"} past due 
+              (<b>7–30 days overdue</b>) and still in the shop.<br><br>
 
-      <b>Receipt ID(s):</b><br>
-      ${receiptList}<br><br>
+              <b>Receipt ID(s):</b><br>
+              ${receiptList}<br><br>
 
-      Please check these items in the <b>Unclaimed</b> table.
-    </div>
-  `,
-  icon: "warning",
-  width: 420,
-  confirmButtonText: "Okay",
-  confirmButtonColor: "#d9534f",
-  background: "#fff8e6",
-  color: "#333",
-   customClass: {
-    popup: 'swal-border'  // Add custom class
-  }
-});
+              Please check these items in the <b>Unclaimed</b> table.
+            </div>
+          `,
+          icon: "warning",
+          width: 420,
+          confirmButtonText: "Okay",
+          confirmButtonColor: "#d9534f",
+          background: "#fff8e6",
+          color: "#333",
+          customClass: { popup: 'swal-border' }
+        });
       }
     }
   }, [transactions.length]);
-
-  // Picked up handler
-  const handleMarkPickedUp = () => {
-    if (!selectedTxn) return;
-    markTransactionPickedUp(selectedTxn.id);
-    setSelectedTxn(null);
-  };
 
   // Table columns
   const columns = [
@@ -115,28 +101,13 @@ const UnclaimLaundry = () => {
     {
       name: 'Action',
       cell: (row) => (
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            className="inventory-action-btn view"
-            title="View"
-            onClick={() => {
-              setViewMode('view');
-              setSelectedTxn(row);
-            }}
-          >
-            <BsEye />
-          </button>
-          <button
-            className="inventory-action-btn edit"
-            title="Mark Picked Up"
-            onClick={() => {
-              setViewMode('edit');
-              setSelectedTxn(row);
-            }}
-          >
-            <BsPencil />
-          </button>
-        </div>
+        <button
+          className="inventory-action-btn view"
+          title="View"
+          onClick={() => setSelectedTxn(row)}
+        >
+          <BsEye />
+        </button>
       ),
     },
   ];
@@ -215,30 +186,6 @@ const UnclaimLaundry = () => {
               <button onClick={() => setSelectedTxn(null)} className="modal-btn secondary">
                 Close
               </button>
-
-              {viewMode === 'view' && (
-                <button
-                  onClick={() => {
-                    deleteTransaction(selectedTxn.id);
-                    setSelectedTxn(null);
-                  }}
-                  className="modal-btn cancel"
-                >
-                  Delete Transaction
-                </button>
-              )}
-
-              {viewMode === 'edit' && (
-                <button
-                  onClick={handleMarkPickedUp}
-                  disabled={
-                    selectedTxn.inventory_status === 'picked_up' || selectedTxn.payment_status !== 'paid'
-                  }
-                  className="modal-btn primary"
-                >
-                  Mark as Picked Up
-                </button>
-              )}
             </div>
           </div>
         </div>

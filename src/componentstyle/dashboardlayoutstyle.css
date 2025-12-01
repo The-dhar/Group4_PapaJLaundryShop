@@ -69,6 +69,50 @@
     box-sizing: border-box;
 }
 
+.dashboard-layout {
+    display: flex;
+    width: 100%;
+}
+
+
+/* Sidebar width when open */
+
+.sidebar-open .sidebar {
+    width: 240px;
+    /* Or whatever size your sidebar is */
+}
+
+
+/* Sidebar collapse (hidden) */
+
+.sidebar-closed .sidebar {
+    width: 0;
+    overflow: hidden;
+}
+
+
+/* Main content adjusts */
+
+.main-wrapper {
+    flex: 1;
+    transition: margin-left 0.3s ease;
+}
+
+
+/* When sidebar is open */
+
+.sidebar-open .main-wrapper {
+    margin-left: 240px;
+    /* same as sidebar width */
+}
+
+
+/* When sidebar is closed */
+
+.sidebar-closed .main-wrapper {
+    margin-left: 0;
+}
+
 
 /* === RESPONSIVE === */
 

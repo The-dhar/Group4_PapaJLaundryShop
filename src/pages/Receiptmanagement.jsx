@@ -1,13 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import DataTable from 'react-data-table-component';
-import { BsEye, BsPencil } from 'react-icons/bs';
+import { BsEye, BsPrinter, BsCheck} from 'react-icons/bs';
 import DashboardLayout from '../components/dashboardlayout';
 import { useTransactions } from '../context/transactionsContext';
 import '../styles/receiptstyle.css';
 import { jsPDF } from 'jspdf';
 
 const Receiptmanagement = () => {
-  const { transactions, deleteTransaction } = useTransactions();
+  const { transactions, deleteTransaction, updateTransaction } = useTransactions();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterInventory, setFilterInventory] = useState('All');
@@ -71,7 +71,7 @@ const Receiptmanagement = () => {
               setSelectedReceipt(row);
             }}
           >
-            <BsPencil />
+            <BsPrinter />
           </button>
         </div>
       ),
@@ -245,6 +245,18 @@ const Receiptmanagement = () => {
     }
   };
 
+  const handleMarkPickedUp = () => {
+    if (selectedReceipt && window.confirm(`Mark Receipt ${selectedReceipt.receipt} as Picked Up?`)) {
+      updateTransaction(selectedReceipt.id, { 
+        inventory_status: 'picked_up' 
+      });
+      setSelectedReceipt({
+        ...selectedReceipt,
+        inventory_status: 'picked_up'
+      });
+    }
+  };
+
   // compute paid / diff for selected receipt (safe defaults)
   const selectedPaid = selectedReceipt ? Number(selectedReceipt.paid_amount || 0) : 0;
   const selectedTotal = selectedReceipt ? Number(selectedReceipt.amount || 0) : 0;
@@ -278,8 +290,8 @@ const Receiptmanagement = () => {
               data={filteredData}
               highlightOnHover
               pagination
-                paginationPerPage={10} // show 10 rows per page by default
-                paginationRowsPerPageOptions={[5, 10, 20, 50]} // optional dropdown options
+              paginationPerPage={10}
+              paginationRowsPerPageOptions={[5, 10, 20, 50]}
               noDataComponent="No receipts found. Create one in POs first."
             />
           </div>
@@ -400,6 +412,23 @@ const Receiptmanagement = () => {
             </div>
 
             <div className="receipt-modal-actions">
+              {viewMode === 'view' && (
+                <>
+                  {selectedReceipt.inventory_status === 'in_shop' && (
+                    <button
+               onClick={handleMarkPickedUp}
+               className="receipt-btn-pickup"
+              >
+                 <BsCheck /> Mark as Picked Up
+                </button>
+                  )}
+                  {selectedReceipt.inventory_status === 'picked_up' && (
+                    <div style={{ color: '#28a745', fontWeight: '600', padding: '10px' }}>
+                      ✓ Already Picked Up
+                    </div>
+                  )}
+                </>
+              )}
               {viewMode === 'edit' && (
                 <>
                   <button

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import DataTable from 'react-data-table-component';
 import DashboardLayout from '../components/dashboardlayout';
-import { BsEye, BsPencil } from 'react-icons/bs';
+import { BsEye,BsPlus } from 'react-icons/bs';
 import { useTransactions } from '../context/transactionsContext';
 import '../styles/inventorystyle.css';
 
@@ -115,7 +115,7 @@ const Inventorymanagement = () => {
               setPenaltyInput(String(calculatePenalty(row.amount, row.due_date)));
             }}
           >
-            <BsPencil />
+           <BsPlus/> 
           </button>
         </div>
       ),
