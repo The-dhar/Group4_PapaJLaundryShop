@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, TextInput,Alert,StyleSheet,SafeAreaView,StatusBar
-} from 'react-native';
-
+import { View, Text, ScrollView, TouchableOpacity, Modal, TextInput,Alert,StyleSheet,SafeAreaView,StatusBar} from 'react-native';
+import { useRouter } from "expo-router";
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
 const LaundryPriceManager = () => {
@@ -201,16 +200,51 @@ const LaundryPriceManager = () => {
       setNewService({ ...newService, tiers: updated });
     }
   };
-
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+   
+  const handleProfile = () => {
+    setOpen(false);
+    router.push("/profile");
+  };
+  
+  const handleLogout = () => {
+    setOpen(false);
+    router.push("/login");
+  };
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Laundry Pricing</Text>
-        <View style={styles.headerUnderline} />
-      </View>
+     <View style={styles.header}>
+                  {/* LEFT SIDE: Dashboard title + underline */}
+                  <View style={styles.headerLeft}>
+                    <Text style={styles.headerText}>Price Management</Text>
+                    <View style={styles.headerAccent} />
+                  </View>
+          
+                  {/* RIGHT SIDE: Profile button */}
+                  <View style={styles.profileContainer}>
+                    <TouchableOpacity
+                      style={styles.profileBtn}
+                      onPress={() => setOpen(!open)}
+                    >
+                      <Ionicons name="person-circle-outline" size={30} color="#1e293b" />
+                    </TouchableOpacity>
+          
+                    {open && (
+                      <View style={styles.dropdown}>
+                        <TouchableOpacity style={styles.dropdownItem} onPress={handleProfile}>
+                          <Text style={styles.dropdownText}>Profile</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.dropdownItem, styles.dropdownItemLast]} onPress={handleLogout}>
+                          <Text style={styles.dropdownText}>Logout</Text>
+                        </TouchableOpacity>
+                  </View>
+                )}
+           </View>
+        </View>
+     
 
       <ScrollView style={styles.content}>
         <View style={styles.card}>
@@ -301,7 +335,7 @@ const LaundryPriceManager = () => {
                     <Text style={styles.tierEditTitle}>Tier {index + 1}</Text>
                     {editedTiers.length > 1 && (
                       <TouchableOpacity
-                     onPress={() => handleRemoveNewServiceTier(index)}
+                     onPress={() => handleRemoveTier(index)}
                     style={styles.deleteButton}
                     >
                     <Ionicons name="trash-outline" size={20} color="#000000ff" />
@@ -517,16 +551,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
-  },
-  header: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
   },
   headerTitle: {
     fontSize: 28,
@@ -872,6 +896,76 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     marginTop: 8,
     marginBottom: 16,
+  },
+   header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    paddingTop: 12,
+    paddingBottom: 20,
+    backgroundColor: "#ffffff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 1000, // Added high z-index to header
+  },
+  headerText: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#1e293b",
+    letterSpacing: -0.5,
+  },
+  
+  headerLeft: {
+    flexDirection: "column",
+    position: "relative",
+  },
+  profileContainer: {
+    position: "relative",
+    zIndex: 2000, // Higher z-index for profile container
+  },
+  profileBtn: {
+    padding: 6,
+  },
+  dropdown: {
+    position: "absolute",
+    top: 40,
+    right: 0,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 999, // Very high elevation for dropdown
+    minWidth: 120,
+    zIndex: 9999, // Extremely high z-index
+  },
+  dropdownItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  dropdownItemLast: {
+    borderBottomWidth: 0, // Remove border from last item
+  },
+  dropdownText: {
+    fontSize: 14,
+    color: "#1e293b",
+    fontWeight: "600",
+  },
+  headerAccent: {
+    position: "absolute",
+    bottom: -8,
+    left: 0,
+    width: 60,
+    height: 4,
+    backgroundColor: "#3b82f6",
+    borderRadius: 2,
   },
 });
 

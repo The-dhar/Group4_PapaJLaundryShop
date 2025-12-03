@@ -14,7 +14,17 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 
 const BranchAccountManager = () => {
   const router = useRouter();
-
+  const [open, setOpen] = useState(false);
+   
+  const handleProfile = () => {
+    setOpen(false);
+    router.push("/profile");
+  };
+  
+  const handleLogout = () => {
+    setOpen(false);
+    router.push("/login");
+  };
   const [branches, setBranches] = useState([
     {
       id: 1,
@@ -67,13 +77,35 @@ const BranchAccountManager = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Branches</Text>
-          <View style={styles.headerAccent} />
-        </View>
-      </View>
+     <View style={styles.header}>
+             {/* LEFT SIDE: Dashboard title + underline */}
+             <View style={styles.headerLeft}>
+               <Text style={styles.headerText}>Branch Accounts</Text>
+               <View style={styles.headerAccent} />
+             </View>
+     
+             {/* RIGHT SIDE: Profile button */}
+             <View style={styles.profileContainer}>
+               <TouchableOpacity
+                 style={styles.profileBtn}
+                 onPress={() => setOpen(!open)}
+               >
+                 <Ionicons name="person-circle-outline" size={30} color="#1e293b" />
+               </TouchableOpacity>
+     
+               {open && (
+                 <View style={styles.dropdown}>
+                   <TouchableOpacity style={styles.dropdownItem} onPress={handleProfile}>
+                     <Text style={styles.dropdownText}>Profile</Text>
+                   </TouchableOpacity>
+                   <TouchableOpacity style={[styles.dropdownItem, styles.dropdownItemLast]} onPress={handleLogout}>
+                     <Text style={styles.dropdownText}>Logout</Text>
+                   </TouchableOpacity>
+                 </View>
+               )}
+             </View>
+           </View>
+     
 
       {/* Branch List */}
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -131,7 +163,7 @@ const BranchAccountManager = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Create Branch</Text>
+              <Text style={styles.modalTitle}>Create Account</Text>
               <TouchableOpacity
                 onPress={() => setIsModalOpen(false)}
                 style={styles.closeButton}
@@ -205,17 +237,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8fafc',
   },
-  header: {
-    backgroundColor: '#ffffff',
-    paddingTop: 12,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
-  },
+
   headerContent: {
     position: 'relative',
   },
@@ -491,4 +513,65 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: 0.3,
   },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    paddingTop: 12,
+    paddingBottom: 20,
+    backgroundColor: "#ffffff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 1000, // Added high z-index to header
+  },
+  headerText: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#1e293b",
+    letterSpacing: -0.5,
+  },
+  
+  headerLeft: {
+    flexDirection: "column",
+    position: "relative",
+  },
+  dropdown: {
+    position: "absolute",
+    top: 40,
+    right: 0,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 999, // Very high elevation for dropdown
+    minWidth: 120,
+    zIndex: 9999, // Extremely high z-index
+  },
+  dropdownItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  dropdownItemLast: {
+    borderBottomWidth: 0, // Remove border from last item
+  },
+  dropdownText: {
+    fontSize: 14,
+    color: "#1e293b",
+    fontWeight: "600",
+  },
+profileContainer: {
+    position: "relative",
+    zIndex: 2000, // Higher z-index for profile container
+  },
+  profileBtn: {
+    padding: 6,
+  }
 });

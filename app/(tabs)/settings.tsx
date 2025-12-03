@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, } from 'react';
 import {
   Modal,
   SafeAreaView,
@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-
+import { useRouter } from "expo-router";
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 const ROWS_PER_PAGE = 5;
@@ -66,15 +66,48 @@ const BranchList = () => {
       setSelectedBranch(null);
     }
   };
-
+  const router = useRouter();
+    const [open, setOpen] = useState(false);
+  const handleProfile = () => {
+    setOpen(false);
+    router.push("/profile");
+  };
+  
+  const handleLogout = () => {
+    setOpen(false);
+    router.push("/login");
+  };
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <Text style={styles.headerTitle}>Branch Settings</Text>
-            <View style={styles.headerAccent} />
-          </View>
-        </View>
+     <View style={styles.header}>
+                  {/* LEFT SIDE: Dashboard title + underline */}
+                  <View style={styles.headerLeft}>
+                    <Text style={styles.headerText}>Account Settings</Text>
+                    <View style={styles.headerAccent} />
+                  </View>
+          
+                  {/* RIGHT SIDE: Profile button */}
+                  <View style={styles.profileContainer}>
+                    <TouchableOpacity
+                      style={styles.profileBtn}
+                      onPress={() => setOpen(!open)}
+                    >
+                      <Ionicons name="person-circle-outline" size={30} color="#1e293b" />
+                    </TouchableOpacity>
+          
+                    {open && (
+                      <View style={styles.dropdown}>
+                        <TouchableOpacity style={styles.dropdownItem} onPress={handleProfile}>
+                          <Text style={styles.dropdownText}>Profile</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.dropdownItem, styles.dropdownItemLast]} onPress={handleLogout}>
+                          <Text style={styles.dropdownText}>Logout</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                </View>
+     
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -227,17 +260,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 60,
-  },
- header: {
-    backgroundColor: '#ffffff',
-    paddingTop: 12,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
   },
   headerContent: {
     position: 'relative',
@@ -511,6 +533,67 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 16,
     letterSpacing: 0.3,
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    paddingTop: 12,
+    paddingBottom: 20,
+    backgroundColor: "#ffffff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 1000, // Added high z-index to header
+  },
+  headerText: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#1e293b",
+    letterSpacing: -0.5,
+  },
+  
+  headerLeft: {
+    flexDirection: "column",
+    position: "relative",
+  },
+  profileContainer: {
+    position: "relative",
+    zIndex: 2000, // Higher z-index for profile container
+  },
+  profileBtn: {
+    padding: 6,
+  },
+  dropdown: {
+    position: "absolute",
+    top: 40,
+    right: 0,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 999, // Very high elevation for dropdown
+    minWidth: 120,
+    zIndex: 9999, // Extremely high z-index
+  },
+  dropdownItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  dropdownItemLast: {
+    borderBottomWidth: 0, // Remove border from last item
+  },
+  dropdownText: {
+    fontSize: 14,
+    color: "#1e293b",
+    fontWeight: "600",
   },
 });
 
