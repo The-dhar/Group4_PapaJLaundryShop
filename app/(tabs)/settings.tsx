@@ -168,6 +168,16 @@ const BranchList = () => {
                   placeholderTextColor="#9ca3af"
                 />
               </View>
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}> Clerk Username:</Text>
+                <TextInput
+                  style={styles.input}
+                  value={username}
+                  onChangeText={setUsername}
+                  placeholder="Clerk username"
+                  placeholderTextColor="#9ca3af"
+                />
+              </View>
 
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Password:</Text>
@@ -187,7 +197,7 @@ const BranchList = () => {
                   onPress={handleDelete}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.deleteButtonText}>Delete</Text>
+                  <Text style={styles.deleteButtonText}>Archive</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
