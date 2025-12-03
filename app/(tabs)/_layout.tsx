@@ -48,12 +48,20 @@ export default function TabLayout() {
 />
 
 <Tabs.Screen
-  name="profile"
+  name="clerk"
   options={{
-    title: 'Profile',
+    title: 'clerk',
     tabBarIcon: ({ color }) => (
       <Ionicons size={28} name="person-outline" color={color} />
     ),
+  }}
+/>
+
+{/* Hidden tab - can still be navigated to programmatically */}
+<Tabs.Screen
+  name="profile"
+  options={{
+    href: null,  // This hides it from the tab bar
   }}
 />
 </Tabs>

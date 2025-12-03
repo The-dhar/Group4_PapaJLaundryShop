@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { Dimensions, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Dimensions, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Pressable,} from "react-native";
 import { BarChart, LineChart } from "react-native-chart-kit";
+import { useRouter } from "expo-router";
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
@@ -12,79 +13,136 @@ export default function DashboardAnalytics() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [revenueView, setRevenueView] = useState("weekly");
   const [branchView, setBranchView] = useState("weekly");
+  const [tooltipPos, setTooltipPos] = useState({
+    x: 0,
+    y: 0,
+    value: 0,
+    visible: false
+  });
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
 
   // Weekly Revenue Data
-  const weeklyRevenueData = [20000, 85000, 45000, 15000, 5000, 35000, 55000, 75000, 25000, 10000];
-  const weeklyLabels = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+  const weeklyRevenueData = [20000, 85000, 45000, 15000, 5000, 35000, 55000,];
+  const weeklyLabels = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",];
 
-  const monthlyRevenueData = [45000, 65000, 55000, 75000];
+  const monthlyRevenueData = [100000, 200000, 300000, 400000];
   const monthlyLabels = ["W1", "W2", "W3", "W4"];
 
   const currentRevenue = revenueView === "weekly" ? weeklyRevenueData : monthlyRevenueData;
   const currentLabels = revenueView === "weekly" ? weeklyLabels : monthlyLabels;
 
-  // Branch Data - Weekly
-  const weeklyBranchData = [3, 4, 7, 10, 3, 5, 8, 8, 3, 3, 3];
+  const weeklyBranchData = [300, 400, 700, 1000, 300, 500, 800, 800, 300, 300, 300];
   const weeklyBranchLabels = [
     "Upper Calarian",
     "San Roque 1",
     "Pasonanca",
-    "Pasonanca",
     "Lower Calarian",
     "Tumaga",
     "Lunzuran",
-    "brgy sta cruz",
-    "brgy sunrise)",
-    "brgy santa cruz",
-    "brgy santa cruz"
+    "Brgy Sta Cruz",
+    "Brgy Sunrise",
+    "Brgy Santa Cruz 1",
+    "Brgy Santa Cruz 2",
+    "Brgy Santa Cruz 3"
   ];
 
-  // Branch Data - Monthly
-  const monthlyBranchData = [15, 25, 70, 100, 40, 60, 80, 35, 35, 40];
+  // Monthly Branch Data
+  const monthlyBranchData = [10000, 25000, 30000, 40000, 50000, 60000, 10000, 35000, 10000, 40000, 50000];
   const monthlyBranchLabels = [
     "Upper Calarian",
-    "San roque1",
-    "San roque2",
+    "San Roque 1",
+    "San Roque 2",
     "Pasonanca",
     "Lower Calarian",
     "Tumaga",
     "Lunzuran",
-    "brgy sta cruz",
-    "brgy sunrise)",
-    "brgy santa cruz"
+    "Brgy Sta Cruz",
+    "Brgy Sunrise",
+    "Brgy Santa Cruz 1",
+    "Brgy Santa Cruz 2"
   ];
-
+  
   const currentBranchValues = branchView === "weekly" ? weeklyBranchData : monthlyBranchData;
   const currentBranchLabels = branchView === "weekly" ? weeklyBranchLabels : monthlyBranchLabels;
+  
+  const totalSales = 10001;
+  const totalOrders = 505;
+  const salesTrend = 1000;
+  const ordersTrend = 100;
+  
+  const handleProfile = () => {
+    setOpen(false);
+    router.push("/profile");
+  };
+  
+  const handleLogout = () => {
+    setOpen(false);
+    router.push("/login");
+  };
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* HEADER */}
       <View style={styles.header}>
-        <View style={styles.headerContent}>
+        {/* LEFT SIDE: Dashboard title + underline */}
+        <View style={styles.headerLeft}>
           <Text style={styles.headerText}>Dashboard</Text>
           <View style={styles.headerAccent} />
+        </View>
+
+        {/* RIGHT SIDE: Profile button */}
+        <View style={styles.profileContainer}>
+          <TouchableOpacity
+            style={styles.profileBtn}
+            onPress={() => setOpen(!open)}
+          >
+            <Ionicons name="person-circle-outline" size={30} color="#1e293b" />
+          </TouchableOpacity>
+
+          {open && (
+            <View style={styles.dropdown}>
+              <TouchableOpacity style={styles.dropdownItem} onPress={handleProfile}>
+                <Text style={styles.dropdownText}>Profile</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.dropdownItem, styles.dropdownItemLast]} onPress={handleLogout}>
+                <Text style={styles.dropdownText}>Logout</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
         {/* CARDS */}
         <View style={styles.cardRow}>
+          {/* Total Sales Card */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Total Sales</Text>
-            <Text style={styles.cardValue}>₱1,000,505.72</Text>
+            <Text style={styles.cardValue}>
+              ₱{totalSales.toLocaleString(undefined, { 
+                minimumFractionDigits: 2, 
+                maximumFractionDigits: 2 
+              })}
+            </Text>
             <View style={styles.cardTrend}>
               <Ionicons name="trending-up" size={16} color="#22c55e" />
-              <Text style={styles.trendText}>+1,000</Text>
+              <Text style={styles.trendText}>
+                +{salesTrend.toLocaleString()}
+              </Text>
             </View>
           </View>
 
+          {/* Total Orders Card */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Total Orders</Text>
-            <Text style={styles.cardValue}>505</Text>
+            <Text style={styles.cardValue}>
+              {totalOrders.toLocaleString()}
+            </Text>
             <View style={styles.cardTrend}>
               <Ionicons name="trending-up" size={16} color="#22c55e" />
-              <Text style={styles.trendText}>+100</Text>
+              <Text style={styles.trendText}>
+                +{ordersTrend.toLocaleString()}
+              </Text>
             </View>
           </View>
         </View>
@@ -110,45 +168,66 @@ export default function DashboardAnalytics() {
               </TouchableOpacity>
             </View>
           </View>
+          <View style={{ alignItems: "center" }}>
 
-          <View style={styles.chartWrapper}>
-            <LineChart
-              data={{
-                labels: currentLabels,
-                datasets: [{ data: currentRevenue }]
-              }}
-              width={chartWidth}
-              height={isSmallScreen ? 200 : 220}
-              chartConfig={{
-                backgroundColor: "#ffffff",
-                backgroundGradientFrom: "#ffffff",
-                backgroundGradientTo: "#ffffff",
-                decimalPlaces: 0,
-                color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
-                labelColor: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
-                strokeWidth: isSmallScreen ? 2.5 : 3,
-                barPercentage: 0.7,
-                propsForBackgroundLines: {
-                  strokeDasharray: "",
-                  stroke: "#e2e8f0",
-                  strokeWidth: 1,
-                },
-                propsForLabels: {
-                  fontSize: isSmallScreen ? 10 : 12,
-                },
-              }}
-              bezier
-              style={styles.chart}
-              withInnerLines={true}
-              withOuterLines={true}
-              withVerticalLabels={true}
-              withHorizontalLabels={true}
-              withDots={!isSmallScreen}
-              withShadow={true}
-              withVerticalLines={false}
-              withHorizontalLines={true}
-              segments={isSmallScreen ? 4 : 5}
-            />
+            {/* Tooltip */}
+            {tooltipPos.visible && (
+              <View
+                style={{
+                  position: "absolute",
+                  left: tooltipPos.x - 40,
+                  top: tooltipPos.y - 50,
+                  backgroundColor: "#4188faff",
+                  paddingVertical: 6,
+                  paddingHorizontal: 10,
+                  borderRadius: 8,
+                  zIndex: 20,
+                }}
+              >
+                <Text style={{ color: "white", fontWeight: "700" }}>
+                  ₱{tooltipPos.value.toLocaleString()}
+                </Text>
+              </View>
+            )}
+
+            {/* Pressable wrapping the chart */}
+            <Pressable
+              onPressIn={() => setTooltipPos(prev => ({ ...prev, visible: true }))}
+              onPressOut={() => setTooltipPos(prev => ({ ...prev, visible: false }))}
+              style={{}}
+            >
+              <LineChart
+                data={{
+                  labels: currentLabels,
+                  datasets: [{ data: currentRevenue }],
+                }}
+                width={chartWidth}
+                height={200}
+                chartConfig={{
+                  backgroundColor: "#ffffff",
+                  backgroundGradientFrom: "#ffffff",
+                  backgroundGradientTo: "#ffffff",
+                  decimalPlaces: 0,
+                  color: () => `rgba(59, 130, 246, 1)`,
+                  labelColor: () => `#64748b`,
+                  formatYLabel: y => `₱${parseInt(y).toLocaleString()}`,
+                  propsForBackgroundLines: {
+                    stroke: "#00000051",
+                    strokeWidth: 1,
+                  },
+                }}
+                bezier
+                formatYLabel={(yValue) => `₱${parseInt(yValue).toLocaleString()}`}
+                onDataPointClick={(data) => {
+                  setTooltipPos({
+                    x: data.x,
+                    y: data.y,
+                    value: data.value,
+                    visible: true,
+                  });
+                }}
+              />
+            </Pressable>
           </View>
         </View>
 
@@ -176,9 +255,7 @@ export default function DashboardAnalytics() {
             <BarChart
               data={{
                 labels: currentBranchLabels,
-                datasets: [{
-                  data: currentBranchValues
-                }]
+                datasets: [{ data: currentBranchValues }]
               }}
               width={chartWidth}
               height={isSmallScreen ? 260 : 300}
@@ -189,31 +266,24 @@ export default function DashboardAnalytics() {
                 decimalPlaces: 0,
                 color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
                 labelColor: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
-                barPercentage: isSmallScreen ? 0.5 : 0.6,
+                barPercentage: currentBranchLabels.length > 10 ? 0.4 : 0.6,
                 propsForBackgroundLines: {
                   strokeDasharray: "",
                   stroke: "#e2e8f0",
                   strokeWidth: 1,
                 },
-                propsForLabels: {
-                  fontSize: isSmallScreen ? 9 : 11,
-                  rotation: isSmallScreen ? -45 : -30,
-                },
               }}
               style={styles.barChart}
-              showValuesOnTopOfBars={!isSmallScreen}
               fromZero={true}
               yAxisLabel=""
-              yAxisSuffix=""
-              withInnerLines={true}
-              withVerticalLabels={true}
-              withHorizontalLabels={true}
-              segments={isSmallScreen ? 4 : 5}
+              yAxisSuffix="  orders"
+              segments={4}
+              showValuesOnTopOfBars={true}
             />
           </View>
         </View>
-        </ScrollView>
-        </SafeAreaView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -235,10 +305,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 8,
-  },
-  headerContent: {
-    flex: 1,
-    position: "relative",
+    zIndex: 1000, // Added high z-index to header
   },
   headerText: {
     fontSize: 24,
@@ -255,23 +322,22 @@ const styles = StyleSheet.create({
     backgroundColor: "#3b82f6",
     borderRadius: 2,
   },
-  userIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: "#dbeafe",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#3b82f6",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+  headerLeft: {
+    flexDirection: "column",
+    position: "relative",
+  },
+  profileContainer: {
+    position: "relative",
+    zIndex: 2000, // Higher z-index for profile container
+  },
+  profileBtn: {
+    padding: 6,
   },
   cardRow: {
     flexDirection: "row",
     padding: 20,
     gap: 16,
+    zIndex: 1, // Lower z-index for cards
   },
   card: {
     flex: 1,
@@ -284,20 +350,6 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 12,
   },
-  cardIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: "#eff6ff",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 12,
-    shadowColor: "#3b82f6",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-  },
   cardTitle: {
     fontSize: 14,
     fontWeight: "600",
@@ -306,11 +358,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   cardValue: {
-    fontSize: 32,
-    fontWeight: "500",
+    fontSize: 18,
+    fontWeight: "700",
     color: "#1e293b",
     marginBottom: 8,
     letterSpacing: -0.5,
+    flexShrink: 1,
+    flexWrap: 'nowrap',
   },
   cardTrend: {
     flexDirection: "row",
@@ -350,11 +404,6 @@ const styles = StyleSheet.create({
     color: "#1e293b",
     letterSpacing: -0.5,
   },
-  chartWrapper: {
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
   switchBox: {
     flexDirection: "row",
     backgroundColor: "#e0e7ff",
@@ -387,10 +436,6 @@ const styles = StyleSheet.create({
   switchTextActive: {
     color: "#ffffff",
     fontWeight: "700",
-  },
-  chart: {
-    borderRadius: 12,
-    marginTop: 10,
   },
   branchPerformanceBox: {
     backgroundColor: "#ffffff",
@@ -428,17 +473,32 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginTop: 10,
   },
-  bottomNav: {
+  dropdown: {
     position: "absolute",
-    bottom: 0,
-    left: 0,
+    top: 40,
     right: 0,
-    flexDirection: "row",
-    justifyContent: "space-around",
-    backgroundColor: "#1f2937",
-    paddingVertical: 10,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 999, // Very high elevation for dropdown
+    minWidth: 120,
+    zIndex: 9999, // Extremely high z-index
   },
-  navItem: {
-    alignItems: "center",
+  dropdownItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  dropdownItemLast: {
+    borderBottomWidth: 0, // Remove border from last item
+  },
+  dropdownText: {
+    fontSize: 14,
+    color: "#1e293b",
+    fontWeight: "600",
   },
 });

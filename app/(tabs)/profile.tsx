@@ -1,21 +1,13 @@
 import React, { useState} from 'react';
-import {
-  Modal,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View, Image
-} from 'react-native';
-
+import {Modal,SafeAreaView,StatusBar,StyleSheet,Text,TextInput,TouchableOpacity, View, Image} from 'react-native';
+import { useRouter } from "expo-router";
+import Ionicons from 'react-native-vector-icons/Ionicons';
 export default function ProfileScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-
+  const router = useRouter();
   const handleConfirm = () => {
     // Add your password change logic here
     console.log('Password change confirmed');
@@ -39,13 +31,20 @@ export default function ProfileScreen() {
       <StatusBar barStyle="dark-content" />
 
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Profile</Text>
-          <View style={styles.headerAccent} />
-        </View>
-      </View>
+  <View style={styles.headerRow}>
+    {/* Back Button */}
+    <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+      <Ionicons name="chevron-back" size={26} color="#1e293b" />
+    </TouchableOpacity>
+
+    {/* Title + Accent */}
+    <View style={styles.headerContent}>
+      <Text style={styles.headerTitle}>Profile</Text>
+      <View style={styles.headerAccent} />
+    </View>
+  </View>
+</View>
 
       {/* Profile Card */}
       <View style={styles.profileCard}>
@@ -59,9 +58,7 @@ export default function ProfileScreen() {
       />
     </View>
   </View>
-</View>
-
-        {/* Name Field */}
+  {/* Name Field */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Name</Text>
           <TextInput
@@ -91,6 +88,9 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
+</View>
+
+        
 
       {/* Password Edit Modal */}
       <Modal
@@ -220,6 +220,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#3b82f6',
     borderRadius: 2,
   },
+  headerRow: {
+  flexDirection: "row",
+  alignItems: "center",
+},
+
+backBtn: {
+  marginRight: 10,
+  padding: 4,
+},
+
   profileCard: {
     backgroundColor: '#ffffff',
     marginHorizontal: 20,

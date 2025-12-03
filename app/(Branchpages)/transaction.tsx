@@ -1,13 +1,6 @@
 import React, { useState } from "react";
-import {
-  Modal,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
-
+import { Modal,SafeAreaView,StyleSheet,Text,TouchableOpacity,View, ScrollView} from "react-native";
+import Ionicons from "react-native-vector-icons/Ionicons";
 const ROWS_PER_PAGE = 5;
 
 // -----------------------------
@@ -15,59 +8,12 @@ const ROWS_PER_PAGE = 5;
 // -----------------------------
 const mockTransactions = [
   {
-    id: "1",
-    receipt: "REC-001",
-    customer_name: "John Doe",
-    payment_status: "paid",
-    inventory_status: "picked_up",
-    amount: 350.0,
-    due_date: "2025-11-25",
-  },
-  {
-    id: "2",
-    receipt: "REC-002",
-    customer_name: "Jane Smith",
-    payment_status: "unpaid",
-    inventory_status: "in_shop",
-    amount: 500.0,
-    due_date: "2025-11-26",
-  },
-  {
-    id: "3",
-    receipt: "REC-003",
-    customer_name: "Carlos Mendoza",
-    payment_status: "paid",
-    inventory_status: "in_shop",
-    amount: 280.0,
-    due_date: "2025-11-24",
-  },
-  {
-    id: "4",
-    receipt: "REC-004",
-    customer_name: "Alex Ray",
-    payment_status: "unpaid",
-    inventory_status: "picked_up",
-    amount: 420.0,
-    due_date: "2025-11-28",
-  },
-  {
-    id: "5",
-    receipt: "REC-005",
-    customer_name: "Maria Cruz",
-    payment_status: "paid",
-    inventory_status: "in_shop",
-    amount: 300.0,
-    due_date: "2025-11-27",
-  },
-  {
-    id: "6",
-    receipt: "REC-006",
-    customer_name: "Vincent Cruz",
-    payment_status: "unpaid",
-    inventory_status: "in_shop",
-    amount: 900.0,
-    due_date: "2025-11-27",
-  },
+    id: "1",receipt: "REC-001",customer_name: "John Doe",payment_status: "paid",inventory_status: "picked_up",amount: 350.0,due_date: "2025-11-25"},
+  {id: "2",receipt: "REC-002",customer_name: "Jane Smith",payment_status: "unpaid",inventory_status: "in_shop",amount: 500.0,due_date: "2025-11-26",},
+  {id: "3",receipt: "REC-003",customer_name: "Carlos Mendoza",payment_status: "paid",inventory_status: "in_shop",amount: 280.0,due_date: "2025-11-24",},
+  {id: "4",receipt: "REC-004",customer_name: "Alex Ray",payment_status: "unpaid",inventory_status: "picked_up",amount: 420.0,due_date: "2025-11-28",},
+  {id: "5",receipt: "REC-005",customer_name: "Maria Cruz",payment_status: "paid",inventory_status: "in_shop",amount: 300.0,due_date: "2025-11-27",},
+  {id: "6",receipt: "REC-006",customer_name: "Vincent Cruz",payment_status: "unpaid",inventory_status: "in_shop",amount: 900.0,due_date: "2025-11-27",},
 ];
 
 // -----------------------------
@@ -92,13 +38,16 @@ export default function TransactionDeviceList() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+   <ScrollView style={{ flex: 1 }}>
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Transactions</Text>
           <View style={styles.headerAccent} />
-        </View>
+         </View>
+        <Text style={styles.breadcrumbs}>Dashboard / Transactions</Text>
+
       </View>
 
       {/* Table Container */}
@@ -109,60 +58,86 @@ export default function TransactionDeviceList() {
           <Text style={styles.colName}>Customer</Text>
           <Text style={styles.colAmt}>Amount</Text>
           <Text style={styles.colStatus}>Status</Text>
+          <Text style={styles.colAction}>Action</Text>
         </View>
 
         {/* Table Rows */}
         <View style={styles.tableBody}>
-          {pageData.map((item, index) => (
-            <TouchableOpacity
-              key={item.id}
-              style={[
-                styles.tableRow,
-                index < pageData.length - 1 && styles.rowDivider,
-              ]}
-              onPress={() => setSelected(item)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.colReceiptText}>{item.receipt}</Text>
-              <Text style={styles.colNameText}>{item.customer_name}</Text>
-              <Text style={styles.colAmtText}>₱{item.amount.toFixed(2)}</Text>
-              <View style={[styles.statusBadge, { backgroundColor: getPaymentColor(item.payment_status) + '20' }]}>
-                <Text style={[styles.statusText, { color: getPaymentColor(item.payment_status) }]}>
-                  {item.payment_status.toUpperCase()}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
+  {pageData.map((item, index) => (
+    <View
+      key={item.id}
+      style={[
+        styles.tableRow,
+        index < pageData.length - 1 && styles.rowDivider,
+      ]}
+    >
+      <Text style={styles.colReceiptText}>{item.receipt}</Text>
+      <Text style={styles.colNameText}>{item.customer_name}</Text>
+      <Text style={styles.colAmtText}>₱{item.amount.toFixed(2)}</Text>
+
+      <View
+        style={[
+          styles.statusBadge,
+          { backgroundColor: getPaymentColor(item.payment_status) + "20" },
+        ]}
+      >
+        <Text
+          style={[
+            styles.statusText,
+            { color: getPaymentColor(item.payment_status) },
+          ]}
+        >
+          {item.payment_status.toUpperCase()}
+        </Text>
       </View>
 
-      {/* Pagination */}
-      <View style={styles.pagination}>
-        <TouchableOpacity
-          disabled={page === 1}
-          onPress={() => setPage(page - 1)}
-          style={[styles.pageBtn, page === 1 && styles.disabledBtn]}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.pageText, page === 1 && styles.disabledText]}>Prev</Text>
-        </TouchableOpacity>
+      <View style={styles.colActionContainer}>
+  <TouchableOpacity
+    style={styles.actionBtn}
+    onPress={() => setSelected(item)}
+  >
+    <Ionicons name="eye-outline" size={20} color="#1e293b" />
+  </TouchableOpacity>
+</View>
 
-        <View style={styles.pageNumberContainer}>
-          <Text style={styles.pageNumber}>
-            Page {page} of {totalPages}
-          </Text>
-        </View>
+    </View>
+  ))}
+</View>
 
-        <TouchableOpacity
-          disabled={page === totalPages}
-          onPress={() => setPage(page + 1)}
-          style={[styles.pageBtn, page === totalPages && styles.disabledBtn]}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.pageText, page === totalPages && styles.disabledText]}>Next</Text>
-        </TouchableOpacity>
-      </View>
+{/* Pagination (must be outside the map) */}
+<View style={styles.pagination}>
+  <TouchableOpacity
+    disabled={page === 1}
+    onPress={() => setPage(page - 1)}
+    style={[styles.pageBtn, page === 1 && styles.disabledBtn]}
+    activeOpacity={0.7}
+  >
+    <Text style={[styles.pageText, page === 1 && styles.disabledText]}>
+      Prev
+    </Text>
+  </TouchableOpacity>
 
+  <View style={styles.pageNumberContainer}>
+    <Text style={styles.pageNumber}>Page {page} of {totalPages}</Text>
+  </View>
+
+  <TouchableOpacity
+    disabled={page === totalPages}
+    onPress={() => setPage(page + 1)}
+    style={[styles.pageBtn, page === totalPages && styles.disabledBtn]}
+    activeOpacity={0.7}
+  >
+    <Text
+      style={[
+        styles.pageText,
+        page === totalPages && styles.disabledText,
+      ]}
+    >
+      Next
+    </Text>
+  </TouchableOpacity>
+</View>
+</View>
       {/* Modal */}
       <Modal visible={!!selected} transparent animationType="slide">
         <View style={styles.modalContainer}>
@@ -227,6 +202,7 @@ export default function TransactionDeviceList() {
         </View>
       </Modal>
     </View>
+    </ScrollView>
     </SafeAreaView>
   );
 }
@@ -511,4 +487,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: 0.3,
   },
+  breadcrumbs: {
+  marginTop: 10,
+  fontSize: 14,
+  color: "#64748b",
+  textAlign: "center",
+  fontWeight: "600",
+},
+colAction: {
+  width: "15%",
+  fontWeight: "700",
+  fontSize: 13,
+  color: "#475569",
+  letterSpacing: 0.3,
+  textAlign: "center",
+},
+
+colActionContainer: {
+  width: "15%",
+  justifyContent: "center",
+  alignItems: "center",
+},
+
+actionBtn: {
+  padding: 8,
+  backgroundColor: "#f1f5f9",
+  borderRadius: 10,
+},
+
 });
