@@ -1,11 +1,35 @@
-/* ============================
-   📋 UNCLAIMED ITEMS STYLES
-   ============================ */
+.express-header {
+    background: white;
+    border-radius: 20px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.express-header h2 {
+    margin: 0;
+}
+
+.express-header p {
+    margin: 8px 0 16px;
+    color: #475467;
+}
+
+.role-toggle {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.role-toggle select {
+    padding: 8px 14px;
+    border-radius: 12px;
+}
 
 
-/* ====== Unclaimed Table Container ====== */
+/* ====== Express Table Container ====== */
 
-.unclaimed-table-container {
+.table-container {
     min-height: auto;
     padding: 20px;
     display: flex;
@@ -15,9 +39,9 @@
 }
 
 
-/* ====== Unclaimed White Box ====== */
+/* ====== Express White Box ====== */
 
-.unclaimed-background-table {
+.background-table {
     width: 100%;
     background: white;
     border-radius: 20px;
@@ -30,9 +54,9 @@
 }
 
 
-/* ====== Unclaimed Search and Filter ====== */
+/* ====== Express Search and Filter ====== */
 
-.unclaimed-search-filter-row {
+.search-filter-row {
     display: flex;
     align-items: center;
     gap: 15px;
@@ -40,7 +64,7 @@
     width: 100%;
 }
 
-.unclaimed-search-filter-row input[type='text'] {
+.search-filter-row input[type='text'] {
     flex: 1;
     min-width: 300px;
     border: 2px solid #e5e7eb;
@@ -52,7 +76,7 @@
     padding: 14px 24px;
 }
 
-.unclaimed-search-filter-row select {
+.search-filter-row select {
     padding: 14px 20px;
     border: 2px solid #e5e7eb;
     border-radius: 30px;
@@ -63,16 +87,16 @@
     transition: all 0.3s ease;
 }
 
-.unclaimed-search-filter-row input[type='text']:focus,
-.unclaimed-search-filter-row select:focus {
+.search-filter-row input[type='text']:focus,
+.search-filter-row select:focus {
     border-color: #667eea;
     box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
 }
 
 
-/* ====== Unclaimed Table Wrapper ====== */
+/* ====== Express Table Wrapper ====== */
 
-.unclaimed-table-wrapper {
+.table-wrapper {
     flex: 1;
     border: 1px solid #e5e7eb;
     border-radius: 15px;
@@ -82,12 +106,12 @@
     scrollbar-width: none;
 }
 
-.unclaimed-table-wrapper::-webkit-scrollbar {
+.table-wrapper::-webkit-scrollbar {
     display: none;
 }
 
 
-/* ====== DataTable Styles (Unclaimed) ====== */
+/* ====== DataTable Styles (Express) ====== */
 
 .rdt_TableHeadRow {
     background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
@@ -204,7 +228,7 @@
 
 /* ====== View Button ====== */
 
-.inventory-view-btn {
+.express-view-btn {
     padding: 8px 12px;
     border-radius: 10px;
     border: none;
@@ -216,22 +240,24 @@
 
 /* ====== Action Icons ====== */
 
-.inventory-action-btn {
+.express-action-btn {
     background: none;
     border: none;
     cursor: pointer;
-    display: flex;
-    align-items: center;
     font-size: 18px;
     transition: color 0.3s ease, transform 0.2s ease;
     color: #007bff;
 }
 
-.inventory-action-btn:hover:not(:disabled) {
+.express-action-btn.edit {
+    color: #28a745;
+}
+
+.express-action-btn:hover:not(:disabled) {
     transform: scale(1.2);
 }
 
-.inventory-action-btn:disabled {
+.express-action-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     color: #6c757d;
@@ -251,7 +277,7 @@
     }
 }
 
-.inventory-modal {
+.express-modal {
     position: fixed;
     inset: 0;
     background: rgba(15, 23, 42, 0.6);
@@ -261,7 +287,7 @@
     z-index: 1000;
 }
 
-.inventory-modal-content {
+.express-modal-content {
     background: #f9f9f9;
     border: 2px solid #333;
     border-radius: 8px;
@@ -275,7 +301,7 @@
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
-.inventory-modal-content h3 {
+.express-modal-content h3 {
     text-align: center;
     font-size: 24px;
     margin: 0 0 10px 0;
@@ -283,21 +309,26 @@
     font-weight: bold;
 }
 
-.inventory-modal-content p {
+.express-modal-content p {
     margin: 6px 0;
     line-height: 1.4;
     font-size: 14px;
 }
 
-.inventory-modal-content ul {
+.express-modal-content ul {
     padding-left: 15px;
     margin: 6px 0;
     list-style-type: none;
     font-size: 13px;
 }
 
-.inventory-modal-content ul li {
+.express-modal-content ul li {
     margin: 3px 0;
+}
+
+.express-modal-content ul {
+    padding-left: 20px;
+    margin: 8px 0;
 }
 
 
@@ -376,24 +407,94 @@
 }
 
 
+/* ====== Paid Amount Section ====== */
+
+.paid-amount-section {
+    margin: 15px 0;
+    padding: 12px;
+    background-color: #f0f4f8;
+    border-left: 4px solid #667eea;
+    border-radius: 6px;
+}
+
+.paid-amount-section label {
+    display: block;
+    margin-bottom: 8px;
+    color: #333;
+}
+
+.paid-amount-input {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.3s ease;
+    background-color: white;
+    margin-bottom: 12px;
+}
+
+.paid-amount-input:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.paid-amount-input::placeholder,
+.penalty-input::placeholder {
+    color: #000;
+    opacity: 1;
+}
+
+.penalty-input {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.3s ease;
+    background-color: white;
+    margin-bottom: 12px;
+}
+
+.penalty-input:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.change-balance {
+    margin-top: 8px;
+    padding: 8px;
+    background-color: #e8f4f8;
+    border-radius: 4px;
+    color: #075985;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+
 /* ============================
    📱 MOBILE RESPONSIVE
    ============================ */
 
 @media (max-width: 768px) {
-    .unclaimed-background-table {
+    .express-header {
         padding: 20px;
     }
-    .unclaimed-search-filter-row {
+    .background-table {
+        padding: 20px;
+    }
+    .search-filter-row {
         flex-direction: column;
         align-items: stretch;
     }
-    .unclaimed-search-filter-row input,
-    .unclaimed-search-filter-row select {
+    .search-filter-row input,
+    .search-filter-row select {
         width: 100%;
         min-width: unset;
     }
-    .unclaimed-table-wrapper {
+    .table-wrapper {
         width: 100%;
         overflow-x: auto;
         overflow-y: visible !important;
@@ -405,7 +506,7 @@
     .rdt_TableHeadRow {
         font-size: 11px !important;
     }
-    .inventory-modal-content {
+    .express-modal-content {
         width: 95%;
         border-radius: 6px;
         padding: 15px;
@@ -420,11 +521,17 @@
 }
 
 @media (max-width: 480px) {
+    .express-header h2 {
+        font-size: 20px;
+    }
+    .express-header p {
+        font-size: 14px;
+    }
     .status-pill {
         font-size: 10px;
         padding: 4px 8px;
     }
-    .inventory-action-btn {
+    .express-action-btn {
         font-size: 16px;
     }
 }

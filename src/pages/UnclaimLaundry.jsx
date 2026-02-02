@@ -12,6 +12,7 @@ const UnclaimLaundry = () => {
   const [filterPayment, setFilterPayment] = useState('All');
   const [filterInventory, setFilterInventory] = useState('in_shop');
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortOrder, setSortOrder] = useState('none');
   const [selectedTxn, setSelectedTxn] = useState(null);
 
   // Check if due date is 7–30 days late
@@ -32,9 +33,20 @@ const UnclaimLaundry = () => {
       const matchesSearch =
         row.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         row.receipt.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesPayment && matchesInventory && matchesSearch;
+      return matchesPayment && matchesInventory && matchesSearch && !row.archived;
     });
   }, [transactions, filterPayment, filterInventory, searchTerm]);
+
+  // Sorted data based on selected sort order
+  const sortedData = useMemo(() => {
+    const data = [...filteredData];
+    if (sortOrder === 'amount_desc') {
+      data.sort((a, b) => b.amount - a.amount);
+    } else if (sortOrder === 'amount_asc') {
+      data.sort((a, b) => a.amount - b.amount);
+    }
+    return data;
+  }, [filteredData, sortOrder]);
 
   // Alert overdue items
   useEffect(() => {
@@ -86,7 +98,7 @@ const UnclaimLaundry = () => {
         <span className={`status-pill status-${row.inventory_status}`}>{row.inventory_status}</span>
       ),
     },
-    { name: 'Amount', selector: (row) => `₱${row.amount.toFixed(2)}` },
+    { name: 'Amount', selector: (row) => row.amount, sortable: true, cell: (row) => `₱${row.amount.toFixed(2)}` },
     {
       name: 'Due Date',
       cell: (row) => (
@@ -134,12 +146,17 @@ const UnclaimLaundry = () => {
                 <option value="in_shop">In Shop</option>
                 <option value="picked_up">Picked Up</option>
               </select>
+              <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)}>
+                <option value="none">Sort: None</option>
+                <option value="amount_desc">Amount: High → Low</option>
+                <option value="amount_asc">Amount: Low → High</option>
+              </select>
             </div>
 
             <div className="unclaimed-table-wrapper">
               <DataTable
                 columns={columns}
-                data={filteredData}
+                data={sortedData}
                 highlightOnHover
                 pagination
                 paginationPerPage={10}
@@ -166,14 +183,16 @@ const UnclaimLaundry = () => {
             <h3>Receipt: {selectedTxn.receipt}</h3>
             <p><strong>Customer:</strong> {selectedTxn.customer_name}</p>
             <p><strong>Address:</strong> {selectedTxn.customer_address}</p>
-            <p><strong>Services:</strong></p>
+            <p><strong>Services:</strong>
+            
             <ul>
               {selectedTxn.services.map((svc) => (
                 <li key={svc.id}>
-                  {svc.serviceName} - {svc.kilos} kg @ ₱{svc.rate.toFixed(2)} = ₱{svc.total.toFixed(2)}
+                  ({svc.serviceName}) {svc.kilos} kg @ ₱{svc.rate.toFixed(2)} = ₱{svc.total.toFixed(2)}
                 </li>
               ))}
-            </ul>
+            </ul></p>
+            
             <p><strong>Total Weight:</strong> {selectedTxn.weight} kg</p>
             <p><strong>Total Amount:</strong> ₱{selectedTxn.amount.toFixed(2)}</p>
             <p><strong>Payment Method:</strong> {selectedTxn.payment_method || '—'}</p>

@@ -295,19 +295,42 @@
 }
 
 .inventory-modal-content {
-    background: white;
-    border-radius: 20px;
-    max-width: 640px;
-    width: 100%;
-    padding: 24px;
+    background: #f9f9f9;
+    border: 2px solid #333;
+    border-radius: 8px;
+    max-width: 450px;
+    width: 90%;
+    padding: 20px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
+    font-family: 'Courier New', monospace;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.inventory-modal-content h3 {
+    text-align: center;
+    font-size: 24px;
+    margin: 0 0 10px 0;
+    color: #000;
+    font-weight: bold;
+}
+
+.inventory-modal-content p {
+    margin: 6px 0;
+    line-height: 1.4;
+    font-size: 14px;
 }
 
 .inventory-modal-content ul {
-    padding-left: 20px;
-    margin: 8px 0;
+    padding-left: 15px;
+    margin: 6px 0;
+    list-style-type: none;
+    font-size: 13px;
+}
+
+.inventory-modal-content ul li {
+    margin: 3px 0;
 }
 
 
@@ -388,6 +411,9 @@
 
 /* ====== Paid Amount Section ====== */
 
+
+/* ====== Paid Amount Section ====== */
+
 .paid-amount-section {
     margin: 15px 0;
     padding: 12px;
@@ -400,9 +426,11 @@
     display: block;
     margin-bottom: 8px;
     color: #333;
+    font-weight: 600;
 }
 
-.paid-amount-input {
+.paid-amount-input,
+.penalty-input {
     width: 100%;
     padding: 10px;
     border: 2px solid #e5e7eb;
@@ -410,11 +438,30 @@
     font-size: 14px;
     outline: none;
     transition: border-color 0.3s ease;
+    background-color: white;
+    margin-bottom: 12px;
 }
 
-.paid-amount-input:focus {
+.paid-amount-input::placeholder,
+.penalty-input::placeholder {
+    color: #000;
+    opacity: 1;
+}
+
+.paid-amount-input:focus,
+.penalty-input:focus {
     border-color: #667eea;
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.change-balance {
+    margin-top: 8px;
+    padding: 8px;
+    background-color: #e8f4f8;
+    border-radius: 4px;
+    color: #075985;
+    font-weight: 600;
+    font-size: 13px;
 }
 
 .change-balance {
@@ -461,9 +508,10 @@
         font-size: 11px !important;
     }
     .inventory-modal-content {
-        width: 90%;
-        border-radius: 16px;
-        padding: 16px;
+        width: 95%;
+        border-radius: 6px;
+        padding: 15px;
+        font-size: 12px;
     }
     .modal-actions {
         flex-direction: column;

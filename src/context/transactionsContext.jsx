@@ -26,6 +26,7 @@ const seedTransactions = [
     extra_charge_type: 'none',
     discount_amount: 0,
     created_at: new Date().toISOString(),
+    archived: false,
     // structured receipt_items for UI table (matches requested columns)
     receipt_items: [
       {
@@ -65,6 +66,7 @@ const seedTransactions = [
     extra_charge_type: 'none',
     discount_amount: 0,
     created_at: new Date().toISOString(),
+    archived: false,
     receipt_items: [
       {
         receiptId: 'RCPT-10002',
@@ -208,9 +210,10 @@ export const TransactionsProvider = ({ children }) => {
       extra_charge_type,
       discount_amount,
       created_at: now,
+      archived: false,
       // attach structured receipt_items for table display / inventory
       receipt_items: receiptItems,
-    };
+    }; 
     setTransactions((prev) => [newTxn, ...prev]);
     return newTxn;
   };
@@ -252,6 +255,20 @@ export const TransactionsProvider = ({ children }) => {
   // Delete transaction
   const deleteTransaction = (txnId) => {
     setTransactions((prev) => prev.filter((txn) => txn.id !== txnId));
+  };
+
+  // Archive a transaction (mark archived: true)
+  const archiveTransaction = (txnId) => {
+    setTransactions((prev) =>
+      prev.map((txn) => (txn.id === txnId ? { ...txn, archived: true } : txn))
+    );
+  };
+
+  // Restore a transaction from archive (set archived: false)
+  const restoreTransaction = (txnId) => {
+    setTransactions((prev) =>
+      prev.map((txn) => (txn.id === txnId ? { ...txn, archived: false } : txn))
+    );
   };
 
   // Update paid amount + penalty + balance for a transaction
@@ -303,7 +320,7 @@ export const TransactionsProvider = ({ children }) => {
         return txn;
       })
     );
-  };
+  }; 
 
   const value = useMemo(
     () => ({
@@ -312,6 +329,8 @@ export const TransactionsProvider = ({ children }) => {
       markTransactionPaid,
       markTransactionPickedUp,
       deleteTransaction,
+      archiveTransaction,
+      restoreTransaction,
       updateTransactionPaidAmount,
       updateTransaction, // ← ADDED THIS!
     }),

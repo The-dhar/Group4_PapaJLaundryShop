@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import DataTable from 'react-data-table-component';
 import DashboardLayout from '../components/dashboardlayout';
-import { BsEye,BsCashStack} from 'react-icons/bs';
+import { BsEye,BsCashStack } from 'react-icons/bs';
 import { useTransactions } from '../context/transactionsContext';
-import '../styles/inventorystyle.css';
+import '../styles/expressstyle.css';
 
-const Inventorymanagement = () => {
+const Express = () => {
   const { 
     transactions, 
     markTransactionPaid, 
@@ -87,7 +87,7 @@ const Inventorymanagement = () => {
       cell: (row) => (
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
-            className="inventory-action-btn view"
+            className="express-action-btn view"
             title="View"
             onClick={() => {
               setViewMode('view');
@@ -103,7 +103,7 @@ const Inventorymanagement = () => {
           </button>
 
           <button
-            className="inventory-action-btn edit"
+            className="express-action-btn edit"
             title="Mark Paid/Picked Up"
             onClick={() => {
               setViewMode('edit');
@@ -125,7 +125,7 @@ const Inventorymanagement = () => {
 
   return (
     <DashboardLayout>
-      <div className="inventory-page">
+      <div className="express-page">
         <div className="table-container">
           <div className="background-table">
             
@@ -166,16 +166,14 @@ const Inventorymanagement = () => {
 
       {/* MODAL */}
       {selectedTxn && (
-        <div className="inventory-modal">
-          <div className="inventory-modal-content">
-
-            
+        <div className="express-modal">
+          <div className="express-modal-content">
             <h3>Receipt: {selectedTxn.receipt}</h3>
             <p><strong>Customer:</strong> {selectedTxn.customer_name}</p>
             <p><strong>Address:</strong> {selectedTxn.customer_address}</p>
 
             <p><strong>Services:</strong>
-             <ul>
+            <ul>
               {selectedTxn.services.map((svc) => (
                 <li key={svc.id}>
                   ({svc.serviceName}) {svc.kilos} kg @ ₱{svc.rate.toFixed(2)} = ₱{svc.total.toFixed(2)}
@@ -183,7 +181,7 @@ const Inventorymanagement = () => {
               ))}
             </ul>
             </p>
-           
+            
 
             <p><strong>Total Weight:</strong> {selectedTxn.weight} kg</p>
             <p><strong>Total Amount:</strong> ₱{selectedTxn.amount.toFixed(2)}</p>
@@ -259,4 +257,4 @@ const Inventorymanagement = () => {
   );
 };
 
-export default Inventorymanagement;
+export default Express;

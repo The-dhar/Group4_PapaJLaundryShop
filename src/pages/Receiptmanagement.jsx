@@ -7,8 +7,8 @@ import '../styles/receiptstyle.css';
 import { jsPDF } from 'jspdf';
 
 const Receiptmanagement = () => {
-  const { transactions, deleteTransaction, updateTransaction } = useTransactions();
-
+  const { transactions, archiveTransaction, updateTransaction } = useTransactions();
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterInventory, setFilterInventory] = useState('All');
   const [selectedReceipt, setSelectedReceipt] = useState(null);
@@ -16,7 +16,7 @@ const Receiptmanagement = () => {
 
   // Filter for paid items (ready for viewing, or already picked_up ready for printing)
   const readyReceipts = useMemo(
-    () => transactions.filter((txn) => txn.payment_status === 'paid' || txn.payment_status === 'unpaid'),
+    () => transactions.filter((txn) => (txn.payment_status === 'paid' || txn.payment_status === 'unpaid') && !txn.archived),
     [transactions]
   );
 
@@ -65,7 +65,7 @@ const Receiptmanagement = () => {
           </button>
           <button
             className="receipt-action-btn edit"
-            title="Print/Delete Receipt"
+            title="Print/Archive Receipt"
             onClick={() => {
               setViewMode('edit');
               setSelectedReceipt(row);
@@ -238,12 +238,13 @@ const Receiptmanagement = () => {
     window.open(blobUrl);
   };
 
-  const handleDeleteReceipt = () => {
-    if (selectedReceipt && window.confirm(`Delete Receipt ${selectedReceipt.receipt}?`)) {
-      deleteTransaction(selectedReceipt.id);
-      setSelectedReceipt(null);
-    }
-  };
+const handleArchiveReceipt = () => {
+  if (!selectedReceipt) return;
+
+  archiveTransaction(selectedReceipt.id);
+  setSelectedReceipt(null);
+  setShowArchiveConfirm(false);
+};
 
   const handleMarkPickedUp = () => {
     if (selectedReceipt && window.confirm(`Mark Receipt ${selectedReceipt.receipt} as Picked Up?`)) {
@@ -441,17 +442,46 @@ const Receiptmanagement = () => {
                       : 'Print (Mark Picked Up First)'}
                   </button>
                   <button
-                    onClick={handleDeleteReceipt}
-                    className="receipt-btn-delete"
-                  >
-                    Delete Receipt
-                  </button>
+                  onClick={() => setShowArchiveConfirm(true)}
+                  className="receipt-btn-archive"
+                >
+                 Archive Receipt
+                </button>
                 </>
+                
               )}
             </div>
           </div>
         </div>
       )}
+      {showArchiveConfirm && selectedReceipt && (
+  <div className="confirm-overlay">
+    <div className="confirm-modal">
+      <h3>Archive Receipt</h3>
+      <p>
+        Are you sure you want to archive receipt
+        <strong> #{selectedReceipt.receipt}</strong>?
+      </p>
+
+      <div className="confirm-actions">
+        <button
+          className="confirm-btn cancel"
+          onClick={() => setShowArchiveConfirm(false)}
+        >
+          Cancel
+        </button>
+
+        <button
+          className="confirm-btn archive"
+          onClick={handleArchiveReceipt}
+        >
+          Yes, Archive
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
     </DashboardLayout>
   );
 };

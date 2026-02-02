@@ -185,7 +185,7 @@
     color: white;
 }
 
-.cancel-btn:hover {
+.cancel-btn .cancel-btn:hover {
     background-color: #b90e05;
     transform: translateY(-1px);
     box-shadow: 0 2px 8px rgba(100, 181, 246, 0.3);
@@ -211,7 +211,7 @@
 
 .modal-footer .cancel-btn {
     background-color: #c8cdd1;
-    color: white;
+    color: rgb(12, 12, 12);
 }
 
 .modal-footer .cancel-btn:hover {

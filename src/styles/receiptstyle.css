@@ -297,8 +297,8 @@
     background-color: #058723;
 }
 
-.receipt-btn-delete {
-    background-color: #FF3B30;
+.receipt-btn-archive {
+    background-color: #6b7280;
     color: white;
     border: none;
     padding: 10px 18px;
@@ -309,8 +309,8 @@
     min-width: 100px;
 }
 
-.receipt-btn-delete:hover {
-    background-color: #b90e05;
+.receipt-btn-archive:hover {
+    background-color: #4b5563;
 }
 
 .receipt-btn-cancel {
@@ -497,4 +497,73 @@
 .receipt-btn-pickup:active {
     transform: translateY(0);
     box-shadow: none;
+}
+
+.confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.confirm-modal {
+    background: #fff;
+    width: 360px;
+    padding: 24px;
+    border-radius: 10px;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.25);
+    text-align: center;
+    animation: popIn 0.25s ease;
+}
+
+.confirm-modal h3 {
+    margin: 0 0 10px;
+    color: #dc3545;
+}
+
+.confirm-modal p {
+    font-size: 14px;
+    color: #444;
+}
+
+.confirm-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+.confirm-btn {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.confirm-btn.cancel {
+    background: #e0e0e0;
+}
+
+.confirm-btn.archive {
+    background: #6b7280;
+    color: #fff;
+}
+
+.confirm-btn.archive:hover {
+    background: #4b5563;
+}
+
+@keyframes popIn {
+    from {
+        transform: scale(0.9);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
