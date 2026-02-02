@@ -4,7 +4,11 @@ import { useRouter } from "expo-router";
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
 const LaundryPriceManager = () => {
-  const [services, setServices] = useState([
+  type Tier = { range: string; price: number; description: string };
+  type Service = { id: number; name: string; category: string; tiers: Tier[]; updatedAt: string | null; effectiveDate: string | null };
+  type NewService = { name: string; category: string; tiers: { range: string; price: string; description: string }[] };
+
+  const [services, setServices] = useState<Service[]>([
     {
       id: 1,
       name: 'Regular Clothes',
@@ -79,27 +83,43 @@ const LaundryPriceManager = () => {
       updatedAt: null,
       effectiveDate: null,
     },
+    {
+      id: 7,
+      name: 'Penalty',
+      category: 'Misc',
+      tiers: [
+        { range: 'Penalty', price: 100, description: 'Penalty fee' },
+      ],
+      updatedAt: null,
+      effectiveDate: null,
+    },
   ]);
 
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [selectedService, setSelectedService] = useState(null);
-  const [editedTiers, setEditedTiers] = useState([]);
-  const [newService, setNewService] = useState({
+  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [editedTiers, setEditedTiers] = useState<Tier[]>([]);
+  const [newService, setNewService] = useState<NewService>({
     name: '',
     category: 'Wash & Fold',
     tiers: [{ range: '', price: '', description: '' }],
   });
 
-  const handleEditService = (service) => {
+  const handleEditService = (service: Service) => {
     setSelectedService(service);
-    setEditedTiers(JSON.parse(JSON.stringify(service.tiers)));
+    setEditedTiers(JSON.parse(JSON.stringify(service.tiers)) as Tier[]);
     setIsEditModalOpen(true);
   };
 
-  const handleUpdatePrice = (tierIndex, field, value) => {
+  const handleUpdatePrice = (tierIndex: number, field: keyof Tier, value: string) => {
     const updated = [...editedTiers];
-    updated[tierIndex][field] = field === 'price' ? parseFloat(value) || 0 : value;
+    if (field === 'price') {
+      updated[tierIndex] = { ...updated[tierIndex], price: parseFloat(value) || 0 };
+    } else if (field === 'range') {
+      updated[tierIndex] = { ...updated[tierIndex], range: value };
+    } else {
+      updated[tierIndex] = { ...updated[tierIndex], description: value };
+    }
     setEditedTiers(updated);
   };
 
@@ -150,7 +170,7 @@ const LaundryPriceManager = () => {
     setEditedTiers([...editedTiers, { range: '', price: 0, description: '' }]);
   };
 
-  const handleRemoveTier = (index) => {
+  const handleRemoveTier = (index: number) => {
     if (editedTiers.length > 1) {
       const updated = editedTiers.filter((_, i) => i !== index);
       setEditedTiers(updated);
@@ -181,9 +201,9 @@ const LaundryPriceManager = () => {
     });
   };
 
-  const handleNewServiceTierUpdate = (tierIndex, field, value) => {
+  const handleNewServiceTierUpdate = (tierIndex: number, field: 'range' | 'price' | 'description', value: string) => {
     const updated = [...newService.tiers];
-    updated[tierIndex][field] = value;
+    updated[tierIndex] = { ...updated[tierIndex], [field]: value };
     setNewService({ ...newService, tiers: updated });
   };
 
@@ -194,7 +214,7 @@ const LaundryPriceManager = () => {
     });
   };
 
-  const handleRemoveNewServiceTier = (index) => {
+  const handleRemoveNewServiceTier = (index: number) => {
     if (newService.tiers.length > 1) {
       const updated = newService.tiers.filter((_, i) => i !== index);
       setNewService({ ...newService, tiers: updated });
@@ -329,37 +349,15 @@ const LaundryPriceManager = () => {
 
             {/* Modal Body */}
             <ScrollView style={styles.modalBody}>
-              {editedTiers.map((tier, index) => (
-                <View key={index} style={styles.tierEditCard}>
-                  <View style={styles.tierEditHeader}>
-                    <Text style={styles.tierEditTitle}>Tier {index + 1}</Text>
-                    {editedTiers.length > 1 && (
-                      <TouchableOpacity
-                     onPress={() => handleRemoveTier(index)}
-                    style={styles.deleteButton}
-                    >
-                    <Ionicons name="trash-outline" size={20} color="#000000ff" />
-                    </TouchableOpacity>
-                    )}
-                  </View>
-
+              {selectedService?.name === 'Penalty' ? (
+                <View style={styles.tierEditCard}>
                   <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Range (e.g., 1-6 kg)</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Enter range"
-                      value={tier.range}
-                      onChangeText={(text) => handleUpdatePrice(index, 'range', text)}
-                    />
-                  </View>
-
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Price (₱)</Text>
+                    <Text style={styles.inputLabel}>Penalty Price (₱)</Text>
                     <TextInput
                       style={styles.input}
                       placeholder="Enter price"
-                      value={tier.price.toString()}
-                      onChangeText={(text) => handleUpdatePrice(index, 'price', text)}
+                      value={editedTiers[0]?.price.toString() ?? '0'}
+                      onChangeText={(text) => handleUpdatePrice(0, 'price', text)}
                       keyboardType="numeric"
                     />
                   </View>
@@ -369,19 +367,68 @@ const LaundryPriceManager = () => {
                     <TextInput
                       style={styles.input}
                       placeholder="Enter description"
-                      value={tier.description}
-                      onChangeText={(text) => handleUpdatePrice(index, 'description', text)}
+                      value={editedTiers[0]?.description ?? ''}
+                      onChangeText={(text) => handleUpdatePrice(0, 'description', text)}
                     />
                   </View>
                 </View>
-              ))}
+              ) : (
+                editedTiers.map((tier, index) => (
+                  <View key={index} style={styles.tierEditCard}>
+                    <View style={styles.tierEditHeader}>
+                      <Text style={styles.tierEditTitle}>Tier {index + 1}</Text>
+                      {editedTiers.length > 1 && (
+                        <TouchableOpacity
+                          onPress={() => handleRemoveTier(index)}
+                          style={styles.deleteButton}
+                        >
+                          <Ionicons name="trash-outline" size={20} color="#000000ff" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
 
-              <TouchableOpacity
-                onPress={handleAddTier}
-                style={styles.addTierButton}
-              >
-                <Text style={styles.addTierButtonText}>+ Add Tier</Text>
-              </TouchableOpacity>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Range (e.g., 1-6 kg)</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Enter range"
+                        value={tier.range}
+                        onChangeText={(text) => handleUpdatePrice(index, 'range', text)}
+                      />
+                    </View>
+
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Price (₱)</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Enter price"
+                        value={tier.price.toString()}
+                        onChangeText={(text) => handleUpdatePrice(index, 'price', text)}
+                        keyboardType="numeric"
+                      />
+                    </View>
+
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Description</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Enter description"
+                        value={tier.description}
+                        onChangeText={(text) => handleUpdatePrice(index, 'description', text)}
+                      />
+                    </View>
+                  </View>
+                ))
+              )}
+
+              {selectedService?.name !== 'Penalty' && (
+                <TouchableOpacity
+                  onPress={handleAddTier}
+                  style={styles.addTierButton}
+                >
+                  <Text style={styles.addTierButtonText}>+ Add Tier</Text>
+                </TouchableOpacity>
+              )}
             </ScrollView>
 
             {/* Modal Footer */}

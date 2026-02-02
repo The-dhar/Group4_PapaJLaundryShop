@@ -1,13 +1,23 @@
 import React, { useState } from "react";
-import { Dimensions, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Pressable,} from "react-native";
+import { Dimensions, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Pressable, Alert } from "react-native";
 import { BarChart, LineChart } from "react-native-chart-kit";
 import { useRouter } from "expo-router";
 import Ionicons from 'react-native-vector-icons/Ionicons';
+
+// BarChart typing workaround to allow runtime onDataPointClick
+const AnyBarChart: any = BarChart;
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 const isSmallScreen = screenWidth < 375;
 const chartPadding = isSmallScreen ? 40 : 60;
 const chartWidth = screenWidth - chartPadding;
+
+// Responsive chart width helper: ensures enough horizontal space for x-axis labels on small screens
+const getResponsiveChartWidth = (labels: string[]) => {
+  const perLabel = isSmallScreen ? 36 : 56; // pixels per label
+  const computed = labels.length * perLabel + 80; // extra padding
+  return Math.max(chartWidth, computed);
+};
 
 export default function DashboardAnalytics() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -19,6 +29,16 @@ export default function DashboardAnalytics() {
     value: 0,
     visible: false
   });
+
+  // Tooltip state for branch comparison chart
+  const [branchTooltip, setBranchTooltip] = useState({
+    x: 0,
+    y: 0,
+    value: 0,
+    label: '',
+    visible: false,
+  });
+
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
@@ -29,8 +49,12 @@ export default function DashboardAnalytics() {
   const monthlyRevenueData = [100000, 200000, 300000, 400000];
   const monthlyLabels = ["W1", "W2", "W3", "W4"];
 
-  const currentRevenue = revenueView === "weekly" ? weeklyRevenueData : monthlyRevenueData;
-  const currentLabels = revenueView === "weekly" ? weeklyLabels : monthlyLabels;
+  // Yearly Revenue Data (12 months)
+  const yearlyRevenueData = [120000, 110000, 130000, 140000, 150000, 160000, 170000, 180000, 190000, 200000, 210000, 220000];
+  const yearlyRevenueLabels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  const currentRevenue = revenueView === "weekly" ? weeklyRevenueData : revenueView === "monthly" ? monthlyRevenueData : yearlyRevenueData;
+  const currentLabels = revenueView === "weekly" ? weeklyLabels : revenueView === "monthly" ? monthlyLabels : yearlyRevenueLabels;
 
   const weeklyBranchData = [300, 400, 700, 1000, 300, 500, 800, 800, 300, 300, 300];
   const weeklyBranchLabels = [
@@ -62,9 +86,18 @@ export default function DashboardAnalytics() {
     "Brgy Santa Cruz 1",
     "Brgy Santa Cruz 2"
   ];
-  
-  const currentBranchValues = branchView === "weekly" ? weeklyBranchData : monthlyBranchData;
-  const currentBranchLabels = branchView === "weekly" ? weeklyBranchLabels : monthlyBranchLabels;
+
+  // Yearly Branch Data (same branch order as monthly)
+  const yearlyBranchData = [120000, 250000, 300000, 400000, 500000, 600000, 100000, 350000, 100000, 400000, 500000];
+  const yearlyBranchLabels = monthlyBranchLabels;
+
+  const currentBranchValues = branchView === "weekly" ? weeklyBranchData : branchView === "monthly" ? monthlyBranchData : yearlyBranchData;
+  const currentBranchLabels = branchView === "weekly" ? weeklyBranchLabels : branchView === "monthly" ? monthlyBranchLabels : yearlyBranchLabels;
+
+  // Compute responsive chart widths so x-axis labels fit on narrow screens
+  const revenueChartWidth = getResponsiveChartWidth(currentLabels);
+  const branchComparisonChartWidth = getResponsiveChartWidth(currentBranchLabels);
+  const branchPerformanceChartWidth = getResponsiveChartWidth(currentBranchLabels);
   
   const totalSales = 10001;
   const totalOrders = 505;
@@ -79,6 +112,15 @@ export default function DashboardAnalytics() {
   const handleLogout = () => {
     setOpen(false);
     router.push("/login");
+  };
+
+  const handlePrint = (section: string) => {
+    // Simple, cross-platform fallback: use window.print on web, otherwise inform the user
+    if (typeof window !== 'undefined' && (window as any).print) {
+      (window as any).print();
+      return;
+    }
+    Alert.alert('Print', 'Printing is available on web. For mobile, please take a screenshot or use export feature.');
   };
 
   return (
@@ -151,20 +193,33 @@ export default function DashboardAnalytics() {
         <View style={styles.chartBox}>
           <View style={styles.chartHeader}>
             <Text style={styles.chartTitle}>Revenue</Text>
+            <View style={styles.headerRight}>
+              <View style={styles.switchBox}>
+                <TouchableOpacity 
+                  onPress={() => setRevenueView("weekly")}
+                  style={[styles.switchBtn, revenueView === "weekly" && styles.switchActive]}
+                >
+                  <Text style={[styles.switchText, revenueView === "weekly" && styles.switchTextActive]}>Weekly</Text>
+                </TouchableOpacity>
 
-            <View style={styles.switchBox}>
-              <TouchableOpacity 
-                onPress={() => setRevenueView("weekly")}
-                style={[styles.switchBtn, revenueView === "weekly" && styles.switchActive]}
-              >
-                <Text style={[styles.switchText, revenueView === "weekly" && styles.switchTextActive]}>Weekly</Text>
-              </TouchableOpacity>
+                <TouchableOpacity 
+                  onPress={() => setRevenueView("monthly")}
+                  style={[styles.switchBtn, revenueView === "monthly" && styles.switchActive]}
+                >
+                  <Text style={[styles.switchText, revenueView === "monthly" && styles.switchTextActive]}>Monthly</Text>
+                </TouchableOpacity>
 
-              <TouchableOpacity 
-                onPress={() => setRevenueView("monthly")}
-                style={[styles.switchBtn, revenueView === "monthly" && styles.switchActive]}
-              >
-                <Text style={[styles.switchText, revenueView === "monthly" && styles.switchTextActive]}>Monthly</Text>
+                <TouchableOpacity 
+                  onPress={() => setRevenueView("yearly")}
+                  style={[styles.switchBtn, revenueView === "yearly" && styles.switchActive]}
+                >
+                  <Text style={[styles.switchText, revenueView === "yearly" && styles.switchTextActive]}>Yearly</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint('Revenue')}>
+                <Ionicons name="print-outline" size={18} color="#1e293b" />
+                <Text style={styles.printText}>Print</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -190,96 +245,230 @@ export default function DashboardAnalytics() {
               </View>
             )}
 
-            {/* Pressable wrapping the chart */}
-            <Pressable
-              onPressIn={() => setTooltipPos(prev => ({ ...prev, visible: true }))}
-              onPressOut={() => setTooltipPos(prev => ({ ...prev, visible: false }))}
-              style={{}}
-            >
-              <LineChart
+            {/* Pressable wrapping the chart - responsive/horizontally scrollable */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center' }}>
+              <Pressable
+                onPressIn={() => setTooltipPos(prev => ({ ...prev, visible: true }))}
+                onPressOut={() => setTooltipPos(prev => ({ ...prev, visible: false }))}
+                style={{ width: revenueChartWidth, paddingLeft: 60 }}
+              >
+                <LineChart
+                  data={{
+                    labels: currentLabels,
+                    datasets: [{ data: currentRevenue }],
+                  }}
+                  width={revenueChartWidth}
+                  height={200}
+                  chartConfig={{
+                    backgroundColor: "#ffffff",
+                    backgroundGradientFrom: "#ffffff",
+                    backgroundGradientTo: "#ffffff",
+                    decimalPlaces: 0,
+                    color: () => `rgba(59, 130, 246, 1)`,
+                    labelColor: () => `#64748b`,
+                    // Make x-axis labels smaller on small screens
+                    propsForLabels: {
+                      fontSize: isSmallScreen ? 10 : 12,
+                    },
+                    formatYLabel: (y: string) => `₱${parseInt(y).toLocaleString()}`,
+                    propsForBackgroundLines: {
+                      stroke: "#00000051",
+                      strokeWidth: 1,
+                    },
+                  }}
+                  bezier
+                  formatYLabel={(yValue) => `₱${parseInt(yValue).toLocaleString()}`}
+                  onDataPointClick={(data) => {
+                    setTooltipPos({
+                      x: data.x,
+                      y: data.y,
+                      value: data.value,
+                      visible: true,
+                    });
+                  }}
+                />
+              </Pressable>
+            </ScrollView>
+          </View>
+        </View>
+          {/* BRANCH REVENUE COMPARISON */}
+          <View style={styles.chartBox}>
+            <View style={styles.chartHeader}>
+              <Text style={styles.chartTitle}>Branch Revenue Comparison</Text>
+              <View style={styles.headerRight}>
+                <View style={styles.switchBox}>
+                  <TouchableOpacity 
+                    onPress={() => setBranchView("weekly")}
+                    style={[styles.switchBtn, branchView === "weekly" && styles.switchActive]}
+                  >
+                    <Text style={[styles.switchText, branchView === "weekly" && styles.switchTextActive]}>Weekly</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    onPress={() => setBranchView("monthly")}
+                    style={[styles.switchBtn, branchView === "monthly" && styles.switchActive]}
+                  >
+                    <Text style={[styles.switchText, branchView === "monthly" && styles.switchTextActive]}>Monthly</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    onPress={() => setBranchView("yearly")}
+                    style={[styles.switchBtn, branchView === "yearly" && styles.switchActive]}
+                  >
+                    <Text style={[styles.switchText, branchView === "yearly" && styles.switchTextActive]}>Yearly</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint('Branch Revenue Comparison')}>
+                  <Ionicons name="print-outline" size={18} color="#1e293b" />
+                  <Text style={styles.printText}>Print</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={{ alignItems: "center" }}>
+
+              {/* Branch Tooltip */}
+              {branchTooltip.visible && (
+                <View
+                  style={{
+                    position: "absolute",
+                    left: branchTooltip.x - 40,
+                    top: branchTooltip.y - 50,
+                    backgroundColor: "#4188faff",
+                    paddingVertical: 6,
+                    paddingHorizontal: 10,
+                    borderRadius: 8,
+                    zIndex: 20,
+                  }}
+                >
+                  <Text style={{ color: "white", fontWeight: "700" }}>
+                    {branchTooltip.label}: ₱{branchTooltip.value.toLocaleString()}
+                  </Text>
+                </View>
+              )}
+
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center' }}>
+                <Pressable
+                  onPressIn={() => setBranchTooltip(prev => ({ ...prev, visible: true }))}
+                  onPressOut={() => setBranchTooltip(prev => ({ ...prev, visible: false }))}
+                  style={{ width: branchComparisonChartWidth }}
+                >
+                  <AnyBarChart
+                    data={{
+                      labels: currentBranchLabels,
+                      datasets: [{ data: currentBranchValues }],
+                    }}
+                    width={branchComparisonChartWidth}
+                    height={220}
+                    chartConfig={{
+                      backgroundColor: "#ffffff",
+                      backgroundGradientFrom: "#ffffff",
+                      backgroundGradientTo: "#ffffff",
+                      decimalPlaces: 0,
+                      color: () => `rgba(59, 130, 246, 1)`,
+                    labelColor: () => `#475569`,
+                      // Make x-axis labels slightly larger on small screens and make y-axis labels more readable
+                      propsForLabels: {
+                        fontSize: isSmallScreen ? 10 : 12,
+                        // color setting applied via labelColor
+                      },
+                      formatYLabel: (y: string) => `₱${parseInt(y).toLocaleString()}`,
+                      propsForBackgroundLines: {
+                        stroke: "#00000051",
+                        strokeWidth: 1,
+                      },
+                    }}
+                    verticalLabelRotation={0}
+                    fromZero={true}
+                    showValuesOnTopOfBars={true}
+                    style={{ paddingRight: 16, paddingLeft: 60 }}
+                    // @ts-ignore - BarChart typings don't include onDataPointClick but runtime supports it
+                    onDataPointClick={(data: any) => {
+                      setBranchTooltip({
+                        x: data.x,
+                        y: data.y,
+                        value: data.value,
+                        label: currentBranchLabels[data.index],
+                        visible: true,
+                      });
+                    }}
+                  />
+                </Pressable>
+              </ScrollView>
+            </View>
+          </View>
+        {/* BRANCH PERFORMANCE - Separate Container */}
+        <View style={styles.branchPerformanceBox}>
+          <View style={styles.branchPerformanceHeader}>
+            <Text style={styles.branchPerformanceTitle}>Branch Performance</Text>
+            <View style={styles.headerRight}>
+              <View style={styles.switchBox}>
+                <TouchableOpacity 
+                  onPress={() => setBranchView("weekly")}
+                  style={[styles.switchBtn, branchView === "weekly" && styles.switchActive]}
+                >
+                  <Text style={[styles.switchText, branchView === "weekly" && styles.switchTextActive]}>Weekly</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  onPress={() => setBranchView("monthly")}
+                  style={[styles.switchBtn, branchView === "monthly" && styles.switchActive]}
+                >
+                  <Text style={[styles.switchText, branchView === "monthly" && styles.switchTextActive]}>Monthly</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  onPress={() => setBranchView("yearly")}
+                  style={[styles.switchBtn, branchView === "yearly" && styles.switchActive]}
+                >
+                  <Text style={[styles.switchText, branchView === "yearly" && styles.switchTextActive]}>Yearly</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint('Branch Performance')}>
+                <Ionicons name="print-outline" size={18} color="#1e293b" />
+                <Text style={styles.printText}>Print</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          <View style={styles.barChartWrapper}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center' }}>
+              <BarChart
                 data={{
-                  labels: currentLabels,
-                  datasets: [{ data: currentRevenue }],
+                  labels: currentBranchLabels,
+                  datasets: [{ data: currentBranchValues }]
                 }}
-                width={chartWidth}
-                height={200}
+                width={branchPerformanceChartWidth}
+                height={isSmallScreen ? 260 : 300}
                 chartConfig={{
                   backgroundColor: "#ffffff",
                   backgroundGradientFrom: "#ffffff",
                   backgroundGradientTo: "#ffffff",
                   decimalPlaces: 0,
-                  color: () => `rgba(59, 130, 246, 1)`,
-                  labelColor: () => `#64748b`,
-                  formatYLabel: y => `₱${parseInt(y).toLocaleString()}`,
+                  color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
+                  labelColor: (opacity = 1) => `rgba(71, 85, 105, ${opacity})`,
+                  // Make x-axis labels slightly larger on small screens and ensure y-axis labels are readable
+                  propsForLabels: {
+                    fontSize: isSmallScreen ? 10 : 12,
+                  },
+                  // Ensure y-axis values render as numbers
+                  formatYLabel: (y: string) => `${parseInt(y).toLocaleString()}`,
+                  barPercentage: currentBranchLabels.length > 10 ? 0.4 : 0.6,
                   propsForBackgroundLines: {
-                    stroke: "#00000051",
+                    strokeDasharray: "",
+                    stroke: "#e2e8f0",
                     strokeWidth: 1,
                   },
                 }}
-                bezier
-                formatYLabel={(yValue) => `₱${parseInt(yValue).toLocaleString()}`}
-                onDataPointClick={(data) => {
-                  setTooltipPos({
-                    x: data.x,
-                    y: data.y,
-                    value: data.value,
-                    visible: true,
-                  });
-                }}
+                style={{ paddingLeft: 80, borderRadius: 12, marginTop: 10 }}
+                verticalLabelRotation={0}
+                fromZero={true}
+                yAxisLabel=""
+                yAxisSuffix="  orders"
+                segments={4}
+                showValuesOnTopOfBars={true}
               />
-            </Pressable>
-          </View>
-        </View>
-
-        {/* BRANCH PERFORMANCE - Separate Container */}
-        <View style={styles.branchPerformanceBox}>
-          <View style={styles.branchPerformanceHeader}>
-            <Text style={styles.branchPerformanceTitle}>Branch Performance</Text>
-            <View style={styles.switchBox}>
-              <TouchableOpacity 
-                onPress={() => setBranchView("weekly")}
-                style={[styles.switchBtn, branchView === "weekly" && styles.switchActive]}
-              >
-                <Text style={[styles.switchText, branchView === "weekly" && styles.switchTextActive]}>Weekly</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                onPress={() => setBranchView("monthly")}
-                style={[styles.switchBtn, branchView === "monthly" && styles.switchActive]}
-              >
-                <Text style={[styles.switchText, branchView === "monthly" && styles.switchTextActive]}>Monthly</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-          <View style={styles.barChartWrapper}>
-            <BarChart
-              data={{
-                labels: currentBranchLabels,
-                datasets: [{ data: currentBranchValues }]
-              }}
-              width={chartWidth}
-              height={isSmallScreen ? 260 : 300}
-              chartConfig={{
-                backgroundColor: "#ffffff",
-                backgroundGradientFrom: "#ffffff",
-                backgroundGradientTo: "#ffffff",
-                decimalPlaces: 0,
-                color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
-                labelColor: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
-                barPercentage: currentBranchLabels.length > 10 ? 0.4 : 0.6,
-                propsForBackgroundLines: {
-                  strokeDasharray: "",
-                  stroke: "#e2e8f0",
-                  strokeWidth: 1,
-                },
-              }}
-              style={styles.barChart}
-              fromZero={true}
-              yAxisLabel=""
-              yAxisSuffix="  orders"
-              segments={4}
-              showValuesOnTopOfBars={true}
-            />
+            </ScrollView>
           </View>
         </View>
       </ScrollView>
@@ -388,7 +577,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 16,
     elevation: 12,
-    overflow: "hidden",
+    overflow: "visible", // allow axis labels to render outside rounded container
   },
   chartHeader: {
     flexDirection: "row",
@@ -414,6 +603,26 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  printBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginLeft: 8,
+    borderRadius: 8,
+    backgroundColor: "#f1f5f9",
+  },
+  printText: {
+    marginLeft: 6,
+    fontSize: 13,
+    color: "#1e293b",
+    fontWeight: "600",
   },
   switchBtn: {
     paddingHorizontal: 16,
@@ -448,7 +657,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 16,
     elevation: 12,
-    overflow: "hidden",
+    overflow: "visible",
   },
   branchPerformanceHeader: {
     flexDirection: "row",
@@ -467,7 +676,7 @@ const styles = StyleSheet.create({
   barChartWrapper: {
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
+    overflow: "visible",
   },
   barChart: {
     borderRadius: 12,
