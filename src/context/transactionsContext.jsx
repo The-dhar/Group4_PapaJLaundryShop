@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
 const TransactionsContext = createContext(null);
 
+// this is transaction seed data (dummy data no backend at all pa.)
 const seedTransactions = [
   {
     id: 'txn-seed-1',
