@@ -129,46 +129,70 @@
 
 .kilos-spinner {
     position: absolute;
-    right: 1px;
-    top: 1px;
-    bottom: 1px;
+    right: 2px;
+    top: 2px;
+    bottom: 2px;
     display: flex;
     flex-direction: column;
-    border-left: 1px solid #e0e0e0;
-    background: #fafafa;
-    width: 28px;
+    width: 36px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid rgba(19, 44, 69, 0.08);
+    background: linear-gradient(180deg, #fbfdff 0%, #eef6ff 100%);
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
-.spinner-btn {
-    flex: 1;
-    background: transparent;
+.kilos-spinner button,
+.kilos-spinner .spinner-btn {
+    flex: 1 1 50%;
     border: none;
+    margin: 0;
+    padding: 0;
+    background: linear-gradient(180deg, #ffffff 0%, #e9f2ff 100%);
+    color: #0f1724;
+    font-weight: 700;
+    font-size: 12px;
     cursor: pointer;
-    font-size: 10px;
-    color: #616161;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s ease;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+    box-shadow: 0 3px 0 rgba(16, 46, 87, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
-.spinner-btn:first-child {
-    border-top-right-radius: 6px;
-    border-bottom: 1px solid #e0e0e0;
+.kilos-spinner button:first-child,
+.kilos-spinner .spinner-btn:first-child {
+    border-bottom: 1px solid rgba(19, 44, 69, 0.06);
 }
 
-.spinner-btn:last-child {
-    border-bottom-right-radius: 6px;
+.kilos-spinner button:focus,
+.kilos-spinner .spinner-btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.12), 0 2px 6px rgba(15, 23, 42, 0.12);
 }
 
-.spinner-btn:hover {
-    background: #2196f3;
-    color: #ffffff;
+.kilos-spinner button:hover,
+.kilos-spinner .spinner-btn:hover {
+    transform: translateY(-1px);
+    background: linear-gradient(180deg, #ffffff 0%, #dff0ff 100%);
 }
 
-.spinner-btn:active {
-    background: #1976d2;
-    color: #ffffff;
+.kilos-spinner button:active,
+.kilos-spinner .spinner-btn:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 0 rgba(16, 46, 87, 0.04) inset;
+    background: linear-gradient(180deg, #e6f2ff 0%, #cfe9ff 100%);
+}
+
+
+/* Make the arrow icons crisper and slightly embossed */
+
+.kilos-spinner button::before,
+.kilos-spinner .spinner-btn::before {
+    content: attr(data-arrow);
+    line-height: 1;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8), 0 -1px 0 rgba(0, 0, 0, 0.08);
+    transform: translateY(0);
 }
 
 

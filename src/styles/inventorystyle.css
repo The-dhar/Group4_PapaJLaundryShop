@@ -1,10 +1,3 @@
-/* ============================
-   📦 INVENTORY STYLES
-   ============================ */
-
-
-/* ====== Inventory Header ====== */
-
 .inventory-header {
     background: white;
     border-radius: 20px;
@@ -31,6 +24,15 @@
 .role-toggle select {
     padding: 8px 14px;
     border-radius: 12px;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    --select-arrow-down: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%23666' d='M6 8L0 0h12z'/></svg>");
+    --select-arrow-up: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%23666' d='M6 0L12 8H0z'/></svg>");
+    background-image: var(--select-arrow-down);
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 12px 8px;
 }
 
 
@@ -84,14 +86,29 @@
 }
 
 .search-filter-row select {
-    padding: 14px 20px;
+    --select-arrow-down: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%23666' d='M6 8L0 0h12z'/></svg>");
+    --select-arrow-up: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%23666' d='M6 0L12 8H0z'/></svg>");
+    padding: 12px 44px 12px 20px;
+    height: 44px;
     border: 2px solid #e5e7eb;
     border-radius: 30px;
     font-size: 14px;
     background-color: white;
     cursor: pointer;
     font-weight: 500;
-    transition: all 0.3s ease;
+    transition: all 0.18s ease;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: var(--select-arrow-down);
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 12px 8px;
+}
+
+.search-filter-row select:focus,
+.search-filter-row select:active {
+    background-image: var(--select-arrow-up);
 }
 
 .search-filter-row input[type='text']:focus,

@@ -84,7 +84,8 @@
 }
 
 .search-filter-row select {
-    padding: 14px 20px;
+    padding: 12px 44px 12px 20px;
+    height: 44px;
     border: 2px solid #e5e7eb;
     border-radius: 30px;
     font-size: 14px;
@@ -92,6 +93,13 @@
     cursor: pointer;
     font-weight: 500;
     transition: all 0.3s ease;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%23666' d='M6 8L0 0h12z'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 12px 8px;
 }
 
 .search-filter-row input[type='text']:focus,

@@ -196,8 +196,8 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
                 step="0.5"
               />
               <div className="kilos-spinner">
-                <button onClick={() => changeKilos(0.5)}>▲</button>
-                <button onClick={() => changeKilos(-0.5)}>▼</button>
+                <button type="button" className="spinner-btn" data-arrow="▲" aria-label="Increase kilos" onClick={() => changeKilos(0.5)}></button>
+                <button type="button" className="spinner-btn" data-arrow="▼" aria-label="Decrease kilos" onClick={() => changeKilos(-0.5)}></button>
               </div>
             </div>
           </div>
