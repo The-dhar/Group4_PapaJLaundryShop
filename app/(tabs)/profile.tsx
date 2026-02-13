@@ -1,7 +1,6 @@
 import React, { useState} from 'react';
 import {Modal,SafeAreaView,StatusBar,StyleSheet,Text,TextInput,TouchableOpacity, View, Image} from 'react-native';
 import { useRouter } from "expo-router";
-import Ionicons from 'react-native-vector-icons/Ionicons';
 export default function ProfileScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
@@ -32,17 +31,14 @@ export default function ProfileScreen() {
 
     <View style={styles.container}>
       <View style={styles.header}>
-  <View style={styles.headerRow}>
-    {/* Back Button */}
-    <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-      <Ionicons name="chevron-back" size={26} color="#1e293b" />
-    </TouchableOpacity>
+  <TouchableOpacity onPress={() => router.back()} style={styles.backButton} activeOpacity={0.8}>
+    <Text style={styles.backIcon}>←</Text>
+  </TouchableOpacity>
 
-    {/* Title + Accent */}
-    <View style={styles.headerContent}>
-      <Text style={styles.headerTitle}>Profile</Text>
-      <View style={styles.headerAccent} />
-    </View>
+  {/* Title + Accent */}
+  <View style={styles.headerContent}>
+    <Text style={styles.headerTitle}>Profile</Text>
+    <View style={styles.headerAccent} />
   </View>
 </View>
 
@@ -104,10 +100,10 @@ export default function ProfileScreen() {
             {/* Modal Header */}
             <View style={styles.modalHeader}>
               <TouchableOpacity
-                style={styles.backButton}
+                style={styles.modalBackButton}
                 onPress={() => setModalVisible(false)}
               >
-                <Text style={styles.backButtonText}>←</Text>
+                <Text style={styles.modalBackButtonText}>←</Text>
               </TouchableOpacity>
               <Text style={styles.modalTitle}>Profile</Text>
             </View>
@@ -192,6 +188,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#ffffff',
     paddingTop: 12,
     paddingBottom: 20,
@@ -203,10 +201,11 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   headerContent: {
+    flex: 1,
     position: 'relative',
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '800',
     color: '#1e293b',
     letterSpacing: -0.5,
@@ -220,16 +219,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#3b82f6',
     borderRadius: 2,
   },
-  headerRow: {
-  flexDirection: "row",
-  alignItems: "center",
-},
-
-backBtn: {
-  marginRight: 10,
-  padding: 4,
-},
-
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  backIcon: {
+    fontSize: 24,
+    color: '#1e293b',
+    fontWeight: '600',
+  },
   profileCard: {
     backgroundColor: '#ffffff',
     marginHorizontal: 20,
@@ -357,7 +365,7 @@ backBtn: {
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
   },
-  backButton: {
+  modalBackButton: {
     width: 44,
     height: 44,
     backgroundColor: '#ffffff',
@@ -370,7 +378,7 @@ backBtn: {
     shadowRadius: 4,
     elevation: 4,
   },
-  backButtonText: {
+  modalBackButtonText: {
     fontSize: 24,
     color: '#1e293b',
     fontWeight: '600',

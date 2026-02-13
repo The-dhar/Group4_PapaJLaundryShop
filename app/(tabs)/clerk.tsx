@@ -11,6 +11,19 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 const ROWS_PER_PAGE = 5;
 
+// Type Definitions
+type ClerkLog = {
+  id: string;
+  receipt_id: string;
+  clerk_name: string;
+  branch: string;
+  customer_name: string;
+  amount: number;
+  status: string;
+  inventory_status: string;
+  due_date: string;
+};
+
 // -----------------------------
 // Mock Data
 // -----------------------------
@@ -99,7 +112,7 @@ const mockClerkLogs = [
 // -----------------------------
 // Helpers
 // -----------------------------
-const getStatusColor = (status) =>
+const getStatusColor = (status: string) =>
   status === "paid" ? "#22C55E" : "#EF4444";
 
 // -----------------------------
@@ -107,7 +120,7 @@ const getStatusColor = (status) =>
 // -----------------------------
 export default function ClerkLogsList() {
   const [page, setPage] = useState(1);
-  const [selectedLog, setSelectedLog] = useState(null);
+  const [selectedLog, setSelectedLog] = useState<ClerkLog | null>(null);
 
   const totalPages = Math.ceil(mockClerkLogs.length / ROWS_PER_PAGE);
   const startIndex = (page - 1) * ROWS_PER_PAGE;
@@ -239,34 +252,72 @@ export default function ClerkLogsList() {
         </View>
 
         {/* Modal */}
-      <Modal
-  visible={!!selectedLog}
-  transparent
-  animationType="slide"
->
-  <View style={styles.modalOverlay}>
-    {selectedLog && (
-      <View style={styles.modalContent}>
-        <Text style={styles.modalTitle}>Receipt Details</Text>
-        <Text style={styles.modalText}>Receipt ID: {selectedLog.receipt_id}</Text>
-        <Text style={styles.modalText}>Customer: {selectedLog.customer_name}</Text>
-        <Text style={styles.modalText}>Amount: ₱{selectedLog.amount}.00</Text>
-        <Text style={styles.modalText}>
-          Payment Status: {selectedLog.status.toUpperCase()}
-        </Text>
-        <Text style={styles.modalText}>Inventory Status: {selectedLog.inventory_status}</Text>
-        <Text style={styles.modalText}>Due Date: {selectedLog.due_date}</Text>
+      <Modal visible={!!selectedLog} transparent animationType="slide">
+        <View style={styles.modalContainer}>
+          <View style={styles.modalBox}>
+            {selectedLog && (
+              <>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Receipt Details</Text>
+                  <TouchableOpacity
+                    style={styles.modalCloseBtn}
+                    onPress={() => setSelectedLog(null)}
+                  >
+                    <Text style={styles.modalCloseText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                
+                <View style={styles.modalContent}>
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>Receipt ID:</Text>
+                    <Text style={styles.modalValue}>{selectedLog.receipt_id}</Text>
+                  </View>
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>Clerk Name:</Text>
+                    <Text style={styles.modalValue}>{selectedLog.clerk_name}</Text>
+                  </View>
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>Customer:</Text>
+                    <Text style={styles.modalValue}>{selectedLog.customer_name}</Text>
+                  </View>
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>Branch:</Text>
+                    <Text style={styles.modalValue}>{selectedLog.branch}</Text>
+                  </View>
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>Amount:</Text>
+                    <Text style={styles.modalValue}>₱{selectedLog.amount}.00</Text>
+                  </View>
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>Payment Status:</Text>
+                    <View style={[styles.modalStatusBadge, { backgroundColor: getStatusColor(selectedLog.status) + '20' }]}>
+                      <Text style={[styles.modalStatusText, { color: getStatusColor(selectedLog.status) }]}>
+                        {selectedLog.status.toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>Inventory Status:</Text>
+                    <Text style={styles.modalValue}>{selectedLog.inventory_status}</Text>
+                  </View>
+                  <View style={styles.modalRow}>
+                    <Text style={styles.modalLabel}>Due Date:</Text>
+                    <Text style={styles.modalValue}>{selectedLog.due_date}</Text>
+                  </View>
+                </View>
 
-        <TouchableOpacity
-          style={styles.closeBtn}
-          onPress={() => setSelectedLog(null)}
-        >
-          <Text style={styles.closeBtnText}>Close</Text>
-        </TouchableOpacity>
-      </View>
-    )}
-  </View>
-</Modal>
+                <TouchableOpacity
+                  style={styles.closeBtn}
+                  onPress={() => setSelectedLog(null)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.closeBtnText}>Close</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
   
 </SafeAreaView>
   );
@@ -282,7 +333,7 @@ const styles = StyleSheet.create({
   headerContent: { position: "relative" },
   headerTitle: { fontSize: 28, fontWeight: "800", color: "#1e293b", letterSpacing: -0.5 },
   headerAccent: { position: "absolute", bottom: -8, left: 0, width: 60, height: 4, backgroundColor: "#3b82f6", borderRadius: 2 },
-  tableContainer: { margin: 20, backgroundColor: "#ffffff", borderRadius: 20, overflow: "hidden", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 12 },
+  tableContainer: { margin: 20, backgroundColor: "#ffffff", borderRadius: 20, overflow: "hidden", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 12, borderWidth: 1,borderColor: "#e2e8f0", },
   tableHeader: { flexDirection: "row", paddingVertical: 18, paddingHorizontal: 20, backgroundColor: "#f8fafc", borderBottomWidth: 2, borderBottomColor: "#e2e8f0" },
   tableBody: { paddingVertical: 8 },
   tableRow: { flexDirection: "row", paddingVertical: 18, paddingHorizontal: 20, alignItems: "center", backgroundColor: "#ffffff" },
@@ -309,12 +360,20 @@ const styles = StyleSheet.create({
   pageNumber: { fontWeight: "700", fontSize: 14, color: "#1e293b", letterSpacing: 0.3 },
 
   // Modal
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
-  modalContent: { width: "85%", backgroundColor: "#fff", borderRadius: 16, padding: 20 },
-  modalTitle: { fontSize: 20, fontWeight: "700", marginBottom: 12, color: "#1e293b" },
-  modalText: { fontSize: 16, fontWeight: "500", marginVertical: 4, color: "#334155" },
-  closeBtn: { marginTop: 20, paddingVertical: 12, borderRadius: 12, backgroundColor: "#1e293b", alignItems: "center" },
-  closeBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  modalContainer: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.6)", padding: 20, justifyContent: "center", alignItems: "center" },
+  modalBox: { width: "100%", maxWidth: 400, backgroundColor: "#ffffff", borderRadius: 24, overflow: "hidden", shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 24, elevation: 20 },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 24, backgroundColor: "#f8fafc", borderBottomWidth: 1, borderBottomColor: "#e2e8f0" },
+  modalTitle: { fontWeight: "800", fontSize: 22, color: "#1e293b", letterSpacing: -0.5 },
+  modalCloseBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: "#f1f5f9", justifyContent: "center", alignItems: "center" },
+  modalCloseText: { fontSize: 20, color: "#64748b", fontWeight: "600" },
+  modalContent: { padding: 24 },
+  modalRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: "#e2e8f0" },
+  modalLabel: { fontSize: 14, fontWeight: "600", color: "#64748b", letterSpacing: 0.2 },
+  modalValue: { fontSize: 15, fontWeight: "700", color: "#1e293b", letterSpacing: 0.2 },
+  modalStatusBadge: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8 },
+  modalStatusText: { fontSize: 12, fontWeight: "700", letterSpacing: 0.5 },
+  closeBtn: { margin: 24, marginTop: 8, backgroundColor: "#1e293b", padding: 16, borderRadius: 12, alignItems: "center", shadowColor: "#1e293b", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },
+  closeBtnText: { color: "#ffffff", fontWeight: "700", fontSize: 16, letterSpacing: 0.3 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",

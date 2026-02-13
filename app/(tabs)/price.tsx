@@ -329,7 +329,7 @@ const LaundryPriceManager = () => {
       {/* Edit Modal */}
       <Modal
         visible={isEditModalOpen}
-        animationType="slide"
+        animationType="fade"
         transparent={true}
       >
         <View style={styles.modalOverlay}>
@@ -773,18 +773,24 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-end', // Aligns the modal to the bottom like a "bottom sheet"
   },
   modalContainer: {
     backgroundColor: '#ffffff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '85%',
+    borderTopLeftRadius: 32, // Rounded corners at the top
+    borderTopRightRadius: 32,
+    maxHeight: '90%',
+    width: '100%', // Ensure it spans the full width
+    alignSelf: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
+    shadowOffset: { width: 0, height: -4 }, 
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
     elevation: 20,
+  },
+  modalBody: {
+    padding: 24,
+    
   },
   modalHeader: {
     flexDirection: 'row',
@@ -812,10 +818,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#64748b',
   },
-  modalBody: {
-    flex: 1,
-    padding: 24,
-  },
+ 
   tierEditCard: {
     backgroundColor: '#f8fafc',
     borderRadius: 12,

@@ -217,10 +217,12 @@ export default function DashboardAnalytics() {
                 </TouchableOpacity>
               </View>
 
-              <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint('Revenue')}>
-                <Ionicons name="print-outline" size={18} color="#1e293b" />
-                <Text style={styles.printText}>Print</Text>
-              </TouchableOpacity>
+                {!isSmallScreen && (
+                  <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint('Revenue')}>
+                    <Ionicons name="print-outline" size={14} color="#1e293b" />
+                    <Text style={styles.printText}>Print</Text>
+                  </TouchableOpacity>
+                )}
             </View>
           </View>
           <View style={{ alignItems: "center" }}>
@@ -250,14 +252,14 @@ export default function DashboardAnalytics() {
               <Pressable
                 onPressIn={() => setTooltipPos(prev => ({ ...prev, visible: true }))}
                 onPressOut={() => setTooltipPos(prev => ({ ...prev, visible: false }))}
-                style={{ width: revenueChartWidth, paddingLeft: 60 }}
+                style={{ width: revenueChartWidth + 50 }}
               >
                 <LineChart
                   data={{
                     labels: currentLabels,
                     datasets: [{ data: currentRevenue }],
                   }}
-                  width={revenueChartWidth}
+                  width={revenueChartWidth + 50}
                   height={200}
                   chartConfig={{
                     backgroundColor: "#ffffff",
@@ -265,8 +267,7 @@ export default function DashboardAnalytics() {
                     backgroundGradientTo: "#ffffff",
                     decimalPlaces: 0,
                     color: () => `rgba(59, 130, 246, 1)`,
-                    labelColor: () => `#64748b`,
-                    // Make x-axis labels smaller on small screens
+                    labelColor: () => `rgba(30, 41, 59, 1)`,
                     propsForLabels: {
                       fontSize: isSmallScreen ? 10 : 12,
                     },
@@ -277,6 +278,7 @@ export default function DashboardAnalytics() {
                     },
                   }}
                   bezier
+                  style={{ marginLeft: -20, borderRadius: 16 }}
                   formatYLabel={(yValue) => `₱${parseInt(yValue).toLocaleString()}`}
                   onDataPointClick={(data) => {
                     setTooltipPos({
@@ -319,10 +321,12 @@ export default function DashboardAnalytics() {
                   </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint('Branch Revenue Comparison')}>
-                  <Ionicons name="print-outline" size={18} color="#1e293b" />
-                  <Text style={styles.printText}>Print</Text>
-                </TouchableOpacity>
+                {!isSmallScreen && (
+                  <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint('Branch Revenue Comparison')}>
+                    <Ionicons name="print-outline" size={14} color="#1e293b" />
+                    <Text style={styles.printText}>Print</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
             <View style={{ alignItems: "center" }}>
@@ -347,18 +351,18 @@ export default function DashboardAnalytics() {
                 </View>
               )}
 
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center' }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center', marginLeft: 0 }}>
                 <Pressable
                   onPressIn={() => setBranchTooltip(prev => ({ ...prev, visible: true }))}
                   onPressOut={() => setBranchTooltip(prev => ({ ...prev, visible: false }))}
-                  style={{ width: branchComparisonChartWidth }}
+                  style={{ width: branchComparisonChartWidth + 140 }}
                 >
                   <AnyBarChart
                     data={{
                       labels: currentBranchLabels,
                       datasets: [{ data: currentBranchValues }],
                     }}
-                    width={branchComparisonChartWidth}
+                    width={branchComparisonChartWidth + 200}
                     height={220}
                     chartConfig={{
                       backgroundColor: "#ffffff",
@@ -366,11 +370,10 @@ export default function DashboardAnalytics() {
                       backgroundGradientTo: "#ffffff",
                       decimalPlaces: 0,
                       color: () => `rgba(59, 130, 246, 1)`,
-                    labelColor: () => `#475569`,
+                      labelColor: () => `rgba(30, 41, 59, 1)`,
                       // Make x-axis labels slightly larger on small screens and make y-axis labels more readable
                       propsForLabels: {
                         fontSize: isSmallScreen ? 10 : 12,
-                        // color setting applied via labelColor
                       },
                       formatYLabel: (y: string) => `₱${parseInt(y).toLocaleString()}`,
                       propsForBackgroundLines: {
@@ -381,7 +384,7 @@ export default function DashboardAnalytics() {
                     verticalLabelRotation={0}
                     fromZero={true}
                     showValuesOnTopOfBars={true}
-                    style={{ paddingRight: 16, paddingLeft: 60 }}
+                    style={{ marginLeft: -120, paddingRight: 40, paddingLeft: 15, borderRadius: 12, marginTop: 8 }}
                     // @ts-ignore - BarChart typings don't include onDataPointClick but runtime supports it
                     onDataPointClick={(data: any) => {
                       setBranchTooltip({
@@ -425,20 +428,22 @@ export default function DashboardAnalytics() {
                 </TouchableOpacity>
               </View>
 
-              <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint('Branch Performance')}>
-                <Ionicons name="print-outline" size={18} color="#1e293b" />
-                <Text style={styles.printText}>Print</Text>
-              </TouchableOpacity>
+              {!isSmallScreen && (
+                <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint('Branch Performance')}>
+                  <Ionicons name="print-outline" size={14} color="#1e293b" />
+                  <Text style={styles.printText}>Print</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
           <View style={styles.barChartWrapper}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center' }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center', marginLeft: 0 }}>
               <BarChart
                 data={{
                   labels: currentBranchLabels,
                   datasets: [{ data: currentBranchValues }]
                 }}
-                width={branchPerformanceChartWidth}
+                width={branchPerformanceChartWidth + 200}
                 height={isSmallScreen ? 260 : 300}
                 chartConfig={{
                   backgroundColor: "#ffffff",
@@ -446,13 +451,13 @@ export default function DashboardAnalytics() {
                   backgroundGradientTo: "#ffffff",
                   decimalPlaces: 0,
                   color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
-                  labelColor: (opacity = 1) => `rgba(71, 85, 105, ${opacity})`,
+                  labelColor: (opacity = 1) => `rgba(30, 41, 59, ${opacity})`,
                   // Make x-axis labels slightly larger on small screens and ensure y-axis labels are readable
                   propsForLabels: {
                     fontSize: isSmallScreen ? 10 : 12,
                   },
-                  // Ensure y-axis values render as numbers
-                  formatYLabel: (y: string) => `${parseInt(y).toLocaleString()}`,
+                  // Ensure y-axis values render as numbers with peso sign
+                  formatYLabel: (y: string) => `₱${parseInt(y).toLocaleString()}`,
                   barPercentage: currentBranchLabels.length > 10 ? 0.4 : 0.6,
                   propsForBackgroundLines: {
                     strokeDasharray: "",
@@ -460,11 +465,11 @@ export default function DashboardAnalytics() {
                     strokeWidth: 1,
                   },
                 }}
-                style={{ paddingLeft: 80, borderRadius: 12, marginTop: 10 }}
+                style={{ marginLeft: -120, paddingRight: 40, paddingLeft: 15, borderRadius: 12, marginTop: 10 }}
                 verticalLabelRotation={0}
                 fromZero={true}
                 yAxisLabel=""
-                yAxisSuffix="  orders"
+                yAxisSuffix=""
                 segments={4}
                 showValuesOnTopOfBars={true}
               />
@@ -570,7 +575,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     marginHorizontal: 20,
     marginTop: 10,
-    padding: 20,
+    paddingLeft: 25,
+    paddingRight: 20,
+    paddingTop: 20,
+    paddingBottom: 20,
     borderRadius: 20,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
@@ -580,18 +588,14 @@ const styles = StyleSheet.create({
     overflow: "visible", // allow axis labels to render outside rounded container
   },
   chartHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
     marginBottom: 16,
-    flexWrap: "wrap",
-    gap: 12,
   },
   chartTitle: {
     fontSize: 20,
     fontWeight: "800",
     color: "#1e293b",
     letterSpacing: -0.5,
+    marginBottom: 12,
   },
   switchBox: {
     flexDirection: "row",
@@ -608,19 +612,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    justifyContent: "flex-start",
   },
   printBtn: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
     marginLeft: 8,
-    borderRadius: 8,
+    borderRadius: 6,
     backgroundColor: "#f1f5f9",
+    maxWidth: 70,
   },
   printText: {
-    marginLeft: 6,
-    fontSize: 13,
+    marginLeft: 4,
+    fontSize: 11,
     color: "#1e293b",
     fontWeight: "600",
   },
@@ -650,7 +656,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     marginHorizontal: 20,
     marginTop: 16,
-    padding: 20,
+    paddingLeft: 25,
+    paddingRight: 20,
+    paddingTop: 20,
+    paddingBottom: 20,
     borderRadius: 20,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
@@ -660,18 +669,14 @@ const styles = StyleSheet.create({
     overflow: "visible",
   },
   branchPerformanceHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
     marginBottom: 16,
-    flexWrap: "wrap",
-    gap: 12,
   },
   branchPerformanceTitle: {
     fontSize: 20,
     fontWeight: "800",
     color: "#1e293b",
     letterSpacing: -0.5,
+    marginBottom: 12,
   },
   barChartWrapper: {
     alignItems: "center",
