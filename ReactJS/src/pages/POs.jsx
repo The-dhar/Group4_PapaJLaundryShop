@@ -48,13 +48,16 @@ const POs = () => {
   // SEARCH FUNCTION
   const handleCustomerSearch = async (value) => {
 
-    setSearchTerm(value);
+  setSearchTerm(value);
 
-    if (value.length < 2) {
-      setSearchResults([]);
-      return;
-    }
+  if (value.trim() === "") {
+    setSearchResults([]);
+    return;
+  }
 
+  if (value.length < 2) {
+    return;
+  }
     try {
 
       const response = await fetch(`${API_URL}/customers/search/${value}`);
@@ -132,16 +135,105 @@ const POs = () => {
 
   const printThermalReceipt = (txn) => {
 
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [58, 200] });
+  const servicesHTML = selectedServices.map(service => `
+    <tr>
+      <td>${service.serviceName}</td>
+      <td style="text-align:center">${service.kilos}</td>
+      <td style="text-align:right">₱${Number(service.total).toFixed(2)}</td>
+    </tr>
+  `).join("");
 
-    doc.text("Papa J's Laundry Shop", 29, 6, { align: 'center' });
+  const receiptHTML = `
+  <html>
+  <head>
+  <title>Receipt</title>
 
-    doc.text(`Receipt: ${txn.receipt}`, 2, 15);
-    doc.text(`Customer: ${txn.customer_name}`, 2, 20);
+  <style>
+  body{
+    font-family: monospace;
+    width:58mm;
+    padding:5px;
+  }
 
-    const blobUrl = doc.output('bloburl');
-    window.open(blobUrl);
-  };
+  .center{
+    text-align:center;
+  }
+
+  table{
+    width:100%;
+    font-size:12px;
+  }
+
+  td{
+    padding:2px 0;
+  }
+
+  .line{
+    border-top:1px dashed black;
+    margin:5px 0;
+  }
+
+  </style>
+  </head>
+
+  <body>
+
+  <div class="center">
+    <b>Papa J's Laundry Shop</b><br/>
+    Zamboanga City<br/>
+    Contact: 09xx-xxx-xxxx
+  </div>
+
+  <div class="line"></div>
+
+  Receipt: ${txn.receipt}<br/>
+  Date: ${new Date().toLocaleDateString()}<br/>
+  Customer: ${txn.customer_name}<br/>
+  Address: ${txn.customer_address}
+
+  <div class="line"></div>
+
+  <table>
+    <tr>
+      <td>Service</td>
+      <td style="text-align:center">Kg</td>
+      <td style="text-align:right">Amount</td>
+    </tr>
+
+    ${servicesHTML}
+
+  </table>
+
+  <div class="line"></div>
+
+  Total: ₱${Number(txn.amount).toFixed(2)}<br/>
+  Paid: ₱${Number(txn.paid_amount || 0).toFixed(2)}<br/>
+  Status: ${txn.payment_status}
+
+  <div class="line"></div>
+
+  <div class="center">
+  Thank you for choosing<br/>
+  Papa J's Laundry Shop!
+  </div>
+
+  </body>
+  </html>
+  `;
+
+  const printWindow = window.open("", "", "width=300,height=600");
+
+  printWindow.document.write(receiptHTML);
+  printWindow.document.close();
+
+  printWindow.focus();
+
+  setTimeout(() => {
+    printWindow.print();
+    printWindow.close();
+  }, 500);
+
+};
 
   const handleCompleteTransaction = async () => {
 
@@ -244,6 +336,25 @@ const POs = () => {
                       value={searchTerm}
                       onChange={(e) => handleCustomerSearch(e.target.value)}
                     />
+
+                    {searchResults.length > 0 && (
+                      <div className="search-results">
+                        {searchResults.map(customer => (
+                          <div
+                            key={customer.id}
+                            className="search-result-item"
+                            onClick={() => {
+                              setCustomerName(customer.name);
+                              setCustomerAddress(customer.address);
+                              setSearchResults([]);
+                              setSearchTerm(customer.name);
+                            }}
+                          >
+                            {customer.name}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <button className="for-receipt-add-customer" onClick={() => setIsCustomerModalOpen(true)}>
                     Add Customer

@@ -110,4 +110,40 @@ class TransactionController extends Controller
 
     }
 
+        public function index()
+    {
+        $transactions = Transaction::with('items')->get();
+
+        return response()->json(
+            $transactions->map(function ($txn) {
+
+                return [
+                    'id' => $txn->id,
+                    'receipt' => $txn->receipt_number,
+                    'customer_name' => $txn->customer_name,
+                    'customer_address' => $txn->customer_address,
+
+                    'amount' => $txn->total_amount,
+                    'paid_amount' => $txn->paid_amount,
+
+                    'payment_status' => $txn->payment_status,
+                    'inventory_status' => $txn->inventory_status,
+
+                    'due_date' => $txn->due_date,
+
+                    'receipt_items' => $txn->items->map(function ($item) {
+                        return [
+                            'id' => $item->id,
+                            'serviceName' => $item->service_name,
+                            'laundryType' => $item->laundry_type,
+                            'rate' => $item->rate,
+                            'kilos' => $item->kilos,
+                            'total' => $item->total
+                        ];
+                    })
+                ];
+            })
+        );
+    }
+
 }
