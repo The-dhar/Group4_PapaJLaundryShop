@@ -27,6 +27,10 @@ const POs = () => {
   const [paymentMethod, setPaymentMethod] = useState('');
   const [amountPaid, setAmountPaid] = useState('');
 
+  // NEW STATES (FUNCTIONAL ONLY)
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+
   useEffect(() => {
     if (paymentStatus === 'full') setPaymentMethod('Cash');
     else setPaymentMethod('');
@@ -40,6 +44,28 @@ const POs = () => {
     { id: 5, icon: '/pictures/towel.png', name: 'Comforters' },
     { id: 6, icon: '/pictures/male-clothes.png', name: 'Drying' },
   ];
+
+  // SEARCH FUNCTION
+  const handleCustomerSearch = async (value) => {
+
+    setSearchTerm(value);
+
+    if (value.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    try {
+
+      const response = await fetch(`${API_URL}/customers/search/${value}`);
+      const data = await response.json();
+
+      setSearchResults(data);
+
+    } catch (error) {
+      console.log(error);
+    }
+  };
 
   const handleAddServiceFromModal = (laundryItem, selectedTier, kilos, laundryType, extra) => {
 
@@ -211,7 +237,13 @@ const POs = () => {
                 <div className="for-receipt-top">
                   <div className="for-receipt-searchbar">
                     <BsSearch className="for-receipt-searchicon" />
-                    <input type="text" placeholder="Search Names..." className="for-receipt-searchinput" />
+                    <input
+                      type="text"
+                      placeholder="Search Names..."
+                      className="for-receipt-searchinput"
+                      value={searchTerm}
+                      onChange={(e) => handleCustomerSearch(e.target.value)}
+                    />
                   </div>
                   <button className="for-receipt-add-customer" onClick={() => setIsCustomerModalOpen(true)}>
                     Add Customer
@@ -222,9 +254,25 @@ const POs = () => {
                   isOpen={isCustomerModalOpen}
                   onClose={() => setIsCustomerModalOpen(false)}
                   initial={{ name: customerName, address: customerAddress }}
-                  onSave={({ name, address }) => {
+                  onSave={async ({ name, address }) => {
+
                     setCustomerName(name);
                     setCustomerAddress(address);
+
+                    const token = localStorage.getItem("token");
+
+                    await fetch(`${API_URL}/customers`, {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`
+                      },
+                      body: JSON.stringify({
+                        name: name,
+                        address: address
+                      })
+                    });
+
                   }}
                 />
 
