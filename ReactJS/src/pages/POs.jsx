@@ -6,11 +6,13 @@ import SmallcardModal from '../components/smallcardModal';
 import CustomerModal from '../components/customerModal';
 import '../styles/posstyle.css';
 import Swal from 'sweetalert2';
-import { jsPDF } from 'jspdf';
+import { useTransactions } from "../context/transactionsContext";
 import { API_URL } from "../config/api";
 
 
 const POs = () => {
+
+  const { fetchTransactions } = useTransactions();
 
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedServices, setSelectedServices] = useState([]);
@@ -275,7 +277,8 @@ const POs = () => {
           discount_amount: extraChargeType === 'discount' ? Number(discountAmount) : 0,
           payment_status,
           payment_method: paymentMethod,
-          paid_amount: Number(amountPaid) || 0
+          paid_amount: Number(amountPaid) || 0,
+          is_rush: extraChargeType === "express"
         })
       });
 
@@ -292,6 +295,7 @@ const POs = () => {
         confirmButtonText: "Okay",
       });
 
+      await fetchTransactions();
       resetForm();
 
     } catch (error) {

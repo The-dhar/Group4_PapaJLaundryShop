@@ -46,7 +46,7 @@ class TransactionController extends Controller
 
                 'receipt_number' => $receipt,
 
-                // ✅ FIXED (branch comes from logged user)
+                //(branch comes from logged user)
                 'branch_id' => $user->id,
 
                 'customer_name' => $request->customer_name,
@@ -63,7 +63,9 @@ class TransactionController extends Controller
 
                 'inventory_status' => 'in_shop',
 
-                'due_date' => $request->due_date
+                'due_date' => $request->due_date,
+
+                'is_rush' => $request->is_rush ?? false,
 
             ]);
 
@@ -112,7 +114,10 @@ class TransactionController extends Controller
 
         public function index()
     {
-        $transactions = Transaction::with('items')->get();
+        
+        $transactions = Transaction::with('items')
+            ->where('archived', false)
+            ->get();
 
         return response()->json(
             $transactions->map(function ($txn) {
@@ -124,6 +129,9 @@ class TransactionController extends Controller
                     'customer_address' => $txn->customer_address,
 
                     'amount' => $txn->total_amount,
+
+                    'is_rush' => $txn->is_rush,
+                    
                     'paid_amount' => $txn->paid_amount,
 
                     'payment_status' => $txn->payment_status,
@@ -144,6 +152,46 @@ class TransactionController extends Controller
                 ];
             })
         );
+    }
+
+    public function markPaid($id)
+    {
+        $transaction = Transaction::findOrFail($id);
+
+        $transaction->payment_status = 'paid';
+
+        $transaction->save();
+
+        return response()->json([
+            'message' => 'Transaction marked as paid'
+        ]);
+    }
+
+    public function updatePayment(Request $request, $id)
+    {
+        $transaction = Transaction::findOrFail($id);
+
+        $transaction->paid_amount = $request->paid_amount;
+        $transaction->payment_method = $request->payment_method;
+
+        $transaction->save();
+
+        return response()->json([
+            'message' => 'Payment updated'
+        ]);
+    }
+
+    public function archive($id)
+    {
+        $transaction = Transaction::findOrFail($id);
+
+        $transaction->archived = true;
+
+        $transaction->save();
+
+        return response()->json([
+            'message' => 'Transaction archived successfully'
+        ]);
     }
 
 }

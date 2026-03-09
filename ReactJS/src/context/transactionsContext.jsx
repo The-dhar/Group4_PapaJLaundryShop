@@ -17,9 +17,13 @@ export const TransactionsProvider = ({ children }) => {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
+          Authorization: `Bearer ${token}`
         }
       });
+
+      if (!res.ok) {
+        throw new Error("Failed to fetch transactions");
+      }
 
       const data = await res.json();
 
@@ -41,51 +45,96 @@ export const TransactionsProvider = ({ children }) => {
 
   const markTransactionPaid = async (id) => {
 
-    const token = localStorage.getItem("token");
+    try {
 
-    await fetch(`${API_URL}/transactions/${id}/mark-paid`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(`${API_URL}/transactions/${id}/mark-paid`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to mark transaction as paid");
       }
-    });
 
-    fetchTransactions();
+      await fetchTransactions();
+
+    } catch (error) {
+
+      console.error("Error marking paid:", error);
+
+    }
+
   };
 
-  const updateTransactionPaidAmount = async (id, paidAmount, penalty, paymentMethod) => {
+  const updateTransactionPaidAmount = async (
+    id,
+    paidAmount,
+    penalty,
+    paymentMethod
+  ) => {
 
-    const token = localStorage.getItem("token");
+    try {
 
-    await fetch(`${API_URL}/transactions/${id}/update-payment`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        paid_amount: paidAmount,
-        penalty: penalty,
-        payment_method: paymentMethod
-      })
-    });
+      const token = localStorage.getItem("token");
 
-    fetchTransactions();
+      const res = await fetch(`${API_URL}/transactions/${id}/update-payment`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          paid_amount: paidAmount,
+          penalty: penalty,
+          payment_method: paymentMethod
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to update payment");
+      }
+
+      await fetchTransactions();
+
+    } catch (error) {
+
+      console.error("Error updating payment:", error);
+
+    }
+
   };
 
   const archiveTransaction = async (id) => {
 
-    const token = localStorage.getItem("token");
+    try {
 
-    await fetch(`${API_URL}/transactions/${id}/archive`, {
-      method: "PUT",
-      headers: {
-        "Authorization": `Bearer ${token}`
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(`${API_URL}/transactions/${id}/archive`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to archive transaction");
       }
-    });
 
-    fetchTransactions();
+      await fetchTransactions();
+
+    } catch (error) {
+
+      console.error("Error archiving transaction:", error);
+
+    }
+
   };
 
   return (

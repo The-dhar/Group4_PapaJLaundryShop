@@ -19,7 +19,9 @@ class Transaction extends Model
         'payment_method',
         'paid_amount',
         'inventory_status',
-        'due_date'
+        'due_date',
+        'archived',
+        'is_rush',
     ];
 
     public function items()
