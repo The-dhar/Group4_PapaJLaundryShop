@@ -1,0 +1,566 @@
+/* ============================
+   📦 INVENTORY STYLES
+   ============================ */
+
+
+/* ====== Inventory Header ====== */
+
+.inventory-header {
+    background: white;
+    border-radius: 20px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.inventory-header h2 {
+    margin: 0;
+}
+
+.inventory-header p {
+    margin: 8px 0 16px;
+    color: #475467;
+}
+
+.role-toggle {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.role-toggle select {
+    padding: 8px 14px;
+    border-radius: 12px;
+}
+
+
+/* ====== Inventory Table Container ====== */
+
+.table-container {
+    min-height: auto;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    box-sizing: border-box;
+}
+
+
+/* ====== Inventory White Box ====== */
+
+.background-table {
+    width: 100%;
+    background: white;
+    border-radius: 20px;
+    padding: 30px;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    box-sizing: border-box;
+}
+
+
+/* ====== Inventory Search and Filter ====== */
+
+.search-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+    width: 100%;
+}
+
+.search-filter-row input[type='text'] {
+    flex: 1;
+    min-width: 300px;
+    border: 2px solid #e5e7eb;
+    border-radius: 30px;
+    font-size: 14px;
+    outline: none;
+    transition: all 0.3s ease;
+    font-family: inherit;
+    padding: 14px 24px;
+}
+
+.search-filter-row select {
+    padding: 12px 44px 12px 20px;
+    height: 44px;
+    border: 2px solid #e5e7eb;
+    border-radius: 30px;
+    font-size: 14px;
+    background-color: white;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%23666' d='M6 8L0 0h12z'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 12px 8px;
+}
+
+.search-filter-row input[type='text']:focus,
+.search-filter-row select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+}
+
+
+/* ====== Inventory Table Wrapper ====== */
+
+.table-wrapper {
+    flex: 1;
+    border: 1px solid #e5e7eb;
+    border-radius: 15px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    overflow-x: auto;
+    overflow-y: visible !important;
+    scrollbar-width: none;
+}
+
+.table-wrapper::-webkit-scrollbar {
+    display: none;
+}
+
+
+/* ====== DataTable Styles (Inventory) ====== */
+
+.rdt_TableHeadRow {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+    font-weight: 600;
+    color: #495057;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid #dee2e6 !important;
+}
+
+.rdt_TableRow {
+    border-bottom: 1px solid #f1f3f5;
+    transition: all 0.2s ease;
+    background-color: white;
+}
+
+.rdt_TableRow:hover {
+    background-color: #f8f9ff !important;
+    transform: scale(1.001);
+}
+
+
+/* ====== Overdue Rows ====== */
+
+.rdt_TableRow.overdue-row {
+    background-color: #fecaca !important;
+    border-left: 4px solid #dc2626;
+}
+
+.rdt_TableRow.overdue-row:hover {
+    background-color: #fca5a5 !important;
+}
+
+.rdt_TableRow.overdue-row .rdt_TableCell {
+    background-color: transparent !important;
+}
+
+.overdue-alert-icon {
+    color: #dc2626;
+    font-size: 18px;
+    margin-left: 8px;
+    animation: pulse 2s infinite;
+}
+
+
+/* ====== Archived Rows (gray) ====== */
+
+.rdt_TableRow.archived-row {
+    background-color: #f3f4f6 !important;
+    color: #6b7280 !important;
+}
+
+.rdt_TableRow.archived-row .rdt_TableCell {
+    color: #6b7280 !important;
+}
+
+
+/* archived status pill modifier */
+
+.status-archived {
+    background: #eef2f7 !important;
+    color: #6b7280 !important;
+}
+
+@keyframes pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
+}
+
+
+/* ====== Table Cells ====== */
+
+.rdt_TableCell {
+    padding: 16px 12px !important;
+    color: #212529 !important;
+    font-size: 14px !important;
+}
+
+
+/* ====== Remove Scrollbars ====== */
+
+.rdt_TableBody {
+    overflow-y: visible !important;
+    overflow-x: visible !important;
+}
+
+.rdt_Table {
+    overflow-y: visible !important;
+    overflow-x: visible !important;
+}
+
+.rdt_Table::-webkit-scrollbar,
+.rdt_TableBody::-webkit-scrollbar {
+    display: none !important;
+}
+
+
+/* ====== Status Pills ====== */
+
+.status-pill {
+    text-transform: capitalize;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.status-paid {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.status-unpaid {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.status-in_shop {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.status-picked_up {
+    background: #ede9fe;
+    color: #5b21b6;
+}
+
+
+/* ====== View Button ====== */
+
+.inventory-view-btn {
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: none;
+    background: #6366f1;
+    color: white;
+    cursor: pointer;
+}
+
+
+/* ====== Action Icons ====== */
+
+.inventory-action-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+    transition: color 0.3s ease, transform 0.2s ease;
+    color: #007bff;
+}
+
+.inventory-action-btn.edit {
+    color: #28a745;
+}
+
+.inventory-action-btn:hover:not(:disabled) {
+    transform: scale(1.2);
+}
+
+.inventory-action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    color: #6c757d;
+}
+
+
+/* ====== Modal ====== */
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.inventory-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.inventory-modal-content {
+    background: #f9f9f9;
+    border: 2px solid #333;
+    border-radius: 8px;
+    max-width: 450px;
+    width: 90%;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-family: 'Courier New', monospace;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.inventory-modal-content h3 {
+    text-align: center;
+    font-size: 24px;
+    margin: 0 0 10px 0;
+    color: #000;
+    font-weight: bold;
+}
+
+.inventory-modal-content p {
+    margin: 6px 0;
+    line-height: 1.4;
+    font-size: 14px;
+}
+
+.inventory-modal-content ul {
+    padding-left: 15px;
+    margin: 6px 0;
+    list-style-type: none;
+    font-size: 13px;
+}
+
+.inventory-modal-content ul li {
+    margin: 3px 0;
+}
+
+
+/* ====== Status Row ====== */
+
+.status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+
+/* ====== Logs ====== */
+
+.log-list {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 12px;
+}
+
+.modal-section {
+    border-top: 1px solid #f1f5f9;
+    padding-top: 12px;
+}
+
+.log-item {
+    border-bottom: 1px solid #f1f5f9;
+    padding: 8px 0;
+}
+
+.log-item:last-child {
+    border-bottom: none;
+}
+
+
+/* ====== Modal Buttons ====== */
+
+.modal-actions {
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.modal-btn {
+    flex: 1;
+    padding: 12px 16px;
+    font-weight: 600;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    text-align: center;
+}
+
+.modal-btn.primary {
+    background: #2563eb;
+    color: white;
+}
+
+.modal-btn.secondary {
+    background: #e5e7eb;
+    color: #111;
+}
+
+.modal-btn.cancel {
+    background: #FF3B30;
+    color: white;
+}
+
+.modal-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #9ca3af;
+}
+
+
+/* ====== Paid Amount Section ====== */
+
+
+/* ====== Paid Amount Section ====== */
+
+.paid-amount-section {
+    margin: 15px 0;
+    padding: 12px;
+    background-color: #f0f4f8;
+    border-left: 4px solid #667eea;
+    border-radius: 6px;
+}
+
+.paid-amount-section label {
+    display: block;
+    margin-bottom: 8px;
+    color: #333;
+    font-weight: 600;
+}
+
+.paid-amount-input,
+.penalty-input {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.3s ease;
+    background-color: white;
+    margin-bottom: 12px;
+}
+
+.paid-amount-input::placeholder,
+.penalty-input::placeholder {
+    color: #000;
+    opacity: 1;
+}
+
+.paid-amount-input:focus,
+.penalty-input:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.change-balance {
+    margin-top: 8px;
+    padding: 8px;
+    background-color: #e8f4f8;
+    border-radius: 4px;
+    color: #075985;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.change-balance {
+    margin-top: 8px;
+    padding: 8px;
+    background-color: #e8f4f8;
+    border-radius: 4px;
+    color: #075985;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+
+/* ============================
+   📱 MOBILE RESPONSIVE
+   ============================ */
+
+@media (max-width: 768px) {
+    .inventory-header {
+        padding: 20px;
+    }
+    .background-table {
+        padding: 20px;
+    }
+    .search-filter-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .search-filter-row input,
+    .search-filter-row select {
+        width: 100%;
+        min-width: unset;
+    }
+    .table-wrapper {
+        width: 100%;
+        overflow-x: auto;
+        overflow-y: visible !important;
+    }
+    .rdt_TableCell {
+        font-size: 12px !important;
+        padding: 10px 6px !important;
+    }
+    .rdt_TableHeadRow {
+        font-size: 11px !important;
+    }
+    .inventory-modal-content {
+        width: 95%;
+        border-radius: 6px;
+        padding: 15px;
+        font-size: 12px;
+    }
+    .modal-actions {
+        flex-direction: column;
+    }
+    .modal-btn {
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .inventory-header h2 {
+        font-size: 20px;
+    }
+    .inventory-header p {
+        font-size: 14px;
+    }
+    .status-pill {
+        font-size: 10px;
+        padding: 4px 8px;
+    }
+    .inventory-action-btn {
+        font-size: 16px;
+    }
+}

@@ -1,0 +1,142 @@
+/* === WRAPPER === */
+
+.dashboard-layout {
+    display: flex;
+    flex-direction: row;
+    height: 100vh;
+    width: 100vw;
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    box-sizing: border-box;
+}
+
+
+/* === SIDEBAR === */
+
+.sidebar {
+    width: 250px;
+    background-color: #1976d2;
+    height: 100vh;
+    flex-shrink: 0;
+    /* don’t shrink when resizing */
+    position: fixed;
+    /* keeps sidebar static on left */
+    top: 0;
+    left: 0;
+}
+
+.main-wrapper {
+    justify-content: center;
+    margin-left: 250px;
+    /* offset to avoid hiding under sidebar */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* centers horizontally */
+    justify-content: flex-start;
+    /* keeps content from centering vertically */
+    width: calc(100% - 250px);
+    min-height: 100vh;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.header {
+    background-color: #fff;
+    height: 80px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-sizing: border-box;
+    padding: 0 20px;
+}
+
+
+/* === MAIN CONTENT === */
+
+.main-content {
+    flex-grow: 1;
+    padding: 0px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    height: 100%;
+    border-radius: 15px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.dashboard-layout {
+    display: flex;
+    width: 100%;
+}
+
+
+/* Sidebar width when open */
+
+.sidebar-open .sidebar {
+    width: 240px;
+    /* Or whatever size your sidebar is */
+}
+
+
+/* Sidebar collapse (hidden) */
+
+.sidebar-closed .sidebar {
+    width: 0;
+    overflow: hidden;
+}
+
+
+/* Main content adjusts */
+
+.main-wrapper {
+    flex: 1;
+    transition: margin-left 0.3s ease;
+}
+
+
+/* When sidebar is open */
+
+.sidebar-open .main-wrapper {
+    margin-left: 240px;
+    /* same as sidebar width */
+}
+
+
+/* When sidebar is closed */
+
+.sidebar-closed .main-wrapper {
+    margin-left: 0;
+}
+
+
+/* === RESPONSIVE === */
+
+@media (max-width: 1024px) {
+    .sidebar {
+        width: 200px;
+    }
+    .main-wrapper {
+        margin-left: 200px;
+    }
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        position: fixed;
+        left: -250px;
+        width: 250px;
+        transition: left 0.3s ease;
+        z-index: 1000;
+    }
+    .sidebar.active {
+        left: 0;
+    }
+    .main-wrapper {
+        margin-left: 0;
+    }
+}
