@@ -50,16 +50,13 @@ export default function LoginPage() {
         return;
       }
 
-      // Allow only branch accounts
       if (data.user.role !== "manager") {
         alert("Only branch accounts can login here");
         return;
       }
 
-      // Save token
       localStorage.setItem("token", data.token);
 
-      // Save user
       localStorage.setItem("user", JSON.stringify(data.user));
 
       navigate('/Dashboard');

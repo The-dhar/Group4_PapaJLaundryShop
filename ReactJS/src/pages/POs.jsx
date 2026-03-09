@@ -137,10 +137,14 @@ const POs = () => {
 
     try {
 
+      const token = localStorage.getItem("token");
+
       const response = await fetch(`${API_URL}/transactions`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+          "Accept": "application/json"
         },
         body: JSON.stringify({
           customer_name: customerName.trim(),
