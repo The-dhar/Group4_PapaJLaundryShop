@@ -167,6 +167,9 @@ export const TransactionsProvider = ({ children }) => {
     due_date,
     extra_charge_type = 'none',
     discount_amount = 0,
+    additional_amount = 0,
+    active_extras = null,
+    sub_extras = null,
     // optional payment fields from POs
     payment_status = 'unpaid',
     payment_method = '',
@@ -209,6 +212,9 @@ export const TransactionsProvider = ({ children }) => {
       due_date,
       extra_charge_type,
       discount_amount,
+      additional_amount,
+      active_extras,
+      sub_extras,
       created_at: now,
       archived: false,
       // attach structured receipt_items for table display / inventory

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { NavLink } from 'react-router-dom'; // Changed from Link
 import { BsGrid1X2Fill, BsCart3, BsBoxSeam, BsReceiptCutoff, BsDoorOpen, BsCashStack, BsLightningCharge, BsArchive } from 'react-icons/bs';
 import '../componentstyle/sidebarstyle.css';
 
@@ -12,44 +12,49 @@ const Sidebar = ({ sidebarOpen }) => {
 
             <ul className='sidebar-list'>
                 <li className='sidebar-list-items'>
-                    <Link to="/dashboard">
+                    <NavLink to="/dashboard">
                         <BsGrid1X2Fill className='icon'/> Dashboard
-                    </Link>
+                    </NavLink>
                 </li>
 
                 <li className='sidebar-list-items'>
-                    <Link to="/POS">
+                    <NavLink to="/POS">
                         <BsCart3 className='icon'/> POS
-                    </Link>
+                    </NavLink>
                 </li>
 
                 <li className='sidebar-list-items'>
-                    <Link to="/Inventory">
+                    <NavLink to="/Inventory">
                         <BsCashStack className='icon'/> Transaction Log
-                    </Link>
+                    </NavLink>
                 </li>
+                
                 <li className='sidebar-list-items'>
-                    <Link to="/Express">
+                    <NavLink to="/Express">
                         <BsLightningCharge className='icon'/> Rush Orders
-                    </Link>
+                    </NavLink>
                 </li>
+                
                 <li className='sidebar-list-items'>
-                    <Link to="/Unclaimed">
+                    <NavLink to="/Unclaimed">
                         <BsBoxSeam className='icon'/> Unclaimed Items
-                    </Link>
+                    </NavLink>
                 </li>
 
                 <li className='sidebar-list-items'>
-                    <Link to="/Receipt">
+                    <NavLink to="/Receipt">
                         <BsReceiptCutoff className='icon'/> Receipt Management
-                    </Link>
+                    </NavLink>
                 </li>
-            <li className='sidebar-list-items'>
-                    <a href="/Archive">
-                        <BsArchive className='icon'/> Archive
-                    </a>
-                </li>
+
                 <li className='sidebar-list-items'>
+                    <NavLink to="/Archive">
+                        <BsArchive className='icon'/> Archive
+                    </NavLink>
+                </li>
+
+                <li className='sidebar-list-items'>
+                    {/* Logout usually stays as an anchor or button since it triggers an action */}
                     <a href="/logout">
                         <BsDoorOpen className='icon'/> Log Out
                     </a>
@@ -60,3 +65,4 @@ const Sidebar = ({ sidebarOpen }) => {
 };
 
 export default Sidebar;
+

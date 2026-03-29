@@ -9,18 +9,19 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
 
   useEffect(() => {
     if (isOpen && item) {
-      setKilos(1);
-      setNotes("");
+      setKilos(item.initialKilos || 1);
+      setNotes(item.initialNotes || "");
 
-      // AUTO-SET LAUNDRY TYPE BASED ON CARD NAME
-      if (item.name.toLowerCase().includes("dry")) {
+      if (item.initialType) {
+        setLaundryType(item.initialType);
+      } else if (item.name.toLowerCase().includes("dry")) {
         setLaundryType("dry-only");
       } else {
         setLaundryType("wash-and-fold");
       }
 
       // INITIAL PRICE
-      const initialInfo = calculatePriceInfo(1);
+      const initialInfo = calculatePriceInfo(item.initialKilos || 1);
       setSelectedTier(initialInfo);
     }
   }, [isOpen, item]);
@@ -109,6 +110,17 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
     }
 
     /** ----------------------------------------
+     * COMFORTERS
+     * ---------------------------------------- */
+    if (name.includes("comforter")) {
+      if (kv <= 6) return { computedTotal: 195, label: "₱195 (1–6 kg)" };
+      if (kv > 6 && kv <= 7) return { computedTotal: 265, label: "₱265 (7 kg = ₱195+₱70)" };
+      const cycles = Math.ceil(kv / 7);
+      const total = cycles * 195;
+      return { computedTotal: total, label: `₱${total.toFixed(2)} (${cycles} cycles)` };
+    }
+
+    /** ----------------------------------------
      * REGULAR CLOTHES
      * ---------------------------------------- */
     if (name.includes("regular")) {
@@ -162,7 +174,8 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
       null,
       kilos,
       laundryType,
-      { computedTotal: selectedTier.computedTotal, unit: "computed" }
+      { computedTotal: selectedTier.computedTotal, unit: "computed" },
+      notes
     );
 
     handleCancel();

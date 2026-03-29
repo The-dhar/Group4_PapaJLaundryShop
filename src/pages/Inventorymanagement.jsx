@@ -5,6 +5,17 @@ import { BsEye,BsCashStack} from 'react-icons/bs';
 import { useTransactions } from '../context/transactionsContext';
 import '../styles/inventorystyle.css';
 
+function formatInventoryStatus(status) {
+  if (status == null || status === '') return '—';
+  const map = { in_shop: 'In Shop', picked_up: 'Pick Up' };
+  const key = String(status).toLowerCase();
+  if (map[key]) return map[key];
+  return String(status)
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
 const Inventorymanagement = () => {
   const { 
     transactions, 
@@ -35,6 +46,7 @@ const Inventorymanagement = () => {
     return isPastDue(dueDate) ? amount * 0.05 : 0;
   };
 
+
   const filteredData = useMemo(() => {
     return transactions.filter((row) => {
       const matchesPayment = filterPayment === 'All' || row.payment_status === filterPayment;
@@ -48,22 +60,25 @@ const Inventorymanagement = () => {
 
   // Mark paid logic with fixed payment_method = Cash
   const handleMarkPaid = () => {
-    if (!selectedTxn) return;
-    const paidAmount = Number(paidAmountInput) || 0;
-    const penalty = Number(penaltyInput) || 0;
+  if (!selectedTxn) return;
+  const paidAmount = Number(paidAmountInput) || 0;
+  const penalty = Number(penaltyInput) || 0;
 
-    updateTransactionPaidAmount(
-      selectedTxn.id,
-      paidAmount,
-      penalty,
-      "Cash" // FORCE CASH ALWAYS
-    );
+  updateTransactionPaidAmount(
+    selectedTxn.id,
+    paidAmount,
+    penalty,
+    "Cash" 
+  );
 
-    markTransactionPaid(selectedTxn.id);
-    setSelectedTxn(null);
-    setPaidAmountInput('');
-    setPenaltyInput('');
-  };
+  markTransactionPaid(selectedTxn.id);
+  
+  // CLEAR OR REFRESH: This ensures the next time you open it, 
+  // it pulls the fresh data from the transactions array.
+  setSelectedTxn(null); 
+  setPaidAmountInput('');
+  setPenaltyInput('');
+};
 
   const columns = [
     { name: 'Receipt ID', selector: (row) => row.receipt, sortable: true },
@@ -78,7 +93,9 @@ const Inventorymanagement = () => {
     {
       name: 'Status',
       cell: (row) => (
-        <span className={`status-pill status-${row.inventory_status}`}>{row.inventory_status}</span>
+        <span className={`status-pill status-${row.inventory_status}`}>
+          {formatInventoryStatus(row.inventory_status)}
+        </span>
       ),
     },
     { name: 'Amount', selector: (row) => `₱${row.amount.toFixed(2)}` },
@@ -168,7 +185,7 @@ const Inventorymanagement = () => {
       {selectedTxn && (
         <div className="inventory-modal">
           <div className="inventory-modal-content">
-
+          <div className="inventory-modal-body">
             
             <h3>Receipt: {selectedTxn.receipt}</h3>
             <p><strong>Customer:</strong> {selectedTxn.customer_name}</p>
@@ -194,30 +211,41 @@ const Inventorymanagement = () => {
             <p><strong>Paid Amount:</strong> ₱{(Number(selectedTxn.paid_amount) || 0).toFixed(2)}</p>
             <p><strong>Penalty:</strong> ₱{(Number(selectedTxn.penalty) || 0).toFixed(2)}</p>
             <p><strong>Payment Status:</strong> {selectedTxn.payment_status}</p>
-            <p><strong>Inventory Status:</strong> {selectedTxn.inventory_status}</p>
-
+            <p><strong>Inventory Status:</strong> {formatInventoryStatus(selectedTxn.inventory_status)}</p>
+            {/* Add this after your Paid Amount and Penalty <p> tags */}
+            <p>
+              <strong>Remaining Balance:</strong> 
+              <span style={{ color: (selectedTxn.amount + (Number(selectedTxn.penalty) || 0) - (Number(selectedTxn.paid_amount) || 0)) > 0 ? 'red' : 'green' }}>
+                ₱{(selectedTxn.amount + (Number(selectedTxn.penalty) || 0) - (Number(selectedTxn.paid_amount) || 0)).toFixed(2)}
+              </span>
+            </p>
             {/* EDIT MODE */}
+            {/* Replace your old paid-amount-section with this */}
             <div className="paid-amount-section">
+              
               <label><strong>Amount Paid:</strong></label>
               <input
-                type="text"
+                type="number"
                 className="paid-amount-input"
-                placeholder="Pending - Enter amount paid"
+                placeholder="Enter amount paid"
                 value={paidAmountInput}
-                disabled={viewMode === 'view'}
+                /* LOCKS if the mode is 'view' OR if the transaction is already 'paid' */
+                disabled={viewMode === 'view' || selectedTxn?.payment_status === 'paid'} 
                 onChange={(e) => setPaidAmountInput(e.target.value)}
               />
 
               <label><strong>Penalty:</strong></label>
               <input
-                type="text"
+                type="number"
                 className="penalty-input"
                 placeholder="Enter penalty amount"
                 value={penaltyInput}
-                disabled={viewMode === 'view'}
+                /* ONLY LOCKS if we are in 'view' mode. Stays editable in 'edit' mode even if paid. */
+                disabled={viewMode === 'view'} 
                 onChange={(e) => setPenaltyInput(e.target.value)}
               />
-
+              
+              {/* Display Change/Balance logic remains the same below */}
               {viewMode === 'edit' && paidAmountInput && (
                 <p className="change-balance">
                   {Number(paidAmountInput) >= (selectedTxn.amount + Number(penaltyInput)) ? (
@@ -229,29 +257,40 @@ const Inventorymanagement = () => {
               )}
             </div>
 
-            {/* MODAL BUTTONS */}
-            <div className="modal-actions">
-              <button onClick={() => setSelectedTxn(null)} className="modal-btn secondary">Close</button>
-
-              {viewMode === 'view' && (
-                <button
-                  onClick={() => { archiveTransaction(selectedTxn.id); setSelectedTxn(null); }}
-                  className="modal-btn cancel"
-                >
-                  Archive Transaction
-                </button>
-              )}
-
-              {viewMode === 'edit' && (
-                <button
-                  onClick={handleMarkPaid}
-                  disabled={selectedTxn.payment_status === 'paid'}
-                  className="modal-btn primary"
-                >
-                  Mark as Paid
-                </button>
-              )}
             </div>
+
+            {/* MODAL BUTTONS — outside scroll area so no inner scrollbar */}
+             <div className="modal-actions">
+  {/* 1. Always show the Close button */}
+  <button onClick={() => setSelectedTxn(null)} className="modal-btn secondary">
+    Close
+  </button>
+
+  {/* 2. Show Archive only in View Mode */}
+  {viewMode === 'view' && (
+    <button
+      onClick={() => { archiveTransaction(selectedTxn.id); setSelectedTxn(null); }}
+      className="modal-btn cancel"
+    >
+      Archive Transaction
+    </button>
+  )}
+
+  {/* 3. Show the dynamic Submit button only in Edit Mode */}
+  {viewMode === 'edit' && (
+    <button
+      onClick={handleMarkPaid}
+      /* Logic: 
+         - If status is UNPAID: Disable if paidAmountInput is empty.
+         - If status is PAID: Keep enabled so penalty can be updated.
+      */
+      disabled={selectedTxn.payment_status !== 'paid' && !paidAmountInput}
+      className="modal-btn primary"
+    >
+      {selectedTxn.payment_status === 'paid' ? 'Update Transaction' : 'Mark as Paid'}
+    </button>
+  )}
+</div>
           </div>
         </div>
       )}

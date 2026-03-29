@@ -4,6 +4,18 @@ import DashboardLayout from '../components/dashboardlayout';
 import { BsEye,BsCashStack } from 'react-icons/bs';
 import { useTransactions } from '../context/transactionsContext';
 import '../styles/expressstyle.css';
+import '../styles/inventorystyle.css';
+
+function formatInventoryStatus(status) {
+  if (status == null || status === '') return '—';
+  const map = { in_shop: 'In Shop', picked_up: 'Pick Up' };
+  const key = String(status).toLowerCase();
+  if (map[key]) return map[key];
+  return String(status)
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
 
 const Express = () => {
   const { 
@@ -78,7 +90,9 @@ const Express = () => {
     {
       name: 'Status',
       cell: (row) => (
-        <span className={`status-pill status-${row.inventory_status}`}>{row.inventory_status}</span>
+        <span className={`status-pill status-${row.inventory_status}`}>
+          {formatInventoryStatus(row.inventory_status)}
+        </span>
       ),
     },
     { name: 'Amount', selector: (row) => `₱${row.amount.toFixed(2)}` },
@@ -164,76 +178,108 @@ const Express = () => {
         </div>
       </div>
 
-      {/* MODAL */}
+      {/* MODAL — same structure & classes as Inventory Management */}
       {selectedTxn && (
-        <div className="express-modal">
-          <div className="express-modal-content">
-            <h3>Receipt: {selectedTxn.receipt}</h3>
-            <p><strong>Customer:</strong> {selectedTxn.customer_name}</p>
-            <p><strong>Address:</strong> {selectedTxn.customer_address}</p>
+        <div className="inventory-modal">
+          <div className="inventory-modal-content">
+            <div className="inventory-modal-body">
+              <h3>Receipt: {selectedTxn.receipt}</h3>
+              <p><strong>Customer:</strong> {selectedTxn.customer_name}</p>
+              <p><strong>Address:</strong> {selectedTxn.customer_address}</p>
 
-            <p><strong>Services:</strong>
-            <ul>
-              {selectedTxn.services.map((svc) => (
-                <li key={svc.id}>
-                  ({svc.serviceName}) {svc.kilos} kg @ ₱{svc.rate.toFixed(2)} = ₱{svc.total.toFixed(2)}
-                </li>
-              ))}
-            </ul>
-            </p>
-            
+              <p>
+                <strong>Services:</strong>
+                <ul>
+                  {selectedTxn.services.map((svc) => (
+                    <li key={svc.id}>
+                      ({svc.serviceName}) {svc.kilos} kg @ ₱{svc.rate.toFixed(2)} = ₱{svc.total.toFixed(2)}
+                    </li>
+                  ))}
+                </ul>
+              </p>
 
-            <p><strong>Total Weight:</strong> {selectedTxn.weight} kg</p>
-            <p><strong>Total Amount:</strong> ₱{selectedTxn.amount.toFixed(2)}</p>
+              <p><strong>Total Weight:</strong> {selectedTxn.weight} kg</p>
+              <p><strong>Total Amount:</strong> ₱{selectedTxn.amount.toFixed(2)}</p>
 
-            {/* ALWAYS CASH */}
-            <p><strong>Payment Method:</strong> Cash</p>
+              <p><strong>Payment Method:</strong> Cash</p>
 
-            <p><strong>Paid Amount:</strong> ₱{(Number(selectedTxn.paid_amount) || 0).toFixed(2)}</p>
-            <p><strong>Penalty:</strong> ₱{(Number(selectedTxn.penalty) || 0).toFixed(2)}</p>
-            <p><strong>Payment Status:</strong> {selectedTxn.payment_status}</p>
-            <p><strong>Inventory Status:</strong> {selectedTxn.inventory_status}</p>
+              <p><strong>Paid Amount:</strong> ₱{(Number(selectedTxn.paid_amount) || 0).toFixed(2)}</p>
+              <p><strong>Penalty:</strong> ₱{(Number(selectedTxn.penalty) || 0).toFixed(2)}</p>
+              <p><strong>Payment Status:</strong> {selectedTxn.payment_status}</p>
+              <p><strong>Inventory Status:</strong> {formatInventoryStatus(selectedTxn.inventory_status)}</p>
 
-            {/* EDIT MODE */}
-            <div className="paid-amount-section">
-              <label><strong>Amount Paid:</strong></label>
-              <input
-                type="text"
-                className="paid-amount-input"
-                placeholder="Pending - Enter amount paid"
-                value={paidAmountInput}
-                disabled={viewMode === 'view'}
-                onChange={(e) => setPaidAmountInput(e.target.value)}
-              />
+              <p>
+                <strong>Remaining Balance:</strong>{' '}
+                <span
+                  style={{
+                    color:
+                      selectedTxn.amount +
+                        (Number(selectedTxn.penalty) || 0) -
+                        (Number(selectedTxn.paid_amount) || 0) >
+                      0
+                        ? 'red'
+                        : 'green',
+                  }}
+                >
+                  ₱
+                  {(
+                    selectedTxn.amount +
+                    (Number(selectedTxn.penalty) || 0) -
+                    (Number(selectedTxn.paid_amount) || 0)
+                  ).toFixed(2)}
+                </span>
+              </p>
 
-              <label><strong>Penalty:</strong></label>
-              <input
-                type="text"
-                className="penalty-input"
-                placeholder="Enter penalty amount"
-                value={penaltyInput}
-                disabled={viewMode === 'view'}
-                onChange={(e) => setPenaltyInput(e.target.value)}
-              />
+              <div className="paid-amount-section">
+                <label><strong>Amount Paid:</strong></label>
+                <input
+                  type="number"
+                  className="paid-amount-input"
+                  placeholder="Enter amount paid"
+                  value={paidAmountInput}
+                  disabled={viewMode === 'view'}
+                  onChange={(e) => setPaidAmountInput(e.target.value)}
+                />
 
-              {viewMode === 'edit' && paidAmountInput && (
-                <p className="change-balance">
-                  {Number(paidAmountInput) >= (selectedTxn.amount + Number(penaltyInput)) ? (
-                    <>Change: ₱{(Number(paidAmountInput) - selectedTxn.amount - Number(penaltyInput)).toFixed(2)}</>
-                  ) : (
-                    <>Balance: ₱{(selectedTxn.amount + Number(penaltyInput) - Number(paidAmountInput)).toFixed(2)}</>
-                  )}
-                </p>
-              )}
+                <label><strong>Penalty:</strong></label>
+                <input
+                  type="number"
+                  className="penalty-input"
+                  placeholder="Enter penalty amount"
+                  value={penaltyInput}
+                  disabled={viewMode === 'view'}
+                  onChange={(e) => setPenaltyInput(e.target.value)}
+                />
+
+                {viewMode === 'edit' && paidAmountInput && (
+                  <p className="change-balance">
+                    {Number(paidAmountInput) >= selectedTxn.amount + Number(penaltyInput || 0) ? (
+                      <>
+                        Change: ₱
+                        {(Number(paidAmountInput) - selectedTxn.amount - Number(penaltyInput || 0)).toFixed(2)}
+                      </>
+                    ) : (
+                      <>
+                        Balance: ₱
+                        {(selectedTxn.amount + Number(penaltyInput || 0) - Number(paidAmountInput)).toFixed(2)}
+                      </>
+                    )}
+                  </p>
+                )}
+              </div>
             </div>
 
-            {/* MODAL BUTTONS */}
             <div className="modal-actions">
-              <button onClick={() => setSelectedTxn(null)} className="modal-btn secondary">Close</button>
+              <button onClick={() => setSelectedTxn(null)} className="modal-btn secondary">
+                Close
+              </button>
 
               {viewMode === 'view' && (
                 <button
-                  onClick={() => { archiveTransaction(selectedTxn.id); setSelectedTxn(null); }}
+                  onClick={() => {
+                    archiveTransaction(selectedTxn.id);
+                    setSelectedTxn(null);
+                  }}
                   className="modal-btn cancel"
                 >
                   Archive Transaction

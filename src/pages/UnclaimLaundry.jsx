@@ -1,10 +1,22 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import DataTable from 'react-data-table-component';
 import DashboardLayout from '../components/dashboardlayout';
 import { BsEye, BsExclamationTriangle } from 'react-icons/bs';
 import { useTransactions } from '../context/transactionsContext';
 import Swal from 'sweetalert2';
 import '../styles/unclaimedstyle.css';
+import '../styles/inventorystyle.css';
+
+function formatInventoryStatus(status) {
+  if (status == null || status === '') return '—';
+  const map = { in_shop: 'In Shop', picked_up: 'Pick Up' };
+  const key = String(status).toLowerCase();
+  if (map[key]) return map[key];
+  return String(status)
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
 
 const UnclaimLaundry = () => {
   const { transactions } = useTransactions();
@@ -15,15 +27,27 @@ const UnclaimLaundry = () => {
   const [sortOrder, setSortOrder] = useState('none');
   const [selectedTxn, setSelectedTxn] = useState(null);
 
-  // Check if due date is 7–30 days late
-  const isPastDue = (dueDate) => {
-    if (!dueDate) return false;
+  /** Local calendar days past due (avoids UTC off-by-one on YYYY-MM-DD) */
+  const getDaysPastDue = (dueDate) => {
+    if (!dueDate) return -Infinity;
+    const s = String(dueDate).trim();
+    const parts = s.split('-').map(Number);
+    let due;
+    if (parts.length === 3 && parts[0] > 1000) {
+      due = new Date(parts[0], parts[1] - 1, parts[2]);
+    } else {
+      due = new Date(s);
+    }
     const today = new Date();
-    const due = new Date(dueDate);
-    const diffTime = today - due;
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays >= 7 && diffDays <= 30;
+    today.setHours(0, 0, 0, 0);
+    due.setHours(0, 0, 0, 0);
+    return Math.floor((today - due) / (86400000));
   };
+
+  /** Overdue: due date is before today (not same-day / future) */
+  const isPastDue = (dueDate) => getDaysPastDue(dueDate) >= 1;
+
+  const overdueAlertKeyRef = useRef('');
 
   // Filter table data
   const filteredData = useMemo(() => {
@@ -48,20 +72,29 @@ const UnclaimLaundry = () => {
     return data;
   }, [filteredData, sortOrder]);
 
-  // Alert overdue items
+  // Alert when any in-shop item is past due (depends on full transactions, not only length)
   useEffect(() => {
-    if (transactions.length > 0) {
-      const overdueItems = transactions.filter(
-        (row) => isPastDue(row.due_date) && row.inventory_status === 'in_shop'
-      );
-      if (overdueItems.length > 0) {
-        const receiptList = overdueItems.map((item) => item.receipt).join(', ');
-        Swal.fire({
-          title: "⚠️ Overdue Laundry Alert",
-          html: `
+    const overdueItems = transactions.filter(
+      (row) =>
+        !row.archived &&
+        row.inventory_status === 'in_shop' &&
+        isPastDue(row.due_date)
+    );
+    if (overdueItems.length === 0) return;
+
+    const key = overdueItems
+      .map((r) => r.id)
+      .sort()
+      .join('|');
+    if (overdueAlertKeyRef.current === key) return;
+    overdueAlertKeyRef.current = key;
+
+    const receiptList = overdueItems.map((item) => item.receipt).join(', ');
+    Swal.fire({
+      title: 'Overdue Laundry Alert',
+      html: `
             <div style="text-align:left; font-size:15px; line-height:1.6;">
-              <b>${overdueItems.length}</b> item${overdueItems.length !== 1 ? "s are" : " is"} past due 
-              (<b>7–30 days overdue</b>) and still in the shop.<br><br>
+              <b>${overdueItems.length}</b> item${overdueItems.length !== 1 ? 's are' : ' is'} past the due date and still <b>In Shop</b>.<br><br>
 
               <b>Receipt ID(s):</b><br>
               ${receiptList}<br><br>
@@ -69,17 +102,15 @@ const UnclaimLaundry = () => {
               Please check these items in the <b>Unclaimed</b> table.
             </div>
           `,
-          icon: "warning",
-          width: 420,
-          confirmButtonText: "Okay",
-          confirmButtonColor: "#d9534f",
-          background: "#fff8e6",
-          color: "#333",
-          customClass: { popup: 'swal-border' }
-        });
-      }
-    }
-  }, [transactions.length]);
+      icon: 'warning',
+      width: 420,
+      confirmButtonText: 'Okay',
+      confirmButtonColor: '#d9534f',
+      background: '#fff8e6',
+      color: '#333',
+      customClass: { popup: 'swal-border' },
+    });
+  }, [transactions]);
 
   // Table columns
   const columns = [
@@ -95,7 +126,9 @@ const UnclaimLaundry = () => {
     {
       name: 'Status',
       cell: (row) => (
-        <span className={`status-pill status-${row.inventory_status}`}>{row.inventory_status}</span>
+        <span className={`status-pill status-${row.inventory_status}`}>
+          {formatInventoryStatus(row.inventory_status)}
+        </span>
       ),
     },
     { name: 'Amount', selector: (row) => row.amount, sortable: true, cell: (row) => `₱${row.amount.toFixed(2)}` },
@@ -105,21 +138,27 @@ const UnclaimLaundry = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span>{row.due_date}</span>
           {isPastDue(row.due_date) && (
-            <BsExclamationTriangle className="overdue-alert-icon" title="Past Due: 7-30 days overdue" />
+            <BsExclamationTriangle
+              className="overdue-alert-icon"
+              title="Past due (due date has passed)"
+            />
           )}
         </div>
       ),
     },
     {
       name: 'Action',
+      center: true,
       cell: (row) => (
-        <button
-          className="inventory-action-btn view"
-          title="View"
-          onClick={() => setSelectedTxn(row)}
-        >
-          <BsEye />
-        </button>
+        <div className="unclaimed-action-cell">
+          <button
+            className="inventory-action-btn view"
+            title="View"
+            onClick={() => setSelectedTxn(row)}
+          >
+            <BsEye />
+          </button>
+        </div>
       ),
     },
   ];
@@ -163,7 +202,8 @@ const UnclaimLaundry = () => {
                 paginationRowsPerPageOptions={[5, 10, 20, 50]}
                 conditionalRowStyles={[
                   {
-                    when: (row) => isPastDue(row.due_date) && row.inventory_status === 'in_shop',
+                    when: (row) =>
+                      row.inventory_status === 'in_shop' && isPastDue(row.due_date),
                     style: {
                       backgroundColor: '#fecaca',
                       borderLeft: '4px solid #dc2626',
@@ -180,29 +220,55 @@ const UnclaimLaundry = () => {
       {selectedTxn && (
         <div className="inventory-modal">
           <div className="inventory-modal-content">
-            <h3>Receipt: {selectedTxn.receipt}</h3>
-            <p><strong>Customer:</strong> {selectedTxn.customer_name}</p>
-            <p><strong>Address:</strong> {selectedTxn.customer_address}</p>
-            <p><strong>Services:</strong>
-            
-            <ul>
-              {selectedTxn.services.map((svc) => (
-                <li key={svc.id}>
-                  ({svc.serviceName}) {svc.kilos} kg @ ₱{svc.rate.toFixed(2)} = ₱{svc.total.toFixed(2)}
-                </li>
-              ))}
-            </ul></p>
-            
-            <p><strong>Total Weight:</strong> {selectedTxn.weight} kg</p>
-            <p><strong>Total Amount:</strong> ₱{selectedTxn.amount.toFixed(2)}</p>
-            <p><strong>Payment Method:</strong> {selectedTxn.payment_method || '—'}</p>
-            <p><strong>Paid Amount:</strong> ₱{(Number(selectedTxn.paid_amount) || 0).toFixed(2)}</p>
-            <p><strong>Due Date:</strong> {selectedTxn.due_date}</p>
-            <p><strong>Payment Status:</strong> {selectedTxn.payment_status}</p>
-            <p><strong>Inventory Status:</strong> {selectedTxn.inventory_status}</p>
+            <div className="inventory-modal-body">
+              <h3>Receipt: {selectedTxn.receipt}</h3>
+              <p><strong>Customer:</strong> {selectedTxn.customer_name}</p>
+              <p><strong>Address:</strong> {selectedTxn.customer_address}</p>
+
+              <p>
+                <strong>Services:</strong>
+                <ul>
+                  {selectedTxn.services.map((svc) => (
+                    <li key={svc.id}>
+                      ({svc.serviceName}) {svc.kilos} kg @ ₱{svc.rate.toFixed(2)} = ₱{svc.total.toFixed(2)}
+                    </li>
+                  ))}
+                </ul>
+              </p>
+
+              <p><strong>Total Weight:</strong> {selectedTxn.weight} kg</p>
+              <p><strong>Total Amount:</strong> ₱{selectedTxn.amount.toFixed(2)}</p>
+              <p><strong>Payment Method:</strong> {selectedTxn.payment_method || 'Cash'}</p>
+              <p><strong>Paid Amount:</strong> ₱{(Number(selectedTxn.paid_amount) || 0).toFixed(2)}</p>
+              <p><strong>Penalty:</strong> ₱{(Number(selectedTxn.penalty) || 0).toFixed(2)}</p>
+              <p><strong>Due Date:</strong> {selectedTxn.due_date}</p>
+              <p><strong>Payment Status:</strong> {selectedTxn.payment_status}</p>
+              <p><strong>Inventory Status:</strong> {formatInventoryStatus(selectedTxn.inventory_status)}</p>
+              <p>
+                <strong>Remaining Balance:</strong>{' '}
+                <span
+                  style={{
+                    color:
+                      selectedTxn.amount +
+                        (Number(selectedTxn.penalty) || 0) -
+                        (Number(selectedTxn.paid_amount) || 0) >
+                      0
+                        ? 'red'
+                        : 'green',
+                  }}
+                >
+                  ₱
+                  {(
+                    selectedTxn.amount +
+                    (Number(selectedTxn.penalty) || 0) -
+                    (Number(selectedTxn.paid_amount) || 0)
+                  ).toFixed(2)}
+                </span>
+              </p>
+            </div>
 
             <div className="modal-actions">
-              <button onClick={() => setSelectedTxn(null)} className="modal-btn secondary">
+              <button type="button" onClick={() => setSelectedTxn(null)} className="modal-btn secondary">
                 Close
               </button>
             </div>

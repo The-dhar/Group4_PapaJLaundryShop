@@ -301,6 +301,9 @@
     }
 }
 
+
+/* ====== Modal overlay ====== */
+
 .inventory-modal {
     position: fixed;
     inset: 0;
@@ -309,45 +312,95 @@
     align-items: center;
     justify-content: center;
     z-index: 1000;
+    padding: 12px;
+    box-sizing: border-box;
 }
+
+/* ====== Fixed Modal Container ====== */
 
 .inventory-modal-content {
     background: #f9f9f9;
     border: 2px solid #333;
     border-radius: 8px;
-    max-width: 450px;
+    max-width: 420px;
     width: 90%;
-    padding: 20px;
+    max-height: min(88vh, 640px);
+    padding: 15px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 0;
     font-family: 'Courier New', monospace;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    position: relative;
+    /* Outer shell does not scroll — avoids double scrollbars */
+    overflow: hidden;
 }
 
+
+/* Scrollable receipt + form area only; scrollbar hidden (still scrollable with wheel/touch) */
+
+.inventory-modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 4px;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.inventory-modal-body::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+}
+
+
+/* ====== Compact Text ====== */
+
 .inventory-modal-content h3 {
-    text-align: center;
-    font-size: 24px;
-    margin: 0 0 10px 0;
-    color: #000;
-    font-weight: bold;
+    font-size: 20px;
+    margin-bottom: 5px;
+    text-decoration: underline;
 }
 
 .inventory-modal-content p {
-    margin: 6px 0;
-    line-height: 1.4;
-    font-size: 14px;
-}
-
-.inventory-modal-content ul {
-    padding-left: 15px;
-    margin: 6px 0;
-    list-style-type: none;
+    margin: 3px 0;
+    /* Tightened spacing */
     font-size: 13px;
 }
 
-.inventory-modal-content ul li {
-    margin: 3px 0;
+
+/* ====== Compact Input Section ====== */
+
+.paid-amount-section {
+    margin: 10px 0;
+    padding: 10px;
+    background-color: #f0f4f8;
+    border-left: 4px solid #667eea;
+    border-radius: 6px;
+}
+
+.paid-amount-input,
+.penalty-input {
+    padding: 8px;
+    /* Smaller padding */
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+
+
+/* ====== Fixed Action Buttons ====== */
+
+/* ====== Tighten up the text spacing ====== */
+
+.paid-amount-section {
+    margin: 10px 0;
+    /* Reduced from 15px */
+    padding: 10px;
+    background-color: #f0f4f8;
+    border-left: 4px solid #667eea;
+    border-radius: 6px;
 }
 
 
@@ -389,9 +442,15 @@
 .modal-actions {
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
     gap: 12px;
     justify-content: flex-end;
     align-items: center;
+    padding-top: 12px;
+    margin-top: 8px;
+    border-top: 2px dashed #333;
+    background: #f9f9f9;
+    flex-shrink: 0;
 }
 
 .modal-btn {
