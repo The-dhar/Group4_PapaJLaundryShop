@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: papaj-laundry-backend
+    runtime: php
+    rootDir: LaravelServer
+    buildCommand: composer install --no-dev --optimize-autoloader && npm install && npm run build
+    preDeployCommand: php artisan migrate --force
+    startCommand: php artisan serve --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: LOG_LEVEL
+        value: info
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_PORT
+        value: "5432"
