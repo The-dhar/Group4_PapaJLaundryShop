@@ -180,21 +180,26 @@ const UnclaimLaundry = () => {
       {selectedTxn && (
         <div className="inventory-modal">
           <div className="inventory-modal-content">
+            {(() => {
+              const services = selectedTxn.receipt_items ?? selectedTxn.services ?? [];
+              const totalWeight = selectedTxn.total_weight ?? selectedTxn.weight ?? 0;
+              return (
+                <>
             <h3>Receipt: {selectedTxn.receipt}</h3>
             <p><strong>Customer:</strong> {selectedTxn.customer_name}</p>
             <p><strong>Address:</strong> {selectedTxn.customer_address}</p>
             <p><strong>Services:</strong>
             
             <ul>
-              {selectedTxn.services.map((svc) => (
+              {services.map((svc) => (
                 <li key={svc.id}>
-                  ({svc.serviceName}) {svc.kilos} kg @ ₱{svc.rate.toFixed(2)} = ₱{svc.total.toFixed(2)}
+                  ({svc.serviceName}) {svc.kilos} kg @ ₱{Number(svc.rate).toFixed(2)} = ₱{Number(svc.total).toFixed(2)}
                 </li>
               ))}
             </ul></p>
             
-            <p><strong>Total Weight:</strong> {selectedTxn.weight} kg</p>
-            <p><strong>Total Amount:</strong> ₱{selectedTxn.amount.toFixed(2)}</p>
+            <p><strong>Total Weight:</strong> {Number(totalWeight).toFixed(2)} kg</p>
+            <p><strong>Total Amount:</strong> ₱{Number(selectedTxn.amount).toFixed(2)}</p>
             <p><strong>Payment Method:</strong> {selectedTxn.payment_method || '—'}</p>
             <p><strong>Paid Amount:</strong> ₱{(Number(selectedTxn.paid_amount) || 0).toFixed(2)}</p>
             <p><strong>Due Date:</strong> {selectedTxn.due_date}</p>
@@ -206,6 +211,9 @@ const UnclaimLaundry = () => {
                 Close
               </button>
             </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}

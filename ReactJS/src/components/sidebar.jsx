@@ -4,6 +4,13 @@ import { BsGrid1X2Fill, BsCart3, BsBoxSeam, BsReceiptCutoff, BsDoorOpen, BsCashS
 import '../componentstyle/sidebarstyle.css';
 
 const Sidebar = ({ sidebarOpen }) => {
+    const handleLogout = (event) => {
+        event.preventDefault();
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        window.location.href = "/";
+    };
+
     return (
         <aside id='sidebar' className={sidebarOpen ? "open" : "closed"}>
             <div className='sidebar-title'>
@@ -45,12 +52,12 @@ const Sidebar = ({ sidebarOpen }) => {
                     </Link>
                 </li>
             <li className='sidebar-list-items'>
-                    <a href="/Archive">
+                    <Link to="/Archive">
                         <BsArchive className='icon'/> Archive
-                    </a>
+                    </Link>
                 </li>
                 <li className='sidebar-list-items'>
-                    <a href="/logout">
+                    <a href="/" onClick={handleLogout}>
                         <BsDoorOpen className='icon'/> Log Out
                     </a>
                 </li>

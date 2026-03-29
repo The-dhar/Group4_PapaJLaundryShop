@@ -6,16 +6,16 @@ import { useTransactions } from '../context/transactionsContext';
 import '../styles/archivestyle.css';
 
 const Archive = () => {
-  const { transactions, restoreTransaction } = useTransactions();
+  const { archivedTransactions, restoreTransaction } = useTransactions();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTxn, setSelectedTxn] = useState(null);
 
   const archivedData = useMemo(() => {
-    return transactions.filter((row) => row.archived === true && (
+    return archivedTransactions.filter((row) => (
       row.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       row.receipt.toLowerCase().includes(searchTerm.toLowerCase())
     ));
-  }, [transactions, searchTerm]);
+  }, [archivedTransactions, searchTerm]);
 
   const columns = [
     { name: 'Receipt ID', selector: (row) => row.receipt, sortable: true },
@@ -97,13 +97,17 @@ const Archive = () => {
         {selectedTxn && (
           <div className="inventory-modal">
             <div className="inventory-modal-content">
+              {(() => {
+                const services = selectedTxn.receipt_items ?? selectedTxn.services ?? [];
+                return (
+                  <>
               <h3>Receipt: {selectedTxn.receipt}</h3>
               <p><strong>Customer:</strong> {selectedTxn.customer_name}</p>
               <p><strong>Address:</strong> {selectedTxn.customer_address}</p>
 
               <p><strong>Services:</strong>
                 <ul>
-                  {selectedTxn.services.map((svc) => (
+                  {services.map((svc) => (
                     <li key={svc.id}>
                       ({svc.serviceName}) {svc.kilos} kg @ ₱{svc.rate.toFixed(2)} = ₱{svc.total.toFixed(2)}
                     </li>
@@ -124,6 +128,9 @@ const Archive = () => {
                   Restore Transaction
                 </button>
               </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
         )}

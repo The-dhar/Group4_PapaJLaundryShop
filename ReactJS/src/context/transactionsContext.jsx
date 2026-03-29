@@ -6,12 +6,14 @@ const TransactionsContext = createContext();
 export const TransactionsProvider = ({ children }) => {
 
   const [transactions, setTransactions] = useState([]);
+  const [archivedTransactions, setArchivedTransactions] = useState([]);
 
   const fetchTransactions = async () => {
 
     try {
 
       const token = localStorage.getItem("token");
+      if (!token) return;
 
       const res = await fetch(`${API_URL}/transactions`, {
         method: "GET",
@@ -39,8 +41,40 @@ export const TransactionsProvider = ({ children }) => {
 
   };
 
+  const fetchArchivedTransactions = async () => {
+
+    try {
+
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      const res = await fetch(`${API_URL}/transactions?include_archived=1`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to fetch archived transactions");
+      }
+
+      const data = await res.json();
+
+      setArchivedTransactions(data.filter((row) => row.archived === true));
+
+    } catch (error) {
+
+      console.error("Error fetching archived transactions:", error);
+
+    }
+
+  };
+
   useEffect(() => {
     fetchTransactions();
+    fetchArchivedTransactions();
   }, []);
 
   const markTransactionPaid = async (id) => {
@@ -61,7 +95,7 @@ export const TransactionsProvider = ({ children }) => {
         throw new Error("Failed to mark transaction as paid");
       }
 
-      await fetchTransactions();
+      await Promise.all([fetchTransactions(), fetchArchivedTransactions()]);
 
     } catch (error) {
 
@@ -99,7 +133,7 @@ export const TransactionsProvider = ({ children }) => {
         throw new Error("Failed to update payment");
       }
 
-      await fetchTransactions();
+      await Promise.all([fetchTransactions(), fetchArchivedTransactions()]);
 
     } catch (error) {
 
@@ -127,11 +161,70 @@ export const TransactionsProvider = ({ children }) => {
         throw new Error("Failed to archive transaction");
       }
 
-      await fetchTransactions();
+      await Promise.all([fetchTransactions(), fetchArchivedTransactions()]);
 
     } catch (error) {
 
       console.error("Error archiving transaction:", error);
+
+    }
+
+  };
+
+  const restoreTransaction = async (id) => {
+
+    try {
+
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      const res = await fetch(`${API_URL}/transactions/${id}/restore`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to restore transaction");
+      }
+
+      await Promise.all([fetchTransactions(), fetchArchivedTransactions()]);
+
+    } catch (error) {
+
+      console.error("Error restoring transaction:", error);
+
+    }
+
+  };
+
+  const updateTransaction = async (id, payload) => {
+
+    try {
+
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      const res = await fetch(`${API_URL}/transactions/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to update transaction");
+      }
+
+      await Promise.all([fetchTransactions(), fetchArchivedTransactions()]);
+
+    } catch (error) {
+
+      console.error("Error updating transaction:", error);
 
     }
 
@@ -142,10 +235,14 @@ export const TransactionsProvider = ({ children }) => {
     <TransactionsContext.Provider
       value={{
         transactions,
+        archivedTransactions,
         fetchTransactions,
+        fetchArchivedTransactions,
         markTransactionPaid,
         updateTransactionPaidAmount,
-        archiveTransaction
+        archiveTransaction,
+        restoreTransaction,
+        updateTransaction
       }}
     >
 

@@ -112,46 +112,44 @@ class TransactionController extends Controller
 
     }
 
-        public function index()
+    public function index(Request $request)
     {
-        
-        $transactions = Transaction::with('items')
-            ->where('archived', false)
-            ->get();
+        $includeArchived = $request->boolean('include_archived');
 
-        return response()->json(
-            $transactions->map(function ($txn) {
+        $query = Transaction::with('items');
 
-                return [
-                    'id' => $txn->id,
-                    'receipt' => $txn->receipt_number,
-                    'customer_name' => $txn->customer_name,
-                    'customer_address' => $txn->customer_address,
+        if (! $includeArchived) {
+            $query->where('archived', false);
+        }
 
-                    'amount' => $txn->total_amount,
+        $transactions = $query->get();
 
-                    'is_rush' => $txn->is_rush,
-                    
-                    'paid_amount' => $txn->paid_amount,
-
-                    'payment_status' => $txn->payment_status,
-                    'inventory_status' => $txn->inventory_status,
-
-                    'due_date' => $txn->due_date,
-
-                    'receipt_items' => $txn->items->map(function ($item) {
-                        return [
-                            'id' => $item->id,
-                            'serviceName' => $item->service_name,
-                            'laundryType' => $item->laundry_type,
-                            'rate' => $item->rate,
-                            'kilos' => $item->kilos,
-                            'total' => $item->total
-                        ];
-                    })
-                ];
-            })
-        );
+        return response()->json($transactions->map(function ($txn) {
+            return [
+                'id' => $txn->id,
+                'receipt' => $txn->receipt_number,
+                'customer_name' => $txn->customer_name,
+                'customer_address' => $txn->customer_address,
+                'amount' => $txn->total_amount,
+                'total_weight' => $txn->total_weight,
+                'is_rush' => $txn->is_rush,
+                'paid_amount' => $txn->paid_amount,
+                'payment_status' => $txn->payment_status,
+                'inventory_status' => $txn->inventory_status,
+                'due_date' => $txn->due_date,
+                'archived' => (bool) $txn->archived,
+                'receipt_items' => $txn->items->map(function ($item) {
+                    return [
+                        'id' => $item->id,
+                        'serviceName' => $item->service_name,
+                        'laundryType' => $item->laundry_type,
+                        'rate' => $item->rate,
+                        'kilos' => $item->kilos,
+                        'total' => $item->total
+                    ];
+                })
+            ];
+        }));
     }
 
     public function markPaid($id)
@@ -191,6 +189,37 @@ class TransactionController extends Controller
 
         return response()->json([
             'message' => 'Transaction archived successfully'
+        ]);
+    }
+
+    public function restore($id)
+    {
+        $transaction = Transaction::findOrFail($id);
+
+        $transaction->archived = false;
+        $transaction->save();
+
+        return response()->json([
+            'message' => 'Transaction restored successfully'
+        ]);
+    }
+
+    public function update(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'inventory_status' => 'nullable|in:in_shop,picked_up',
+        ]);
+
+        $transaction = Transaction::findOrFail($id);
+
+        if (array_key_exists('inventory_status', $validated)) {
+            $transaction->inventory_status = $validated['inventory_status'];
+        }
+
+        $transaction->save();
+
+        return response()->json([
+            'message' => 'Transaction updated successfully'
         ]);
     }
 

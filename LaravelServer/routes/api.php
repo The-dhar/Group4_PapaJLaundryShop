@@ -34,7 +34,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::put('/transactions/{id}/mark-paid', [TransactionController::class, 'markPaid']);
     Route::put('/transactions/{id}/update-payment', [TransactionController::class, 'updatePayment']);
+    Route::put('/transactions/{id}', [TransactionController::class, 'update']);
     Route::put('/transactions/{id}/archive', [TransactionController::class, 'archive']);
+    Route::put('/transactions/{id}/restore', [TransactionController::class, 'restore']);
     
 });
 

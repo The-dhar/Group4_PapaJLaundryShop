@@ -91,7 +91,9 @@ const Receiptmanagement = () => {
     let y = 6;
     const centerX = 29; // half of 58mm
 
-    const services = Array.isArray(selectedReceipt.services)
+    const services = Array.isArray(selectedReceipt.receipt_items)
+      ? selectedReceipt.receipt_items
+      : Array.isArray(selectedReceipt.services)
       ? selectedReceipt.services
       : [];
 
@@ -259,6 +261,9 @@ const handleArchiveReceipt = () => {
   };
 
   // compute paid / diff for selected receipt (safe defaults)
+  const receiptServices = selectedReceipt
+    ? (selectedReceipt.receipt_items ?? selectedReceipt.services ?? [])
+    : [];
   const selectedPaid = selectedReceipt ? Number(selectedReceipt.paid_amount || 0) : 0;
   const selectedTotal = selectedReceipt ? Number(selectedReceipt.amount || 0) : 0;
   const selectedDiff = selectedPaid - selectedTotal;
@@ -337,14 +342,14 @@ const handleArchiveReceipt = () => {
                   <span className="tr-amount">Amount</span>
                 </div>
 
-                {selectedReceipt.services.map((svc) => (
+                {receiptServices.map((svc) => (
                   <div className="tr-row tr-item-row" key={svc.id}>
                     <span className="tr-item">
                       {svc.serviceName}
-                      <span className="tr-subtext">@ ₱{svc.rate.toFixed(2)}</span>
+                      <span className="tr-subtext">@ ₱{Number(svc.rate).toFixed(2)}</span>
                     </span>
                     <span className="tr-qty">{svc.kilos}</span>
-                    <span className="tr-amount">₱{svc.total.toFixed(2)}</span>
+                    <span className="tr-amount">₱{Number(svc.total).toFixed(2)}</span>
                   </div>
                 ))}
 
@@ -354,8 +359,8 @@ const handleArchiveReceipt = () => {
                   <span>Subtotal</span>
                   <span>
                     ₱
-                    {selectedReceipt.services
-                      .reduce((sum, s) => sum + s.total, 0)
+                    {receiptServices
+                      .reduce((sum, s) => sum + Number(s.total || 0), 0)
                       .toFixed(2)}
                   </span>
                 </div>
