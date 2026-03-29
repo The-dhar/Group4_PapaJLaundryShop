@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Dimensions, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Pressable } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from "../config/api";
+import { API_URL } from "../../config/api";
 
 const { width } = Dimensions.get('window');
 

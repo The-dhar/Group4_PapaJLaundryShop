@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, Modal, TextInput,Alert,StyleS
 import { useRouter } from "expo-router";
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from "../config/api";
+import { API_URL } from "../../config/api";
 
 const LaundryPriceManager = () => {
   type Tier = { range: string; price: number; description: string };

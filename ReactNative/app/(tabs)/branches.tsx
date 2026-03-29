@@ -14,7 +14,7 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { API_URL } from "../config/api";
+import { API_URL } from "../../config/api";
 
 /* -----------------------------
    Branch Type

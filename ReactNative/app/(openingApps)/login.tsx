@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from "../config/api";
+import { API_URL } from "../../config/api";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');

@@ -12,7 +12,7 @@ import {
 import { useRouter } from "expo-router";
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from "../config/api";
+import { API_URL } from "../../config/api";
 
 const ROWS_PER_PAGE = 5;
 

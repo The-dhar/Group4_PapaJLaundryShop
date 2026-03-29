@@ -4,7 +4,7 @@ import { BarChart, LineChart } from "react-native-chart-kit";
 import { useRouter } from "expo-router";
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from "../config/api";
+import { API_URL } from "../../config/api";
 
 // BarChart typing workaround to allow runtime onDataPointClick
 const AnyBarChart: any = BarChart;
