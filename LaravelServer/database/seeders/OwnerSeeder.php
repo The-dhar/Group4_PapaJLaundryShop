@@ -17,5 +17,14 @@ class OwnerSeeder extends Seeder
                 'password' => 'owner123',
             ]
         );
+
+        User::firstOrCreate(
+            ['email' => 'manager@gmail.com'],
+            [
+                'name' => 'Branch Manager',
+                'role' => 'manager',
+                'password' => 'manager123',
+            ]
+        );
     }
 }
