@@ -22,8 +22,11 @@ const POs = () => {
     express: false
   });
   const [discountAmount, setDiscountAmount] = useState(0);
-  const [customerName, setCustomerName] = useState('');
-  const [customerAddress, setCustomerAddress] = useState('');
+  const [customerFirstName, setCustomerFirstName] = useState('');
+  const [customerLastName, setCustomerLastName] = useState('');
+  const [customerStreet, setCustomerStreet] = useState('');
+  const [customerBarangay, setCustomerBarangay] = useState('');
+  const [customerCity, setCustomerCity] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [lastSavedReceipt, setLastSavedReceipt] = useState(null);
@@ -124,10 +127,19 @@ const POs = () => {
 
   const totalPayment = subtotal + calculateExtras();
 
+  const customerName = `${customerFirstName} ${customerLastName}`.trim();
+  const customerAddress = [customerStreet, customerBarangay, customerCity]
+    .map((part) => (part || '').trim())
+    .filter(Boolean)
+    .join(', ');
+
   const resetForm = () => {
     setSelectedServices([]);
-    setCustomerName('');
-    setCustomerAddress('');
+    setCustomerFirstName('');
+    setCustomerLastName('');
+    setCustomerStreet('');
+    setCustomerBarangay('');
+    setCustomerCity('');
     setDueDate('');
     setExtraCharges({ discount: false, express: false });
     setDiscountAmount(0);
@@ -244,7 +256,8 @@ const POs = () => {
 
     setSaveError('');
 
-    if (!customerName.trim()) return setSaveError('Customer name is required.');
+    if (!customerFirstName.trim() || !customerLastName.trim()) return setSaveError('Customer first and last name are required.');
+    if (!customerStreet.trim() || !customerBarangay.trim() || !customerCity.trim()) return setSaveError('Street, barangay, and city are required.');
     if (!dueDate) return setSaveError('Due date is required.');
     if (selectedServices.length === 0) return setSaveError('Add at least one laundry service.');
 
@@ -358,13 +371,31 @@ const POs = () => {
                             key={customer.id}
                             className="search-result-item"
                             onClick={() => {
-                              setCustomerName(customer.name);
-                              setCustomerAddress(customer.address);
+                              const parsedName = (customer.name || '').trim().split(' ');
+                              const parsedFirstName = customer.first_name || parsedName[0] || '';
+                              const parsedLastName = customer.last_name || parsedName.slice(1).join(' ') || '';
+
+                              let parsedStreet = customer.street || '';
+                              let parsedBarangay = customer.barangay || '';
+                              let parsedCity = customer.city || '';
+
+                              if (!parsedStreet || !parsedBarangay || !parsedCity) {
+                                const parts = (customer.address || '').split(',').map((part) => part.trim());
+                                parsedStreet = parsedStreet || parts[0] || '';
+                                parsedBarangay = parsedBarangay || parts[1] || '';
+                                parsedCity = parsedCity || parts[2] || '';
+                              }
+
+                              setCustomerFirstName(parsedFirstName);
+                              setCustomerLastName(parsedLastName);
+                              setCustomerStreet(parsedStreet);
+                              setCustomerBarangay(parsedBarangay);
+                              setCustomerCity(parsedCity);
                               setSearchResults([]);
-                              setSearchTerm(customer.name);
+                              setSearchTerm(`${parsedFirstName} ${parsedLastName}`.trim());
                             }}
                           >
-                            {customer.name}
+                            {customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim()}
                           </div>
                         ))}
                       </div>
@@ -378,11 +409,22 @@ const POs = () => {
                 <CustomerModal
                   isOpen={isCustomerModalOpen}
                   onClose={() => setIsCustomerModalOpen(false)}
-                  initial={{ name: customerName, address: customerAddress }}
-                  onSave={async ({ name, address }) => {
+                  initial={{
+                    name: customerName,
+                    address: customerAddress,
+                    first_name: customerFirstName,
+                    last_name: customerLastName,
+                    street: customerStreet,
+                    barangay: customerBarangay,
+                    city: customerCity
+                  }}
+                  onSave={async ({ name, address, first_name, last_name, street, barangay, city }) => {
 
-                    setCustomerName(name);
-                    setCustomerAddress(address);
+                    setCustomerFirstName(first_name);
+                    setCustomerLastName(last_name);
+                    setCustomerStreet(street);
+                    setCustomerBarangay(barangay);
+                    setCustomerCity(city);
 
                     const token = localStorage.getItem("token");
 
@@ -394,7 +436,12 @@ const POs = () => {
                       },
                       body: JSON.stringify({
                         name: name,
-                        address: address
+                        address: address,
+                        first_name: first_name,
+                        last_name: last_name,
+                        street: street,
+                        barangay: barangay,
+                        city: city
                       })
                     });
 
@@ -412,11 +459,50 @@ const POs = () => {
 
             {/* Customer Info */}
             <div className="for-receipt-output-customername">
-              <label>Name:
-                <input type="text" placeholder="Customer name" className="for-receipt-customerinput" value={customerName} onChange={e => setCustomerName(e.target.value)} />
+              <label>First Name:
+                <input
+                  type="text"
+                  placeholder="First name"
+                  className="for-receipt-customerinput"
+                  value={customerFirstName}
+                  onChange={e => setCustomerFirstName(e.target.value)}
+                />
               </label>
-              <label>Address:
-                <input type="text" placeholder="Address" className="for-receipt-customerinput" value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} />
+              <label>Last Name:
+                <input
+                  type="text"
+                  placeholder="Last name"
+                  className="for-receipt-customerinput"
+                  value={customerLastName}
+                  onChange={e => setCustomerLastName(e.target.value)}
+                />
+              </label>
+              <label>Street / Drive:
+                <input
+                  type="text"
+                  placeholder="Street / Drive"
+                  className="for-receipt-customerinput"
+                  value={customerStreet}
+                  onChange={e => setCustomerStreet(e.target.value)}
+                />
+              </label>
+              <label>Barangay:
+                <input
+                  type="text"
+                  placeholder="Barangay"
+                  className="for-receipt-customerinput"
+                  value={customerBarangay}
+                  onChange={e => setCustomerBarangay(e.target.value)}
+                />
+              </label>
+              <label>City:
+                <input
+                  type="text"
+                  placeholder="City"
+                  className="for-receipt-customerinput"
+                  value={customerCity}
+                  onChange={e => setCustomerCity(e.target.value)}
+                />
               </label>
             </div>
 

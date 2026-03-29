@@ -7,7 +7,11 @@ import '../styles/receiptstyle.css';
 import { jsPDF } from 'jspdf';
 
 const Receiptmanagement = () => {
-  const { transactions, archiveTransaction, updateTransaction } = useTransactions();
+  const {
+    transactions = [],
+    archiveTransaction = () => {},
+    updateTransaction = () => {}
+  } = useTransactions() || {};
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterInventory, setFilterInventory] = useState('All');
@@ -16,7 +20,7 @@ const Receiptmanagement = () => {
 
   // Filter for paid items (ready for viewing, or already picked_up ready for printing)
   const readyReceipts = useMemo(
-    () => transactions.filter((txn) => (txn.payment_status === 'paid' || txn.payment_status === 'unpaid') && !txn.archived),
+    () => (Array.isArray(transactions) ? transactions : []).filter((txn) => (txn.payment_status === 'paid' || txn.payment_status === 'unpaid') && !txn.archived),
     [transactions]
   );
 
@@ -25,8 +29,8 @@ const Receiptmanagement = () => {
       const matchesInventory =
         filterInventory === 'All' || row.inventory_status === filterInventory;
       const matchesSearch =
-        row.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        row.receipt.toLowerCase().includes(searchTerm.toLowerCase());
+        (row.customer_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (row.receipt || '').toLowerCase().includes(searchTerm.toLowerCase());
       return matchesInventory && matchesSearch;
     });
   }, [readyReceipts, searchTerm, filterInventory]);
@@ -47,7 +51,7 @@ const Receiptmanagement = () => {
         <span className={`status-pill status-${row.inventory_status}`}>{row.inventory_status}</span>
       ),
     },
-    { name: 'Amount', selector: (row) => `₱${row.amount.toFixed(2)}` },
+    { name: 'Amount', selector: (row) => `₱${Number(row.amount || 0).toFixed(2)}` },
     { name: 'Due Date', selector: (row) => row.due_date },
     {
       name: 'Action',

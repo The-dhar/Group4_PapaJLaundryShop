@@ -20,11 +20,11 @@ const CustomerModal = ({ isOpen, onClose, onSave, initial }) => {
 
       const addressParts = existingAddress.split(",").map((part) => part.trim());
 
-      setFirstName(parsedFirstName);
-      setLastName(parsedLastName);
-      setStreet(addressParts[0] || "");
-      setBarangay(addressParts[1] || "");
-      setCity(addressParts[2] || "");
+      setFirstName(initial?.first_name || parsedFirstName);
+      setLastName(initial?.last_name || parsedLastName);
+      setStreet(initial?.street || addressParts[0] || "");
+      setBarangay(initial?.barangay || addressParts[1] || "");
+      setCity(initial?.city || addressParts[2] || "");
     }
   }, [isOpen, initial]);
 

@@ -7,7 +7,7 @@ import Swal from 'sweetalert2';
 import '../styles/unclaimedstyle.css';
 
 const UnclaimLaundry = () => {
-  const { transactions } = useTransactions();
+  const { transactions = [] } = useTransactions() || {};
 
   const [filterPayment, setFilterPayment] = useState('All');
   const [filterInventory, setFilterInventory] = useState('in_shop');
@@ -27,12 +27,13 @@ const UnclaimLaundry = () => {
 
   // Filter table data
   const filteredData = useMemo(() => {
-    return transactions.filter((row) => {
+    const source = Array.isArray(transactions) ? transactions : [];
+    return source.filter((row) => {
       const matchesPayment = filterPayment === 'All' || row.payment_status === filterPayment;
       const matchesInventory = filterInventory === 'All' || row.inventory_status === filterInventory;
       const matchesSearch =
-        row.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        row.receipt.toLowerCase().includes(searchTerm.toLowerCase());
+        (row.customer_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (row.receipt || '').toLowerCase().includes(searchTerm.toLowerCase());
       return matchesPayment && matchesInventory && matchesSearch && !row.archived;
     });
   }, [transactions, filterPayment, filterInventory, searchTerm]);
@@ -41,17 +42,18 @@ const UnclaimLaundry = () => {
   const sortedData = useMemo(() => {
     const data = [...filteredData];
     if (sortOrder === 'amount_desc') {
-      data.sort((a, b) => b.amount - a.amount);
+      data.sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0));
     } else if (sortOrder === 'amount_asc') {
-      data.sort((a, b) => a.amount - b.amount);
+      data.sort((a, b) => Number(a.amount || 0) - Number(b.amount || 0));
     }
     return data;
   }, [filteredData, sortOrder]);
 
   // Alert overdue items
   useEffect(() => {
-    if (transactions.length > 0) {
-      const overdueItems = transactions.filter(
+    const source = Array.isArray(transactions) ? transactions : [];
+    if (source.length > 0) {
+      const overdueItems = source.filter(
         (row) => isPastDue(row.due_date) && row.inventory_status === 'in_shop'
       );
       if (overdueItems.length > 0) {
@@ -79,7 +81,7 @@ const UnclaimLaundry = () => {
         });
       }
     }
-  }, [transactions.length]);
+  }, [transactions]);
 
   // Table columns
   const columns = [
@@ -98,7 +100,7 @@ const UnclaimLaundry = () => {
         <span className={`status-pill status-${row.inventory_status}`}>{row.inventory_status}</span>
       ),
     },
-    { name: 'Amount', selector: (row) => row.amount, sortable: true, cell: (row) => `₱${row.amount.toFixed(2)}` },
+    { name: 'Amount', selector: (row) => Number(row.amount || 0), sortable: true, cell: (row) => `₱${Number(row.amount || 0).toFixed(2)}` },
     {
       name: 'Due Date',
       cell: (row) => (
