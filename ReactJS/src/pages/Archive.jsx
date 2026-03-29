@@ -6,12 +6,16 @@ import { useTransactions } from '../context/transactionsContext';
 import '../styles/archivestyle.css';
 
 const Archive = () => {
-  const { archivedTransactions, restoreTransaction } = useTransactions();
+  const {
+    archivedTransactions = [],
+    restoreTransaction = () => {}
+  } = useTransactions() || {};
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTxn, setSelectedTxn] = useState(null);
 
   const archivedData = useMemo(() => {
-    return archivedTransactions.filter((row) => (
+    const source = Array.isArray(archivedTransactions) ? archivedTransactions : [];
+    return source.filter((row) => (
       row.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       row.receipt.toLowerCase().includes(searchTerm.toLowerCase())
     ));
@@ -33,7 +37,7 @@ const Archive = () => {
         <span className={`status-pill status-${row.inventory_status} status-archived`}>{row.inventory_status}</span>
       ),
     },
-    { name: 'Amount', selector: (row) => `₱${row.amount.toFixed(2)}` },
+    { name: 'Amount', selector: (row) => `₱${Number(row.amount || 0).toFixed(2)}` },
     {
       name: 'Action',
       cell: (row) => (
@@ -109,13 +113,13 @@ const Archive = () => {
                 <ul>
                   {services.map((svc) => (
                     <li key={svc.id}>
-                      ({svc.serviceName}) {svc.kilos} kg @ ₱{svc.rate.toFixed(2)} = ₱{svc.total.toFixed(2)}
+                      ({svc.serviceName}) {svc.kilos} kg @ ₱{Number(svc.rate).toFixed(2)} = ₱{Number(svc.total).toFixed(2)}
                     </li>
                   ))}
                 </ul>
               </p>
 
-              <p><strong>Total Amount:</strong> ₱{selectedTxn.amount.toFixed(2)}</p>
+              <p><strong>Total Amount:</strong> ₱{Number(selectedTxn.amount || 0).toFixed(2)}</p>
               <p><strong>Payment Status:</strong> {selectedTxn.payment_status}</p>
               <p><strong>Inventory Status:</strong> {selectedTxn.inventory_status}</p>
 

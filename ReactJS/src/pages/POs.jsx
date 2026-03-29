@@ -17,7 +17,10 @@ const POs = () => {
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedServices, setSelectedServices] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [extraChargeType, setExtraChargeType] = useState('none');
+  const [extraCharges, setExtraCharges] = useState({
+    discount: false,
+    express: false
+  });
   const [discountAmount, setDiscountAmount] = useState(0);
   const [customerName, setCustomerName] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
@@ -114,9 +117,9 @@ const POs = () => {
   );
 
   const calculateExtras = () => {
-    if (extraChargeType === 'discount') return -Number(discountAmount || 0);
-    if (extraChargeType === 'express') return 100;
-    return 0;
+    const discount = extraCharges.discount ? Number(discountAmount || 0) : 0;
+    const express = extraCharges.express ? 100 : 0;
+    return express - discount;
   };
 
   const totalPayment = subtotal + calculateExtras();
@@ -126,7 +129,7 @@ const POs = () => {
     setCustomerName('');
     setCustomerAddress('');
     setDueDate('');
-    setExtraChargeType('none');
+    setExtraCharges({ discount: false, express: false });
     setDiscountAmount(0);
     setLastSavedReceipt(null);
     setSaveError('');
@@ -273,12 +276,19 @@ const POs = () => {
           weight: totalWeight,
           amount: Number(totalPayment.toFixed(2)),
           due_date: dueDate,
-          extra_charge_type: extraChargeType,
-          discount_amount: extraChargeType === 'discount' ? Number(discountAmount) : 0,
+          extra_charge_type:
+            extraCharges.discount && extraCharges.express
+              ? 'discount+express'
+              : extraCharges.discount
+              ? 'discount'
+              : extraCharges.express
+              ? 'express'
+              : 'none',
+          discount_amount: extraCharges.discount ? Number(discountAmount) : 0,
           payment_status,
           payment_method: paymentMethod,
           paid_amount: Number(amountPaid) || 0,
-          is_rush: extraChargeType === "express"
+          is_rush: extraCharges.express
         })
       });
 
@@ -456,26 +466,52 @@ const POs = () => {
                 <h3>Extra Charges</h3>
                 <div className="payment-options">
                   <label className="payment-option">
-                    <input type="radio" name="extraCharges" value="discount" checked={extraChargeType === 'discount'} onChange={e => setExtraChargeType(e.target.value)} />
+                    <input
+                      type="checkbox"
+                      checked={extraCharges.discount}
+                      onChange={(e) =>
+                        setExtraCharges((prev) => ({
+                          ...prev,
+                          discount: e.target.checked
+                        }))
+                      }
+                    />
                     <span>Discount</span>
                   </label>
                   <label className="payment-option">
-                    <input type="radio" name="extraCharges" value="express" checked={extraChargeType === 'express'} onChange={e => setExtraChargeType(e.target.value)} />
+                    <input
+                      type="checkbox"
+                      checked={extraCharges.express}
+                      onChange={(e) =>
+                        setExtraCharges((prev) => ({
+                          ...prev,
+                          express: e.target.checked
+                        }))
+                      }
+                    />
                     <span>Express/Rush</span>
                   </label>
                   <label className="payment-option">
-                    <input type="radio" name="extraCharges" value="none" checked={extraChargeType === 'none'} onChange={e => setExtraChargeType(e.target.value)} />
+                    <input
+                      type="checkbox"
+                      checked={!extraCharges.discount && !extraCharges.express}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setExtraCharges({ discount: false, express: false });
+                        }
+                      }}
+                    />
                     <span>No Extras</span>
                   </label>
                 </div>
 
-                {extraChargeType === 'discount' && (
+                {extraCharges.discount && (
                   <div className="discount-section">
                     <label>Discount Amount</label>
                     <input type="number" value={discountAmount} onChange={e => setDiscountAmount(e.target.value)} placeholder="Enter discount amount" className="for-receipt-customerinput" />
                   </div>
                 )}
-                {extraChargeType === 'express' && <div className="express-section"><p>Express/Rush Order Charge: ₱100 flat</p></div>}
+                {extraCharges.express && <div className="express-section"><p>Express/Rush Order Charge: ₱100 flat</p></div>}
               </div>
             </div>
           </section>

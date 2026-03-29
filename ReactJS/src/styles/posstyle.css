@@ -276,7 +276,8 @@ body {
     color: #333;
 }
 
-.payment-option input[type="radio"] {
+.payment-option input[type="radio"],
+.payment-option input[type="checkbox"] {
     cursor: pointer;
 }
 
