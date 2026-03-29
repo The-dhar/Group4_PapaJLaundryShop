@@ -110,7 +110,7 @@ const BranchAccountManager = () => {
 
         body: JSON.stringify({
           branchName: formData.branchName,
-          email: formData.email,
+          username: formData.email,
           password: formData.password
         })
 

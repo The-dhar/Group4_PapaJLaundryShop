@@ -95,7 +95,9 @@ const BranchList = () => {
 
       const token = await AsyncStorage.getItem("token");
 
-      await fetch(`${API_URL}/branches/${selectedBranch?.id}`, {
+      if (!selectedBranch?.id) return;
+
+      await fetch(`${API_URL}/branches/${selectedBranch.id}/clerk`, {
 
         method: "PUT",
 
@@ -106,9 +108,7 @@ const BranchList = () => {
         },
 
         body: JSON.stringify({
-          username: username,
-          clerk_username: clerkUsername,
-          password: password
+          clerk_username: clerkUsername
         })
 
       });
