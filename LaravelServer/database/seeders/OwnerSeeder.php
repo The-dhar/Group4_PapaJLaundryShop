@@ -9,11 +9,13 @@ class OwnerSeeder extends Seeder
 {
     public function run(): void
     {
-        User::create([
-            'name' => 'Shop Owner',
-            'email' => 'owner@gmail.com',
-            'role' => 'owner',
-            'password' => 'owner123', 
-        ]);
+        User::firstOrCreate(
+            ['email' => 'owner@gmail.com'],
+            [
+                'name' => 'Shop Owner',
+                'role' => 'owner',
+                'password' => 'owner123',
+            ]
+        );
     }
 }
