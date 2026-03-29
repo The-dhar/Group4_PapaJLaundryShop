@@ -2,98 +2,15 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Modal, TextInput,Alert,StyleSheet,SafeAreaView,StatusBar} from 'react-native';
 import { useRouter } from "expo-router";
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from "../config/api";
 
 const LaundryPriceManager = () => {
   type Tier = { range: string; price: number; description: string };
   type Service = { id: number; name: string; category: string; tiers: Tier[]; updatedAt: string | null; effectiveDate: string | null };
   type NewService = { name: string; category: string; tiers: { range: string; price: string; description: string }[] };
 
-  const [services, setServices] = useState<Service[]>([
-    {
-      id: 1,
-      name: 'Regular Clothes',
-      category: 'Wash & Fold',
-      tiers: [
-        { range: '1-6 kg', price: 150, description: '1 cycle' },
-        { range: '6.1-7 kg', price: 175, description: 'Standard' },
-        { range: '7.1-8 kg', price: 200, description: '₱25 per succeeding kg' },
-        { range: '8+ kg', price: 150, description: 'Per cycle (8kg)' },
-      ],
-      updatedAt: null,
-      effectiveDate: null,
-    },
-    {
-      id: 2,
-      name: 'White Clothes',
-      category: 'Wash & Fold',
-      tiers: [
-        { range: '1-6 kg', price: 150, description: '1 cycle' },
-        { range: '6.1-7 kg', price: 185, description: 'Standard' },
-        { range: '7.1-8 kg', price: 220, description: '₱35 per succeeding kg' },
-        { range: '8+ kg', price: 150, description: 'Per cycle (8kg)' },
-      ],
-      updatedAt: null,
-      effectiveDate: null,
-    },
-    {
-      id: 3,
-      name: 'Bedsheet/Blanket',
-      category: 'Wash & Fold',
-      tiers: [
-        { range: '1-3 kg', price: 150, description: 'Base price' },
-        { range: '3.1-5 kg', price: 50, description: '₱50 per succeeding kg' },
-        { range: '5+ kg', price: 150, description: 'Per cycle (5kg)' },
-      ],
-      updatedAt: null,
-      effectiveDate: null,
-    },
-    {
-      id: 4,
-      name: 'Drying Service',
-      category: 'Dry Only',
-      tiers: [
-        { range: '1-6 kg', price: 120, description: 'Small load' },
-        { range: '6.1-8 kg', price: 150, description: 'Medium load' },
-        { range: '8+ kg', price: 150, description: 'Per cycle (8kg)' },
-      ],
-      updatedAt: null,
-      effectiveDate: null,
-    },
-    {
-      id: 5,
-      name: 'Curtains/Big Towel',
-      category: 'Wash & Fold',
-      tiers: [
-        { range: '1-3 kg', price: 150, description: 'Base price' },
-        { range: '3.1-5 kg', price: 50, description: '₱50 per succeeding kg' },
-        { range: '5+ kg', price: 150, description: 'Per cycle (5kg)' },
-      ],
-      updatedAt: null,
-      effectiveDate: null,
-    },
-    {
-      id: 6,
-      name: 'Comforters',
-      category: 'Wash & Fold',
-      tiers: [
-        { range: '1-3 kg', price: 150, description: 'Base price' },
-        { range: '3.1-5 kg', price: 50, description: '₱50 per succeeding kg' },
-        { range: '5+ kg', price: 150, description: 'Per cycle (5kg)' },
-      ],
-      updatedAt: null,
-      effectiveDate: null,
-    },
-    {
-      id: 7,
-      name: 'Penalty',
-      category: 'Misc',
-      tiers: [
-        { range: 'Penalty', price: 100, description: 'Penalty fee' },
-      ],
-      updatedAt: null,
-      effectiveDate: null,
-    },
-  ]);
+  const [services, setServices] = useState<Service[]>([]);
 
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
@@ -104,6 +21,44 @@ const LaundryPriceManager = () => {
     category: 'Wash & Fold',
     tiers: [{ range: '', price: '', description: '' }],
   });
+
+  React.useEffect(() => {
+    const loadServices = async () => {
+      try {
+        const token = await AsyncStorage.getItem("token");
+        if (!token) return;
+
+        const response = await fetch(`${API_URL}/service-prices`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        });
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const mapped: Service[] = (Array.isArray(data) ? data : []).map((item: any) => ({
+          id: Number(item.id),
+          name: String(item.name),
+          category: String(item.category),
+          tiers: Array.isArray(item.tiers) ? item.tiers.map((t: any) => ({
+            range: String(t.range || ''),
+            price: Number(t.price || 0),
+            description: String(t.description || ''),
+          })) : [],
+          updatedAt: item.updated_at || null,
+          effectiveDate: item.effective_date || null,
+        }));
+
+        setServices(mapped);
+      } catch (error) {
+        console.log(error);
+      }
+    };
+
+    loadServices();
+  }, []);
 
   const handleEditService = (service: Service) => {
     setSelectedService(service);
@@ -123,7 +78,7 @@ const LaundryPriceManager = () => {
     setEditedTiers(updated);
   };
 
-  const handleSaveChanges = () => {
+  const handleSaveChanges = async () => {
     if (!selectedService) return;
     
     const hasChanges = JSON.stringify(editedTiers) !== JSON.stringify(selectedService.tiers);
@@ -147,19 +102,48 @@ const LaundryPriceManager = () => {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Proceed',
-          onPress: () => {
-            const updatedServices = services.map((service) =>
-              service.id === selectedService.id
-                ? {
-                    ...service,
-                    tiers: editedTiers,
-                    updatedAt: new Date().toISOString(),
-                    effectiveDate: effectiveDate.toISOString(),
-                  }
-                : service
-            );
-            setServices(updatedServices);
-            setIsEditModalOpen(false);
+          onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem("token");
+              if (!token) return;
+
+              const response = await fetch(`${API_URL}/service-prices/${selectedService.id}`, {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${token}`,
+                  Accept: "application/json",
+                },
+                body: JSON.stringify({
+                  tiers: editedTiers,
+                  effective_date: effectiveDate.toISOString().slice(0, 10),
+                }),
+              });
+
+              if (!response.ok) {
+                Alert.alert("Error", "Failed to update pricing.");
+                return;
+              }
+
+              const updated = await response.json();
+
+              const updatedServices = services.map((service) =>
+                service.id === selectedService.id
+                  ? {
+                      ...service,
+                      tiers: Array.isArray(updated.tiers) ? updated.tiers : editedTiers,
+                      updatedAt: updated.updated_at || new Date().toISOString(),
+                      effectiveDate: updated.effective_date || effectiveDate.toISOString(),
+                    }
+                  : service
+              );
+
+              setServices(updatedServices);
+              setIsEditModalOpen(false);
+            } catch (error) {
+              console.log(error);
+              Alert.alert("Error", "Failed to update pricing.");
+            }
           }
         }
       ]
@@ -177,28 +161,67 @@ const LaundryPriceManager = () => {
     }
   };
 
-  const handleCreateService = () => {
+  const handleCreateService = async () => {
     if (!newService.name || newService.tiers.some(t => !t.range || !t.price)) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
 
-    const service = {
-      id: services.length + 1,
-      name: newService.name,
-      category: newService.category,
-      tiers: newService.tiers.map(t => ({ ...t, price: parseFloat(t.price) || 0 })),
-      updatedAt: new Date().toISOString(),
-      effectiveDate: null,
-    };
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) return;
 
-    setServices([...services, service]);
-    setIsCreateModalOpen(false);
-    setNewService({
-      name: '',
-      category: 'Wash & Fold',
-      tiers: [{ range: '', price: '', description: '' }],
-    });
+      const response = await fetch(`${API_URL}/service-prices`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          name: newService.name,
+          category: newService.category,
+          tiers: newService.tiers.map(t => ({
+            range: t.range,
+            price: parseFloat(t.price) || 0,
+            description: t.description || '',
+          })),
+        }),
+      });
+
+      if (!response.ok) {
+        Alert.alert("Error", "Failed to create service.");
+        return;
+      }
+
+      const created = await response.json();
+
+      const service: Service = {
+        id: Number(created.id),
+        name: created.name,
+        category: created.category,
+        tiers: Array.isArray(created.tiers)
+          ? created.tiers.map((t: any) => ({
+              range: String(t.range || ''),
+              price: Number(t.price || 0),
+              description: String(t.description || ''),
+            }))
+          : [],
+        updatedAt: created.updated_at || new Date().toISOString(),
+        effectiveDate: created.effective_date || null,
+      };
+
+      setServices([...services, service]);
+      setIsCreateModalOpen(false);
+      setNewService({
+        name: '',
+        category: 'Wash & Fold',
+        tiers: [{ range: '', price: '', description: '' }],
+      });
+    } catch (error) {
+      console.log(error);
+      Alert.alert("Error", "Failed to create service.");
+    }
   };
 
   const handleNewServiceTierUpdate = (tierIndex: number, field: 'range' | 'price' | 'description', value: string) => {

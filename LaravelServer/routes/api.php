@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BranchController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\CustomerController;
+use App\Http\Controllers\Api\ServicePriceController;
 
 /*
 |--------------------------------------------------------------------------
@@ -37,6 +38,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/transactions/{id}', [TransactionController::class, 'update']);
     Route::put('/transactions/{id}/archive', [TransactionController::class, 'archive']);
     Route::put('/transactions/{id}/restore', [TransactionController::class, 'restore']);
+
+    Route::get('/service-prices', [ServicePriceController::class, 'index']);
+    Route::post('/service-prices', [ServicePriceController::class, 'store']);
+    Route::put('/service-prices/{id}', [ServicePriceController::class, 'update']);
     
 });
 

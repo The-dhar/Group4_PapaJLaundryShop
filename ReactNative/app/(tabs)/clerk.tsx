@@ -9,11 +9,13 @@ import {
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { API_URL } from "../config/api";
 const ROWS_PER_PAGE = 5;
 
 // Type Definitions
 type ClerkLog = {
-  id: string;
+  id: number;
   receipt_id: string;
   clerk_name: string;
   branch: string;
@@ -23,91 +25,6 @@ type ClerkLog = {
   inventory_status: string;
   due_date: string;
 };
-
-// -----------------------------
-// Mock Data
-// -----------------------------
-
-const mockClerkLogs = [
-  {
-    id: "1",
-    receipt_id: "REC-001",
-    clerk_name: "John Doe",
-    branch: "Brgy Sta Cruz",
-    customer_name: "Johnny",
-    amount: 300,
-    status: "paid",
-    inventory_status: "IN SHOP",
-    due_date: "2025-12-05",
-  },
-  {
-    id: "2",
-    receipt_id: "REC-002",
-    clerk_name: "Jane Smith",
-    branch: "Tumaga",
-    customer_name: "Rashdy",
-    amount: 500,
-    status: "unpaid",
-    inventory_status: "IN SHOP",
-    due_date: "2025-11-26",
-  },
-  {
-    id: "3",
-    receipt_id: "REC-003",
-    clerk_name: "Elaine Foster",
-    branch: "Brgy Santa Cruz 2",
-    customer_name: "Claire",
-    amount: 350,
-    status: "paid",
-    inventory_status: "IN SHOP",
-    due_date: "2025-12-01",
-  },
-  {
-    id: "4",
-    receipt_id: "REC-0091",
-    clerk_name: "Camil santos",
-    branch: "Brgy Sunrise",
-    customer_name: "Nadia",
-    amount: 150,
-    status: "paid",
-    inventory_status: "IN SHOP",
-    due_date: "2025-12-01",
-  },
-{
-    id: "5",
-    receipt_id: "REC-007",
-    clerk_name: "Camil santos",
-    branch: "Brgy Sunrise",
-    customer_name: "Radia",
-    amount: 170,
-    status: "paid",
-    inventory_status: "IN SHOP",
-    due_date: "2025-12-01",
-  },
-{
-    id: "6",
-    receipt_id: "REC-009",
-    clerk_name: "Carlos Mendoza",
-    branch: "Lower Calarian",
-    customer_name: "Shadia",
-    amount: 450,
-    status: "paid",
-    inventory_status: "IN SHOP",
-    due_date: "2025-12-01",
-  },
-{
-    id: "7",
-    receipt_id: "REC-008",
-    clerk_name: "Carlos Mendoza",
-    branch: "Lower Calarian",
-    customer_name: "Amani",
-    amount: 350,
-    status: "paid",
-    inventory_status: "IN SHOP",
-    due_date: "2025-12-01",
-  },
-
-];
 
 // -----------------------------
 // Helpers
@@ -121,12 +38,53 @@ const getStatusColor = (status: string) =>
 export default function ClerkLogsList() {
   const [page, setPage] = useState(1);
   const [selectedLog, setSelectedLog] = useState<ClerkLog | null>(null);
+  const [clerkLogs, setClerkLogs] = useState<ClerkLog[]>([]);
 
-  const totalPages = Math.ceil(mockClerkLogs.length / ROWS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(clerkLogs.length / ROWS_PER_PAGE));
   const startIndex = (page - 1) * ROWS_PER_PAGE;
-  const pageData = mockClerkLogs.slice(startIndex, startIndex + ROWS_PER_PAGE);
+  const pageData = clerkLogs.slice(startIndex, startIndex + ROWS_PER_PAGE);
   const router = useRouter();
   const [open, setOpen] = useState(false);
+
+  React.useEffect(() => {
+    const loadClerkLogs = async () => {
+      try {
+        const token = await AsyncStorage.getItem("token");
+        if (!token) return;
+
+        const response = await fetch(`${API_URL}/transactions?include_archived=1`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = await response.json();
+
+        const mapped: ClerkLog[] = (Array.isArray(data) ? data : []).map((txn: any) => ({
+          id: Number(txn.id),
+          receipt_id: txn.receipt || `REC-${txn.id}`,
+          clerk_name: txn.clerk_username || "Unassigned",
+          branch: txn.branch_name || "Unknown branch",
+          customer_name: txn.customer_name || "Unknown customer",
+          amount: Number(txn.amount || 0),
+          status: String(txn.payment_status || "unpaid"),
+          inventory_status: String(txn.inventory_status || "").replace("_", " ").toUpperCase(),
+          due_date: txn.due_date || "N/A",
+        }));
+
+        setClerkLogs(mapped);
+      } catch (error) {
+        console.log(error);
+      }
+    };
+
+    loadClerkLogs();
+  }, []);
    
   const handleProfile = () => {
     setOpen(false);

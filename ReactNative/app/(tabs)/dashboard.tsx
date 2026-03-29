@@ -3,6 +3,8 @@ import { Dimensions, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacit
 import { BarChart, LineChart } from "react-native-chart-kit";
 import { useRouter } from "expo-router";
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from "../config/api";
 
 // BarChart typing workaround to allow runtime onDataPointClick
 const AnyBarChart: any = BarChart;
@@ -20,7 +22,6 @@ const getResponsiveChartWidth = (labels: string[]) => {
 };
 
 export default function DashboardAnalytics() {
-  const [activeTab, setActiveTab] = useState("dashboard");
   const [revenueView, setRevenueView] = useState("weekly");
   const [branchView, setBranchView] = useState("weekly");
   const [tooltipPos, setTooltipPos] = useState({
@@ -42,67 +43,149 @@ export default function DashboardAnalytics() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
-  // Weekly Revenue Data
-  const weeklyRevenueData = [20000, 85000, 45000, 15000, 5000, 35000, 55000,];
-  const weeklyLabels = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",];
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [branches, setBranches] = useState<any[]>([]);
 
-  const monthlyRevenueData = [100000, 200000, 300000, 400000];
+  const weeklyLabels = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   const monthlyLabels = ["W1", "W2", "W3", "W4"];
+  const yearlyRevenueLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-  // Yearly Revenue Data (12 months)
-  const yearlyRevenueData = [120000, 110000, 130000, 140000, 150000, 160000, 170000, 180000, 190000, 200000, 210000, 220000];
-  const yearlyRevenueLabels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  React.useEffect(() => {
+    const loadDashboard = async () => {
+      try {
+        const token = await AsyncStorage.getItem("token");
+        if (!token) return;
 
-  const currentRevenue = revenueView === "weekly" ? weeklyRevenueData : revenueView === "monthly" ? monthlyRevenueData : yearlyRevenueData;
-  const currentLabels = revenueView === "weekly" ? weeklyLabels : revenueView === "monthly" ? monthlyLabels : yearlyRevenueLabels;
+        const [txRes, brRes] = await Promise.all([
+          fetch(`${API_URL}/transactions?include_archived=1`, {
+            headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+          }),
+          fetch(`${API_URL}/branches`, {
+            headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+          }),
+        ]);
 
-  const weeklyBranchData = [300, 400, 700, 1000, 300, 500, 800, 800, 300, 300, 300];
-  const weeklyBranchLabels = [
-    "Upper Calarian",
-    "San Roque 1",
-    "Pasonanca",
-    "Lower Calarian",
-    "Tumaga",
-    "Lunzuran",
-    "Brgy Sta Cruz",
-    "Brgy Sunrise",
-    "Brgy Santa Cruz 1",
-    "Brgy Santa Cruz 2",
-    "Brgy Santa Cruz 3"
-  ];
+        const txData = txRes.ok ? await txRes.json() : [];
+        const brData = brRes.ok ? await brRes.json() : [];
 
-  // Monthly Branch Data
-  const monthlyBranchData = [10000, 25000, 30000, 40000, 50000, 60000, 10000, 35000, 10000, 40000, 50000];
-  const monthlyBranchLabels = [
-    "Upper Calarian",
-    "San Roque 1",
-    "San Roque 2",
-    "Pasonanca",
-    "Lower Calarian",
-    "Tumaga",
-    "Lunzuran",
-    "Brgy Sta Cruz",
-    "Brgy Sunrise",
-    "Brgy Santa Cruz 1",
-    "Brgy Santa Cruz 2"
-  ];
+        setTransactions(Array.isArray(txData) ? txData : []);
+        setBranches(Array.isArray(brData) ? brData : []);
+      } catch (error) {
+        console.log(error);
+      }
+    };
 
-  // Yearly Branch Data (same branch order as monthly)
-  const yearlyBranchData = [120000, 250000, 300000, 400000, 500000, 600000, 100000, 350000, 100000, 400000, 500000];
-  const yearlyBranchLabels = monthlyBranchLabels;
+    loadDashboard();
+  }, []);
 
-  const currentBranchValues = branchView === "weekly" ? weeklyBranchData : branchView === "monthly" ? monthlyBranchData : yearlyBranchData;
-  const currentBranchLabels = branchView === "weekly" ? weeklyBranchLabels : branchView === "monthly" ? monthlyBranchLabels : yearlyBranchLabels;
+  const now = new Date();
+
+  const getWeeklyRevenue = () => {
+    const values = [0, 0, 0, 0, 0, 0, 0];
+    const monday = new Date(now);
+    const day = monday.getDay();
+    const diffToMonday = (day + 6) % 7;
+    monday.setDate(monday.getDate() - diffToMonday);
+    monday.setHours(0, 0, 0, 0);
+
+    transactions.forEach((txn) => {
+      const created = new Date(txn.created_at || now);
+      const diffDays = Math.floor((created.getTime() - monday.getTime()) / (1000 * 60 * 60 * 24));
+      if (diffDays >= 0 && diffDays < 7) {
+        values[diffDays] += Number(txn.amount || 0);
+      }
+    });
+
+    return values;
+  };
+
+  const getMonthlyRevenue = () => {
+    const values = [0, 0, 0, 0];
+    transactions.forEach((txn) => {
+      const created = new Date(txn.created_at || now);
+      if (created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear()) {
+        const bucket = Math.min(3, Math.floor((created.getDate() - 1) / 7));
+        values[bucket] += Number(txn.amount || 0);
+      }
+    });
+    return values;
+  };
+
+  const getYearlyRevenue = () => {
+    const values = Array(12).fill(0);
+    transactions.forEach((txn) => {
+      const created = new Date(txn.created_at || now);
+      if (created.getFullYear() === now.getFullYear()) {
+        values[created.getMonth()] += Number(txn.amount || 0);
+      }
+    });
+    return values;
+  };
+
+  const weeklyRevenueData = getWeeklyRevenue();
+  const monthlyRevenueData = getMonthlyRevenue();
+  const yearlyRevenueData = getYearlyRevenue();
+
+  const currentRevenue =
+    revenueView === "weekly"
+      ? weeklyRevenueData
+      : revenueView === "monthly"
+      ? monthlyRevenueData
+      : yearlyRevenueData;
+  const currentLabels =
+    revenueView === "weekly"
+      ? weeklyLabels
+      : revenueView === "monthly"
+      ? monthlyLabels
+      : yearlyRevenueLabels;
+
+  const branchNames = branches.map((b) => b.name);
+  const currentBranchLabels = branchNames.length > 0 ? branchNames : ["No Branches"];
+
+  const getBranchRevenueForView = () => {
+    const totals = new Map<number, number>();
+    branches.forEach((branch) => totals.set(Number(branch.id), 0));
+
+    transactions.forEach((txn) => {
+      const created = new Date(txn.created_at || now);
+      const amount = Number(txn.amount || 0);
+      const branchId = Number(txn.branch_id);
+      if (!totals.has(branchId)) return;
+
+      let include = true;
+      if (branchView === "weekly") {
+        const monday = new Date(now);
+        const day = monday.getDay();
+        const diffToMonday = (day + 6) % 7;
+        monday.setDate(monday.getDate() - diffToMonday);
+        monday.setHours(0, 0, 0, 0);
+        include = created >= monday;
+      } else if (branchView === "monthly") {
+        include = created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
+      } else {
+        include = created.getFullYear() === now.getFullYear();
+      }
+
+      if (include) {
+        totals.set(branchId, (totals.get(branchId) || 0) + amount);
+      }
+    });
+
+    if (branches.length === 0) return [0];
+    return branches.map((branch) => Number((totals.get(Number(branch.id)) || 0).toFixed(2)));
+  };
+
+  const currentBranchValues = getBranchRevenueForView();
 
   // Compute responsive chart widths so x-axis labels fit on narrow screens
   const revenueChartWidth = getResponsiveChartWidth(currentLabels);
   const branchComparisonChartWidth = getResponsiveChartWidth(currentBranchLabels);
   const branchPerformanceChartWidth = getResponsiveChartWidth(currentBranchLabels);
   
-  const totalSales = 10001;
-  const totalOrders = 505;
-  const salesTrend = 1000;
-  const ordersTrend = 100;
+  const totalSales = transactions.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+  const totalOrders = transactions.length;
+  const salesTrend = currentRevenue.length ? Math.round(currentRevenue[currentRevenue.length - 1] || 0) : 0;
+  const ordersTrend = Math.max(0, transactions.filter((t) => String(t.payment_status) === "paid").length);
   
   const handleProfile = () => {
     setOpen(false);

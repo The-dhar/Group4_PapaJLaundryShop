@@ -116,7 +116,10 @@ class TransactionController extends Controller
     {
         $includeArchived = $request->boolean('include_archived');
 
-        $query = Transaction::with('items');
+        $query = Transaction::with([
+            'items',
+            'branch:id,name,clerk_username',
+        ]);
 
         if (! $includeArchived) {
             $query->where('archived', false);
@@ -138,6 +141,10 @@ class TransactionController extends Controller
                 'inventory_status' => $txn->inventory_status,
                 'due_date' => $txn->due_date,
                 'archived' => (bool) $txn->archived,
+                'branch_id' => $txn->branch_id,
+                'branch_name' => optional($txn->branch)->name,
+                'clerk_username' => optional($txn->branch)->clerk_username,
+                'created_at' => $txn->created_at,
                 'receipt_items' => $txn->items->map(function ($item) {
                     return [
                         'id' => $item->id,

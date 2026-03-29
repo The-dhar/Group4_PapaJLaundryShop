@@ -1,23 +1,17 @@
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from 'react';
 import { Dimensions, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Pressable } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from "../config/api";
 
 const { width } = Dimensions.get('window');
 
 export default function RevenueDashboard() {
   const [revenueView, setRevenueView] = useState("weekly");
   const router = useRouter(); 
-
-  const receipts = [
-    { id: 'ORD-100', name: 'Johnny', status: 'Completed', total: '₱250.00' },
-    { id: 'ORD-101', name: 'Khymer', status: 'Completed', total: '₱250.00' },
-    { id: 'ORD-102', name: 'Rashdy', status: 'Completed', total: '₱250.00' },
-    { id: 'ORD-103', name: 'Paul', status: 'Completed', total: '₱250.00' },
-    { id: 'ORD-104', name: 'Shadla', status: 'Completed', total: '₱250.00' },
-    { id: 'ORD-105', name: 'Amani', status: 'Completed', total: '₱250.00' },
-    { id: 'ORD-106', name: 'Dharelle', status: 'Completed', total: '₱250.00' }
-  ];
+  const { branchId, branchName } = useLocalSearchParams<{ branchId?: string; branchName?: string }>();
+  const [receipts, setReceipts] = useState<any[]>([]);
 
   const [tooltipPos, setTooltipPos] = useState({
     x: 0,
@@ -26,8 +20,57 @@ export default function RevenueDashboard() {
     visible: false
   });
 
-  const weeklyRevenueData = [20000, 85000, 45000, 15000, 5000, 35000, 55000];
-  const monthlyRevenueData = [100000, 200000, 300000, 400000];
+  React.useEffect(() => {
+    const loadBranchTransactions = async () => {
+      try {
+        const token = await AsyncStorage.getItem("token");
+        if (!token) return;
+
+        const response = await fetch(`${API_URL}/transactions?include_archived=1`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        });
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const branchTx = (Array.isArray(data) ? data : []).filter((txn: any) =>
+          String(txn.branch_id) === String(branchId || '')
+        );
+        setReceipts(branchTx);
+      } catch (error) {
+        console.log(error);
+      }
+    };
+
+    loadBranchTransactions();
+  }, [branchId]);
+
+  const now = new Date();
+  const weeklyRevenueData = [0, 0, 0, 0, 0, 0, 0];
+  const monthlyRevenueData = [0, 0, 0, 0];
+
+  receipts.forEach((txn) => {
+    const created = new Date(txn.created_at || now);
+    const amount = Number(txn.amount || 0);
+
+    const monday = new Date(now);
+    const day = monday.getDay();
+    const diffToMonday = (day + 6) % 7;
+    monday.setDate(monday.getDate() - diffToMonday);
+    monday.setHours(0, 0, 0, 0);
+    const diffDays = Math.floor((created.getTime() - monday.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays >= 0 && diffDays < 7) {
+      weeklyRevenueData[diffDays] += amount;
+    }
+
+    if (created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear()) {
+      const bucket = Math.min(3, Math.floor((created.getDate() - 1) / 7));
+      monthlyRevenueData[bucket] += amount;
+    }
+  });
 
   const currentRevenue = revenueView === "weekly" ? weeklyRevenueData : monthlyRevenueData;
   const currentLabels = revenueView === "weekly" 
@@ -48,7 +91,7 @@ export default function RevenueDashboard() {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <View style={styles.headerContent}>
-            <Text style={styles.headerTitle}>Branch Dashboard</Text>
+            <Text style={styles.headerTitle}>{branchName ? `${branchName} Dashboard` : "Branch Dashboard"}</Text>
             <View style={styles.headerAccent} />
           </View>
            </View>
@@ -140,13 +183,13 @@ export default function RevenueDashboard() {
           {/* Table Rows */}
           {receipts?.map((r, i) => (
             <View
-              key={r.id}
+              key={String(r.id)}
               style={[styles.tableRow, i !== receipts.length - 1 && styles.tableRowBorder]}
             >
-              <Text style={[styles.tableCell, { flex: 1 }]}>{r.id}</Text>
-              <Text style={[styles.tableCell, { flex: 2 }]}>{r.name}</Text>
-              <Text style={[styles.tableCell, { flex: 1 }]}>{r.status}</Text>
-              <Text style={[styles.tableCell, { flex: 1, textAlign: 'right' }]}>{r.total}</Text>
+              <Text style={[styles.tableCell, { flex: 1 }]}>{r.receipt || r.id}</Text>
+              <Text style={[styles.tableCell, { flex: 2 }]}>{r.customer_name || 'Unknown'}</Text>
+              <Text style={[styles.tableCell, { flex: 1 }]}>{String(r.payment_status || '').toUpperCase()}</Text>
+              <Text style={[styles.tableCell, { flex: 1, textAlign: 'right' }]}>₱{Number(r.amount || 0).toFixed(2)}</Text>
             </View>
           ))}
         </View>
