@@ -1,8 +1,6 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Dimensions, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
-
-const { width, height } = Dimensions.get('window');
+import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
 
 export default function LaundryWelcomeScreen() {
 const handleGetStarted = () => {
@@ -31,11 +29,11 @@ const handleGetStarted = () => {
       {/* Main Content */}
       <View style={styles.contentContainer}>
         <Text style={styles.heading}>
-          Fresh, clean, and perfectly folded that's how we do laundry.
+          Fresh, clean, and perfectly folded that&apos;s how we do laundry.
         </Text>
         
         <Text style={styles.subheading}>
-          Welcome to Papa J's where clean clothes meet convenience.
+          Welcome to Papa J&apos;s where clean clothes meet convenience.
         </Text>
 
         {/* Get Started Button */}

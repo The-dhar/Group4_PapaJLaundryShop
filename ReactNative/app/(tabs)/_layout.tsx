@@ -57,6 +57,16 @@ export default function TabLayout() {
         }}
       />
 
+      <Tabs.Screen
+        name="employees"
+        options={{
+          title: 'Employees',
+          tabBarIcon: ({ color }) => (
+            <Ionicons size={28} name="people-outline" color={color} />
+          ),
+        }}
+      />
+
       {/* Hidden tab */}
       <Tabs.Screen
         name="profile"

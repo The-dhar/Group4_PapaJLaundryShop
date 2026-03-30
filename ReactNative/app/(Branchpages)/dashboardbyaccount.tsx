@@ -1,7 +1,8 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Dimensions, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Pressable } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
+import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from "../../config/api";
 
@@ -20,33 +21,35 @@ export default function RevenueDashboard() {
     visible: false
   });
 
-  React.useEffect(() => {
-    const loadBranchTransactions = async () => {
-      try {
-        const token = await AsyncStorage.getItem("token");
-        if (!token) return;
+  const loadBranchTransactions = useCallback(async () => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) return;
 
-        const response = await fetch(`${API_URL}/transactions?include_archived=1`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-        });
+      const response = await fetch(`${API_URL}/transactions?include_archived=1`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
 
-        if (!response.ok) return;
+      if (!response.ok) return;
 
-        const data = await response.json();
-        const branchTx = (Array.isArray(data) ? data : []).filter((txn: any) =>
-          String(txn.branch_id) === String(branchId || '')
-        );
-        setReceipts(branchTx);
-      } catch (error) {
-        console.log(error);
-      }
-    };
-
-    loadBranchTransactions();
+      const data = await response.json();
+      const branchTx = (Array.isArray(data) ? data : []).filter((txn: any) =>
+        String(txn.branch_id) === String(branchId || '')
+      );
+      setReceipts(branchTx);
+    } catch (error) {
+      console.log(error);
+    }
   }, [branchId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadBranchTransactions();
+    }, [loadBranchTransactions])
+  );
 
   const now = new Date();
   const weeklyRevenueData = [0, 0, 0, 0, 0, 0, 0];

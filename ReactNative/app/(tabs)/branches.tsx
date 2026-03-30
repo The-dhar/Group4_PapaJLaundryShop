@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   Modal,
   SafeAreaView,
@@ -57,7 +58,7 @@ const BranchAccountManager = () => {
      Load Branches
   ------------------------------*/
 
-  const loadBranches = async () => {
+  const loadBranches = useCallback(async () => {
 
     try {
 
@@ -77,11 +78,13 @@ const BranchAccountManager = () => {
     } catch (error) {
       console.log(error);
     }
-  };
-
-  useEffect(() => {
-    loadBranches();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadBranches();
+    }, [loadBranches])
+  );
 
   /* -----------------------------
      Create Branch

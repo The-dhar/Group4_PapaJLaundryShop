@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   SafeAreaView,
   StyleSheet,
@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_URL } from "../../config/api";
 const ROWS_PER_PAGE = 5;
@@ -46,45 +47,47 @@ export default function ClerkLogsList() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
-  React.useEffect(() => {
-    const loadClerkLogs = async () => {
-      try {
-        const token = await AsyncStorage.getItem("token");
-        if (!token) return;
+  const loadClerkLogs = useCallback(async () => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) return;
 
-        const response = await fetch(`${API_URL}/transactions?include_archived=1`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-        });
+      const response = await fetch(`${API_URL}/transactions?include_archived=1`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
 
-        if (!response.ok) {
-          return;
-        }
-
-        const data = await response.json();
-
-        const mapped: ClerkLog[] = (Array.isArray(data) ? data : []).map((txn: any) => ({
-          id: Number(txn.id),
-          receipt_id: txn.receipt || `REC-${txn.id}`,
-          clerk_name: txn.clerk_username || "Unassigned",
-          branch: txn.branch_name || "Unknown branch",
-          customer_name: txn.customer_name || "Unknown customer",
-          amount: Number(txn.amount || 0),
-          status: String(txn.payment_status || "unpaid"),
-          inventory_status: String(txn.inventory_status || "").replace("_", " ").toUpperCase(),
-          due_date: txn.due_date || "N/A",
-        }));
-
-        setClerkLogs(mapped);
-      } catch (error) {
-        console.log(error);
+      if (!response.ok) {
+        return;
       }
-    };
 
-    loadClerkLogs();
+      const data = await response.json();
+
+      const mapped: ClerkLog[] = (Array.isArray(data) ? data : []).map((txn: any) => ({
+        id: Number(txn.id),
+        receipt_id: txn.receipt || `REC-${txn.id}`,
+        clerk_name: txn.clerk_username || "Unassigned",
+        branch: txn.branch_name || "Unknown branch",
+        customer_name: txn.customer_name || "Unknown customer",
+        amount: Number(txn.amount || 0),
+        status: String(txn.payment_status || "unpaid"),
+        inventory_status: String(txn.inventory_status || "").replace("_", " ").toUpperCase(),
+        due_date: txn.due_date || "N/A",
+      }));
+
+      setClerkLogs(mapped);
+    } catch (error) {
+      console.log(error);
+    }
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadClerkLogs();
+    }, [loadClerkLogs])
+  );
    
   const handleProfile = () => {
     setOpen(false);

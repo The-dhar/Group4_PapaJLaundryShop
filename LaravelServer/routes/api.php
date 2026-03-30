@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\BranchController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\ServicePriceController;
+use App\Http\Controllers\Api\EmployeeController;
 
 /*
 |--------------------------------------------------------------------------
@@ -42,6 +43,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/service-prices', [ServicePriceController::class, 'index']);
     Route::post('/service-prices', [ServicePriceController::class, 'store']);
     Route::put('/service-prices/{id}', [ServicePriceController::class, 'update']);
+
+    Route::get('/employees', [EmployeeController::class, 'index']);
+    Route::post('/employees', [EmployeeController::class, 'store']);
+    Route::put('/employees/{id}', [EmployeeController::class, 'update']);
+    Route::put('/employees/{id}/assign-branch', [EmployeeController::class, 'assignBranch']);
     
 });
 

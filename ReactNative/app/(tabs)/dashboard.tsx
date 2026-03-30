@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import { Dimensions, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Pressable, Alert } from "react-native";
 import { BarChart, LineChart } from "react-native-chart-kit";
 import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from "../../config/api";
@@ -50,33 +51,35 @@ export default function DashboardAnalytics() {
   const monthlyLabels = ["W1", "W2", "W3", "W4"];
   const yearlyRevenueLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-  React.useEffect(() => {
-    const loadDashboard = async () => {
-      try {
-        const token = await AsyncStorage.getItem("token");
-        if (!token) return;
+  const loadDashboard = useCallback(async () => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) return;
 
-        const [txRes, brRes] = await Promise.all([
-          fetch(`${API_URL}/transactions?include_archived=1`, {
-            headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-          }),
-          fetch(`${API_URL}/branches`, {
-            headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-          }),
-        ]);
+      const [txRes, brRes] = await Promise.all([
+        fetch(`${API_URL}/transactions?include_archived=1`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        }),
+        fetch(`${API_URL}/branches`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        }),
+      ]);
 
-        const txData = txRes.ok ? await txRes.json() : [];
-        const brData = brRes.ok ? await brRes.json() : [];
+      const txData = txRes.ok ? await txRes.json() : [];
+      const brData = brRes.ok ? await brRes.json() : [];
 
-        setTransactions(Array.isArray(txData) ? txData : []);
-        setBranches(Array.isArray(brData) ? brData : []);
-      } catch (error) {
-        console.log(error);
-      }
-    };
-
-    loadDashboard();
+      setTransactions(Array.isArray(txData) ? txData : []);
+      setBranches(Array.isArray(brData) ? brData : []);
+    } catch (error) {
+      console.log(error);
+    }
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboard();
+    }, [loadDashboard])
+  );
 
   const now = new Date();
 
