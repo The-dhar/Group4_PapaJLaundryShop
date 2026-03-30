@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import '../componentstyle/smallcardModal.css';
+import Swal from 'sweetalert2';
 
 const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
   const [kilos, setKilos] = useState(1);
@@ -179,7 +180,12 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
 
   const handleAdd = () => {
     if (!selectedTier) {
-      alert("Invalid pricing");
+      Swal.fire({
+        title: 'Invalid pricing',
+        text: 'Please enter a valid kilos value first.',
+        icon: 'warning',
+        width: 360,
+      });
       return;
     }
 

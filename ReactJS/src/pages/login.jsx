@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../styles/loginstyle.css';
 import { API_URL } from "../config/api";
+import Swal from 'sweetalert2';
 
 export default function LoginPage() {
 
@@ -49,14 +50,22 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        alert(data.message || "Login failed");
-        setIsLoading(false);
+        await Swal.fire({
+          title: 'Login failed',
+          text: data.message || 'Invalid credentials.',
+          icon: 'error',
+          width: 380
+        });
         return;
       }
 
       if (data.user.role !== "manager") {
-        alert("Only branch accounts can login here");
-        setIsLoading(false);
+        await Swal.fire({
+          title: 'Access denied',
+          text: 'Only branch accounts can login here.',
+          icon: 'warning',
+          width: 400
+        });
         return;
       }
 
@@ -69,7 +78,12 @@ export default function LoginPage() {
     } catch (error) {
 
       console.error(error);
-      alert("Server error");
+      await Swal.fire({
+        title: 'Server error',
+        text: 'Cannot connect to server. Please try again.',
+        icon: 'error',
+        width: 400
+      });
 
     } finally {
       setIsLoading(false);

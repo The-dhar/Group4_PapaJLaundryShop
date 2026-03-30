@@ -5,6 +5,7 @@ import DashboardLayout from '../components/dashboardlayout';
 import { useTransactions } from '../context/transactionsContext';
 import '../styles/receiptstyle.css';
 import { jsPDF } from 'jspdf';
+import Swal from 'sweetalert2';
 
 function formatInventoryStatus(status) {
   if (status == null || status === '') return '—';
@@ -305,16 +306,29 @@ const Receiptmanagement = () => {
     setShowArchiveConfirm(false);
   };
 
-  const handleMarkPickedUp = () => {
-    if (selectedReceipt && window.confirm(`Mark Receipt ${selectedReceipt.receipt} as Picked Up?`)) {
-      updateTransaction(selectedReceipt.id, {
-        inventory_status: 'picked_up'
-      });
-      setSelectedReceipt({
-        ...selectedReceipt,
-        inventory_status: 'picked_up'
-      });
-    }
+  const handleMarkPickedUp = async () => {
+    if (!selectedReceipt) return;
+
+    const result = await Swal.fire({
+      title: 'Mark as Picked Up?',
+      text: `Receipt ${selectedReceipt.receipt} will be marked as picked up.`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, mark picked up',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#16a34a',
+      width: 420,
+    });
+
+    if (!result.isConfirmed) return;
+
+    await updateTransaction(selectedReceipt.id, {
+      inventory_status: 'picked_up'
+    });
+    setSelectedReceipt({
+      ...selectedReceipt,
+      inventory_status: 'picked_up'
+    });
   };
 
   // compute paid / diff for selected receipt (safe defaults)

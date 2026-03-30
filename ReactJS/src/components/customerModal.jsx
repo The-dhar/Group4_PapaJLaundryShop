@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import "../componentstyle/smallcardModal.css";
 import '../componentstyle/customerModalstylesheet.css';
+import Swal from 'sweetalert2';
 
 const CustomerModal = ({ isOpen, onClose, onSave, initial }) => {
   // Chopped States
@@ -26,7 +27,12 @@ const CustomerModal = ({ isOpen, onClose, onSave, initial }) => {
   const handleSave = () => {
     // Validation: Check if required fields are filled
     if (!firstName || !lastName || !street || !barangay || !city) {
-      alert("Please fill in all customer information fields.");
+      Swal.fire({
+        title: 'Missing customer details',
+        text: 'Please fill in all customer information fields.',
+        icon: 'warning',
+        width: 420,
+      });
       return;
     }
 
