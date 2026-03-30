@@ -120,8 +120,38 @@ export const TransactionsProvider = ({ children }) => {
       }
 
       const result = await res.json();
+      const createdTxn = normalizeTransaction({
+        id: result.id ?? `local-${Date.now()}`,
+        receipt: result.receipt,
+        customer_name,
+        customer_address,
+        amount: Number(result.amount ?? amount) || 0,
+        total_weight: Number(result.total_weight ?? weight) || 0,
+        paid_amount: Number(result.paid_amount ?? paid_amount) || 0,
+        payment_status: result.payment_status ?? payment_status ?? "unpaid",
+        payment_method: result.payment_method ?? payment_method ?? "",
+        inventory_status: result.inventory_status ?? "in_shop",
+        due_date: result.due_date ?? due_date,
+        archived: false,
+        created_at: result.created_at ?? new Date().toISOString(),
+        receipt_items: Array.isArray(result.receipt_items) && result.receipt_items.length > 0
+          ? result.receipt_items
+          : (services || []).map((s, idx) => ({
+              id: s.id ?? `${Date.now()}-${idx}`,
+              serviceName: s.serviceName,
+              laundryType: s.laundryType,
+              rate: Number(s.rate) || 0,
+              kilos: Number(s.kilos) || 0,
+              total: Number(s.total) || 0,
+            })),
+        active_extras,
+        sub_extras,
+        extra_charge_type,
+        discount_amount,
+        additional_amount,
+      });
       await fetchTransactions();
-      return result;
+      return createdTxn;
     } catch (error) {
       console.error("Error creating transaction:", error);
       throw error;

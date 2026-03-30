@@ -1,41 +1,116 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { BsBoxSeam, BsExclamationTriangle, BsCreditCard } from 'react-icons/bs';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Card from '../components/card';
 import DashboardLayout from '../components/dashboardlayout';
+import { useTransactions } from '../context/transactionsContext';
 import '../styles/dashboardstyle.css';
 
 const Dashboard = () => {
+  const { transactions } = useTransactions();
   const [viewType, setViewType] = useState('week');
-// WEEKLY DATA
-  const weekData = [
-    { name: 'Mon', revenue: 4000, unpaid: 1200 },
-    { name: 'Tue', revenue: 3000, unpaid: 800 },
-    { name: 'Wed', revenue: 2000, unpaid: 1500 },
-    { name: 'Thu', revenue: 2780, unpaid: 600 },
-    { name: 'Fri', revenue: 1890, unpaid: 400 },
-    { name: 'Sat', revenue: 2390, unpaid: 200 },
-    { name: 'Sun', revenue: 3090, unpaid: 900 },
-  ];
-
-  // MONTHLY DATA
-  const monthData = [
-    { name: 'Week 1', revenue: 12000, unpaid: 3500 },
-    { name: 'Week 2', revenue: 15000, unpaid: 2000 },
-    { name: 'Week 3', revenue: 11000, unpaid: 4500 },
-    { name: 'Week 4', revenue: 18000, unpaid: 1500 },
-  ];
-
-  const chartData = viewType === 'week' ? weekData : monthData;
-
-  const transactions = [
-    { id: 'RCPT-00123', customer: 'Juan Dela Cruz', amount: 1250, date: 'Oct 20, 2025', status: 'Paid' },
-    { id: 'RCPT-00124', customer: 'Maria Santos', amount: 870, date: 'Oct 21, 2025', status: 'Unpaid' },
-    { id: 'RCPT-00125', customer: 'Jose Ramirez', amount: 1050, date: 'Oct 22, 2025', status: 'Paid' },
-  ];
 
   // Helper to format amount with peso sign
   const formatPeso = (value) => `₱${value.toLocaleString()}`;
+
+  const activeTransactions = useMemo(
+    () => transactions.filter((t) => !t.archived),
+    [transactions]
+  );
+
+  const paidTotal = useMemo(
+    () =>
+      activeTransactions
+        .filter((t) => t.payment_status === 'paid')
+        .reduce((sum, t) => sum + (Number(t.amount) || 0), 0),
+    [activeTransactions]
+  );
+
+  const debitCount = useMemo(
+    () => activeTransactions.filter((t) => t.payment_status === 'unpaid').length,
+    [activeTransactions]
+  );
+
+  const inShopCount = useMemo(
+    () => activeTransactions.filter((t) => t.inventory_status === 'in_shop').length,
+    [activeTransactions]
+  );
+
+  const overdueCount = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return activeTransactions.filter((t) => {
+      if (t.inventory_status !== 'in_shop' || !t.due_date) return false;
+      const due = new Date(t.due_date);
+      due.setHours(0, 0, 0, 0);
+      return due < today;
+    }).length;
+  }, [activeTransactions]);
+
+  const weekData = useMemo(() => {
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const now = new Date();
+    const start = new Date(now);
+    start.setDate(now.getDate() - 6);
+    start.setHours(0, 0, 0, 0);
+
+    const rows = Array.from({ length: 7 }).map((_, idx) => {
+      const d = new Date(start);
+      d.setDate(start.getDate() + idx);
+      return {
+        name: dayNames[d.getDay()],
+        key: d.toDateString(),
+        revenue: 0,
+        unpaid: 0,
+      };
+    });
+
+    activeTransactions.forEach((t) => {
+      const dt = new Date(t.created_at || t.updated_at || Date.now());
+      const key = dt.toDateString();
+      const row = rows.find((r) => r.key === key);
+      if (!row) return;
+      const amount = Number(t.amount) || 0;
+      if (t.payment_status === 'paid') row.revenue += amount;
+      else row.unpaid += amount;
+    });
+
+    return rows.map(({ name, revenue, unpaid }) => ({ name, revenue, unpaid }));
+  }, [activeTransactions]);
+
+  const monthData = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const weekBuckets = [
+      { name: 'Week 1', revenue: 0, unpaid: 0 },
+      { name: 'Week 2', revenue: 0, unpaid: 0 },
+      { name: 'Week 3', revenue: 0, unpaid: 0 },
+      { name: 'Week 4', revenue: 0, unpaid: 0 },
+    ];
+
+    activeTransactions.forEach((t) => {
+      const dt = new Date(t.created_at || t.updated_at || Date.now());
+      if (dt.getFullYear() !== currentYear || dt.getMonth() !== currentMonth) return;
+      const day = dt.getDate();
+      const bucketIdx = Math.min(3, Math.floor((day - 1) / 7));
+      const amount = Number(t.amount) || 0;
+      if (t.payment_status === 'paid') weekBuckets[bucketIdx].revenue += amount;
+      else weekBuckets[bucketIdx].unpaid += amount;
+    });
+
+    return weekBuckets;
+  }, [activeTransactions]);
+
+  const chartData = viewType === 'week' ? weekData : monthData;
+
+  const recentTransactions = useMemo(
+    () =>
+      [...activeTransactions]
+        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+        .slice(0, 8),
+    [activeTransactions]
+  );
 
   return (
     <DashboardLayout>
@@ -46,7 +121,7 @@ const Dashboard = () => {
           <div className="card-total">
             <div className="chart-title">Total Orders</div>
             <div className="icon-value">
-              <span>{formatPeso(transactions.reduce((sum, t) => sum + t.amount, 0))}</span>
+              <span>{formatPeso(paidTotal)}</span>
             </div>
           </div>
 
@@ -54,7 +129,7 @@ const Dashboard = () => {
             <div className="chart-title"> Debit Sales</div>
             <div className="icon-value">
               <BsCreditCard className="icon" />
-              <span>{transactions.filter(t => t.status === 'Unpaid').length}</span>
+              <span>{debitCount}</span>
             </div>
           </div>
 
@@ -65,7 +140,7 @@ const Dashboard = () => {
             <div className="chart-title">Items in Shop</div>
             <div className="icon-value">
               <BsBoxSeam className="icon" />
-              <span>5</span>
+              <span>{inShopCount}</span>
             </div>
           </div>
           
@@ -73,7 +148,7 @@ const Dashboard = () => {
             <div className="chart-title">Overdue Items</div>
             <div className="icon-value">
               <BsExclamationTriangle className="icon" />
-              <span>2</span>
+              <span>{overdueCount}</span>
             </div>
           </div>
         </div>
@@ -139,13 +214,13 @@ const Dashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {transactions.map((t) => (
-                  <tr key={t.id}>
-                    <td>{t.id}</td>
-                    <td>{t.customer}</td>
-                    <td>{formatPeso(t.amount)}</td>
-                    <td>{t.date}</td>
-                    <td>{t.status}</td>
+                {recentTransactions.map((t) => (
+                  <tr key={t.id || t.receipt}>
+                    <td>{t.receipt || 'N/A'}</td>
+                    <td>{t.customer_name || 'N/A'}</td>
+                    <td>{formatPeso(Number(t.amount) || 0)}</td>
+                    <td>{new Date(t.created_at || Date.now()).toLocaleDateString()}</td>
+                    <td>{(t.payment_status || '').toLowerCase() === 'paid' ? 'Paid' : 'Unpaid'}</td>
                   </tr>
                 ))}
               </tbody>

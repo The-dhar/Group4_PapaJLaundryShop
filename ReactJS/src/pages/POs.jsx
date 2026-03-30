@@ -188,7 +188,7 @@ const POs = () => {
 
       doc.setFont('courier', 'bold');
       doc.text(`TOTAL DUE: P${(txn.amount || 0).toFixed(2)}`, 2, y); y += 4;
-      doc.text(`STATUS: ${txn.payment_status.toUpperCase()}`, 2, y); y += 6;
+      doc.text(`STATUS: ${String(txn.payment_status || 'unpaid').toUpperCase()}`, 2, y); y += 6;
 
       doc.setLineDash([1, 1]); doc.line(2, y, 56, y); doc.setLineDash([]); y += 5;
       
@@ -359,7 +359,7 @@ const POs = () => {
     // Payment Status Information
     doc.text("PAYMENT STATUS:", 2, y);
     doc.setFont('courier', 'bold');
-    doc.text(txn.payment_status.toUpperCase(), 56, y, { align: 'right' });
+    doc.text(String(txn.payment_status || 'unpaid').toUpperCase(), 56, y, { align: 'right' });
     y += 4;
     
     if (txn.payment_status === 'paid') {
