@@ -46,6 +46,24 @@ const Inventorymanagement = () => {
     return isPastDue(dueDate) ? amount * 0.05 : 0;
   };
 
+  /** Parses amount field; null = walang valid number na na-enter pa */
+  const parseAmountInput = (str) => {
+    if (str == null || String(str).trim() === '') return null;
+    const n = Number(String(str).trim());
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const requiredPaymentTotal = selectedTxn
+    ? Number(selectedTxn.amount) + Number(penaltyInput || 0)
+    : 0;
+  const paidParsed = parseAmountInput(paidAmountInput);
+  const paidEntered = paidParsed !== null ? paidParsed : 0;
+  /** May na-type nang halaga sa Amount Paid at mas mababa ito sa kabuuang dapat bayarin */
+  const showInsufficientPayment =
+    viewMode === 'edit' &&
+    selectedTxn &&
+    paidParsed !== null &&
+    paidParsed + 0.001 < requiredPaymentTotal;
 
   const filteredData = useMemo(() => {
     return transactions.filter((row) => {
@@ -61,8 +79,11 @@ const Inventorymanagement = () => {
   // Mark paid logic with fixed payment_method = Cash
   const handleMarkPaid = () => {
   if (!selectedTxn) return;
-  const paidAmount = Number(paidAmountInput) || 0;
+  const paidAmount = parseAmountInput(paidAmountInput);
+  if (paidAmount === null) return;
   const penalty = Number(penaltyInput) || 0;
+  const required = Number(selectedTxn.amount) + penalty;
+  if (paidAmount + 0.001 < required) return;
 
   updateTransactionPaidAmount(
     selectedTxn.id,
@@ -220,9 +241,7 @@ const Inventorymanagement = () => {
               </span>
             </p>
             {/* EDIT MODE */}
-            {/* Replace your old paid-amount-section with this */}
             <div className="paid-amount-section">
-              
               <label><strong>Amount Paid:</strong></label>
               <input
                 type="number"
@@ -232,7 +251,21 @@ const Inventorymanagement = () => {
                 /* LOCKS if the mode is 'view' OR if the transaction is already 'paid' */
                 disabled={viewMode === 'view' || selectedTxn?.payment_status === 'paid'} 
                 onChange={(e) => setPaidAmountInput(e.target.value)}
+                min={0}
+                step="0.01"
               />
+
+              {showInsufficientPayment && (
+                <div className="modal-payment-error" role="alert">
+                  <span className="modal-payment-error-icon" aria-hidden="true">
+                    !
+                  </span>
+                  <p className="modal-payment-error-text">
+                    <strong>Insufficient payment.</strong> Enter at least{' '}
+                    <strong>₱{requiredPaymentTotal.toFixed(2)}</strong> before marking as paid.
+                  </p>
+                </div>
+              )}
 
               <label><strong>Penalty:</strong></label>
               <input
@@ -246,12 +279,12 @@ const Inventorymanagement = () => {
               />
               
               {/* Display Change/Balance logic remains the same below */}
-              {viewMode === 'edit' && paidAmountInput && (
+              {viewMode === 'edit' && paidParsed !== null && (
                 <p className="change-balance">
-                  {Number(paidAmountInput) >= (selectedTxn.amount + Number(penaltyInput)) ? (
-                    <>Change: ₱{(Number(paidAmountInput) - selectedTxn.amount - Number(penaltyInput)).toFixed(2)}</>
+                  {paidEntered >= requiredPaymentTotal ? (
+                    <>Change: ₱{(paidEntered - requiredPaymentTotal).toFixed(2)}</>
                   ) : (
-                    <>Balance: ₱{(selectedTxn.amount + Number(penaltyInput) - Number(paidAmountInput)).toFixed(2)}</>
+                    <>Balance: ₱{(requiredPaymentTotal - paidEntered).toFixed(2)}</>
                   )}
                 </p>
               )}
@@ -284,7 +317,12 @@ const Inventorymanagement = () => {
          - If status is UNPAID: Disable if paidAmountInput is empty.
          - If status is PAID: Keep enabled so penalty can be updated.
       */
-      disabled={selectedTxn.payment_status !== 'paid' && !paidAmountInput}
+      disabled={
+        showInsufficientPayment ||
+        (selectedTxn.payment_status !== 'paid' &&
+          (!String(paidAmountInput || '').trim() ||
+            parseAmountInput(paidAmountInput) === null))
+      }
       className="modal-btn primary"
     >
       {selectedTxn.payment_status === 'paid' ? 'Update Transaction' : 'Mark as Paid'}

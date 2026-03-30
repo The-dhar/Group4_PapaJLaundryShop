@@ -18,9 +18,8 @@ const POs = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingServiceId, setEditingServiceId] = useState(null); // Tracks if we are editing an item
 
-  const [activeExtras, setActiveExtras] = useState({ discount: false, express: false, additional: false });
+  const [activeExtras, setActiveExtras] = useState({ discount: false, express: false });
   const [discountAmount, setDiscountAmount] = useState(0);
-  const [additionalAmount, setAdditionalAmount] = useState(0);
   
   // Customer States
   const [firstName, setFirstName] = useState('');
@@ -37,8 +36,8 @@ const POs = () => {
   const [paymentMethod, setPaymentMethod] = useState('');
   const [amountPaid, setAmountPaid] = useState('');
   const [subExtras, setSubExtras] = useState({
-    extra_detergent: false,
-    extra_softener: false,
+    extra_detergent: 0,
+    extra_softener: 0,
     stain_removal: false,
   });
   const [pastSearches, setPastSearches] = useState([]);
@@ -139,12 +138,9 @@ const POs = () => {
     let total = 0;
     if (activeExtras.discount) total -= Number(discountAmount || 0);
     if (activeExtras.express) total += 100;
-    if (activeExtras.additional) {
-      total += Number(additionalAmount || 0);
-      if (subExtras.extra_detergent) total += 20;
-      if (subExtras.extra_softener) total += 20;
-      if (subExtras.stain_removal) total += 50;
-    }
+    total += Number(subExtras.extra_detergent || 0) * 20;
+    total += Number(subExtras.extra_softener || 0) * 20;
+    if (subExtras.stain_removal) total += 50;
     return total;
   };
 
@@ -154,12 +150,11 @@ const POs = () => {
     setSelectedServices([]);
     setFirstName(''); setLastName(''); setStreet(''); setBarangay(''); setCity('');
     setDueDate('');
-    setActiveExtras({ discount: false, express: false, additional: false });
+    setActiveExtras({ discount: false, express: false });
     setDiscountAmount(0);
-    setAdditionalAmount(0);
     setPaymentStatus('later');
     setAmountPaid('');
-    setSubExtras({ extra_detergent: false, extra_softener: false, stain_removal: false });
+    setSubExtras({ extra_detergent: 0, extra_softener: 0, stain_removal: false });
   };
 
   const printThermalReceipt = (txn) => {
@@ -312,13 +307,21 @@ const POs = () => {
       y += 4;
     }
 
-    if (slist.extra_detergent) {
+    if (slist.extra_detergent > 0) {
+      doc.text(`Extra Detergent (x${slist.extra_detergent}):`, 2, y);
+      doc.text(`P${(20 * slist.extra_detergent).toFixed(2)}`, 56, y, { align: 'right' });
+      y += 4;
+    } else if (slist.extra_detergent === true) {
       doc.text("Extra Detergent:", 2, y);
       doc.text("P20.00", 56, y, { align: 'right' });
       y += 4;
     }
 
-    if (slist.extra_softener) {
+    if (slist.extra_softener > 0) {
+      doc.text(`Extra Softener (x${slist.extra_softener}):`, 2, y);
+      doc.text(`P${(20 * slist.extra_softener).toFixed(2)}`, 56, y, { align: 'right' });
+      y += 4;
+    } else if (slist.extra_softener === true) {
       doc.text("Extra Softener:", 2, y);
       doc.text("P20.00", 56, y, { align: 'right' });
       y += 4;
@@ -423,7 +426,7 @@ const POs = () => {
       due_date: dueDate,
       extra_charge_type: Object.keys(activeExtras).filter(k => activeExtras[k]).join(', ') || 'none',
       discount_amount: activeExtras.discount ? Number(discountAmount) : 0,
-      additional_amount: activeExtras.additional ? Number(additionalAmount) : 0,
+      additional_amount: 0,
       active_extras: activeExtras,
       sub_extras: subExtras,
       payment_status: paymentStatus === 'full' ? 'paid' : 'unpaid',
@@ -548,7 +551,7 @@ const POs = () => {
               <div className="extras-box">
                 <h3>Extra Charges</h3>
                 <div className="payment-options">
-                  {['discount', 'express', 'additional'].map((type) => (
+                  {['discount', 'express'].map((type) => (
                     <label key={type} className="payment-option">
                       <input 
                         type="checkbox" 
@@ -558,27 +561,75 @@ const POs = () => {
                       <span style={{ textTransform: 'capitalize' }}>{type === 'express' ? 'Rush' : type}</span>
                     </label>
                   ))}
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                    <label className="payment-option" style={{ margin: 0, cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={subExtras.extra_detergent > 0} 
+                        onChange={(e) => setSubExtras(prev => ({ ...prev, extra_detergent: e.target.checked ? 1 : 0 }))} 
+                      />
+                      <span>Extra Detergent (P20)</span>
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <button 
+                        type="button"
+                        onClick={() => setSubExtras(prev => ({ ...prev, extra_detergent: Math.max(0, prev.extra_detergent - 1) }))} 
+                        style={{ background: '#6c757d', color: '#fff', border: 'none', width: '22px', height: '22px', cursor: 'pointer', fontSize: '12px', borderRadius: '4px 0 0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >-</button>
+                      <input 
+                        type="text" 
+                        value={subExtras.extra_detergent} 
+                        readOnly 
+                        style={{ width: '30px', height: '22px', textAlign: 'center', border: '1px solid #ccc', borderLeft: 'none', borderRight: 'none', boxSizing: 'border-box', fontSize: '12px', margin: 0, outline: 'none' }} 
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => setSubExtras(prev => ({ ...prev, extra_detergent: prev.extra_detergent + 1 }))} 
+                        style={{ background: '#6c757d', color: '#fff', border: 'none', width: '22px', height: '22px', cursor: 'pointer', fontSize: '12px', borderRadius: '0 4px 4px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >+</button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                    <label className="payment-option" style={{ margin: 0, cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={subExtras.extra_softener > 0} 
+                        onChange={(e) => setSubExtras(prev => ({ ...prev, extra_softener: e.target.checked ? 1 : 0 }))} 
+                      />
+                      <span>Extra Softener (P20)</span>
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <button 
+                        type="button"
+                        onClick={() => setSubExtras(prev => ({ ...prev, extra_softener: Math.max(0, prev.extra_softener - 1) }))} 
+                        style={{ background: '#6c757d', color: '#fff', border: 'none', width: '22px', height: '22px', cursor: 'pointer', fontSize: '12px', borderRadius: '4px 0 0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >-</button>
+                      <input 
+                        type="text" 
+                        value={subExtras.extra_softener} 
+                        readOnly 
+                        style={{ width: '30px', height: '22px', textAlign: 'center', border: '1px solid #ccc', borderLeft: 'none', borderRight: 'none', boxSizing: 'border-box', fontSize: '12px', margin: 0, outline: 'none' }} 
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => setSubExtras(prev => ({ ...prev, extra_softener: prev.extra_softener + 1 }))} 
+                        style={{ background: '#6c757d', color: '#fff', border: 'none', width: '22px', height: '22px', cursor: 'pointer', fontSize: '12px', borderRadius: '0 4px 4px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >+</button>
+                    </div>
+                  </div>
+
+                  <label className="payment-option" style={{ cursor: 'pointer' }}>
+                    <input type="checkbox" checked={subExtras.stain_removal} onChange={() => setSubExtras(prev => ({ ...prev, stain_removal: !prev.stain_removal }))} />
+                    <span>Stain Removal (P50)</span>
+                  </label>
                 </div>
 
                 {activeExtras.discount && (
                   <div className="payment-amount-section" style={{ marginLeft: '10px', marginTop: '10px' }}>
                     <label>Amount to Discount</label>
                     <input type="number" className="for-receipt-customerinput" value={discountAmount} onChange={e => setDiscountAmount(e.target.value)} />
-                  </div>
-                )}
-
-                {activeExtras.additional && (
-                  <div className="sub-extras-container" style={{ marginLeft: '10px', marginTop: '10px', padding: '5px', borderLeft: '2px solid #ddd' }}>
-                    {Object.keys(subExtras).map((key) => (
-                      <label key={key} className="payment-option" style={{ display: 'block' }}>
-                        <input type="checkbox" checked={subExtras[key]} onChange={() => setSubExtras(prev => ({ ...prev, [key]: !prev[key] }))} />
-                        <span style={{ marginLeft: '5px' }}>{key.replace('_', ' ')}</span>
-                      </label>
-                    ))}
-                    <div className="payment-amount-section" style={{ marginTop: '10px' }}>
-                      <label>Other Additional Amount</label>
-                      <input type="number" className="for-receipt-customerinput" value={additionalAmount} onChange={e => setAdditionalAmount(e.target.value)} />
-                    </div>
                   </div>
                 )}
               </div>
@@ -614,7 +665,27 @@ const POs = () => {
             <div className="container-information">
               <div className="for-receipt-totals">
                 <div className="total-row"><span>Subtotal:</span><span>P{subtotal.toFixed(2)}</span></div>
-                <div className="total-row"><span>Extras:</span><span>P{calculateExtras().toFixed(2)}</span></div>
+                
+                {activeExtras.express && (
+                  <div className="total-row" style={{ color: '#555', fontSize: '13px', margin: '2px 0' }}><span>Rush Order:</span><span>P100.00</span></div>
+                )}
+                
+                {subExtras.extra_detergent > 0 && (
+                  <div className="total-row" style={{ color: '#555', fontSize: '13px', margin: '2px 0' }}><span>Extra Detergent (x{subExtras.extra_detergent}):</span><span>P{(subExtras.extra_detergent * 20).toFixed(2)}</span></div>
+                )}
+
+                {subExtras.extra_softener > 0 && (
+                  <div className="total-row" style={{ color: '#555', fontSize: '13px', margin: '2px 0' }}><span>Extra Softener (x{subExtras.extra_softener}):</span><span>P{(subExtras.extra_softener * 20).toFixed(2)}</span></div>
+                )}
+
+                {subExtras.stain_removal && (
+                  <div className="total-row" style={{ color: '#555', fontSize: '13px', margin: '2px 0' }}><span>Stain Removal:</span><span>P50.00</span></div>
+                )}
+
+                {activeExtras.discount && discountAmount > 0 && (
+                  <div className="total-row" style={{ color: '#e53935', fontSize: '13px', margin: '2px 0' }}><span>Discount:</span><span>-P{Number(discountAmount).toFixed(2)}</span></div>
+                )}
+
                 <div className="total-row"><span>Total Payment:</span><strong>P{totalPayment.toFixed(2)}</strong></div>
               </div>
             </div>

@@ -113,11 +113,25 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
      * COMFORTERS
      * ---------------------------------------- */
     if (name.includes("comforter")) {
-      if (kv <= 6) return { computedTotal: 195, label: "₱195 (1–6 kg)" };
-      if (kv > 6 && kv <= 7) return { computedTotal: 265, label: "₱265 (7 kg = ₱195+₱70)" };
-      const cycles = Math.ceil(kv / 7);
-      const total = cycles * 195;
-      return { computedTotal: total, label: `₱${total.toFixed(2)} (${cycles} cycles)` };
+      if (kv <= 3) return { computedTotal: 150, label: "₱150 (1–3 kg)" };
+
+      if (kv > 3 && kv <= 5) {
+        const extra = (kv - 3) * 50;
+        const total = 150 + extra;
+        return {
+          computedTotal: total,
+          label: `₱${total.toFixed(2)} (₱50 per succeeding kg)`
+        };
+      }
+
+      if (kv > 5) {
+        const cycles = Math.ceil(kv / 5);
+        const total = cycles * 150;
+        return {
+          computedTotal: total,
+          label: `₱${total.toFixed(2)} (${cycles} cycles)`
+        };
+      }
     }
 
     /** ----------------------------------------

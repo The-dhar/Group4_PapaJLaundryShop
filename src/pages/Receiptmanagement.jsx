@@ -204,13 +204,21 @@ const Receiptmanagement = () => {
       y += 4;
     }
 
-    if (slist.extra_detergent) {
+    if (slist.extra_detergent > 0) {
+      doc.text(`Extra Detergent (x${slist.extra_detergent}):`, 2, y);
+      doc.text(`P${(20 * slist.extra_detergent).toFixed(2)}`, 56, y, { align: 'right' });
+      y += 4;
+    } else if (slist.extra_detergent === true) {
       doc.text("Extra Detergent:", 2, y);
       doc.text("P20.00", 56, y, { align: 'right' });
       y += 4;
     }
 
-    if (slist.extra_softener) {
+    if (slist.extra_softener > 0) {
+      doc.text(`Extra Softener (x${slist.extra_softener}):`, 2, y);
+      doc.text(`P${(20 * slist.extra_softener).toFixed(2)}`, 56, y, { align: 'right' });
+      y += 4;
+    } else if (slist.extra_softener === true) {
       doc.text("Extra Softener:", 2, y);
       doc.text("P20.00", 56, y, { align: 'right' });
       y += 4;
@@ -408,14 +416,24 @@ const Receiptmanagement = () => {
                   </div>
                 )}
 
-                {(selectedReceipt.sub_extras || {}).extra_detergent && (
+                {(selectedReceipt.sub_extras || {}).extra_detergent > 0 ? (
+                  <div className="tr-row" style={{ fontSize: '0.9em', padding: '2px 0' }}>
+                    <span>Extra Detergent (x{(selectedReceipt.sub_extras || {}).extra_detergent}):</span>
+                    <span>P{(20 * (selectedReceipt.sub_extras || {}).extra_detergent).toFixed(2)}</span>
+                  </div>
+                ) : (selectedReceipt.sub_extras || {}).extra_detergent === true && (
                   <div className="tr-row" style={{ fontSize: '0.9em', padding: '2px 0' }}>
                     <span>Extra Detergent:</span>
                     <span>P20.00</span>
                   </div>
                 )}
 
-                {(selectedReceipt.sub_extras || {}).extra_softener && (
+                {(selectedReceipt.sub_extras || {}).extra_softener > 0 ? (
+                  <div className="tr-row" style={{ fontSize: '0.9em', padding: '2px 0' }}>
+                    <span>Extra Softener (x{(selectedReceipt.sub_extras || {}).extra_softener}):</span>
+                    <span>P{(20 * (selectedReceipt.sub_extras || {}).extra_softener).toFixed(2)}</span>
+                  </div>
+                ) : (selectedReceipt.sub_extras || {}).extra_softener === true && (
                   <div className="tr-row" style={{ fontSize: '0.9em', padding: '2px 0' }}>
                     <span>Extra Softener:</span>
                     <span>P20.00</span>

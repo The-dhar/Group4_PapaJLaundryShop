@@ -4,6 +4,7 @@ import '../styles/loginstyle.css';
 
 export default function SignUpPage() {
   const [formData, setFormData] = useState({
+    clerkUsername: '',
     name: '',
     email: '',
     password: ''
@@ -15,15 +16,9 @@ export default function SignUpPage() {
       [e.target.name]: e.target.value
     });
   };
-    const handleLogin = (e) => {
-    e.preventDefault(); 
-    navigate('/Dashboard'); 
-  };
-
-
-  const handleSubmit = (e) => {
+  const handleLogin = (e) => {
     e.preventDefault();
-    console.log('Form submitted:', formData);
+    navigate('/Dashboard');
   };
 
   return (
@@ -31,7 +26,21 @@ export default function SignUpPage() {
       <div className="login-left">
         <div className="login-form-wrapper">
           <h2 className="login-title">Welcome Back!</h2>
-          <form onSubmit={handleSubmit} className="login-form">
+          <form onSubmit={handleLogin} className="login-form">
+            <div className="form-group">
+              <label htmlFor="clerkUsername">Clerk username</label>
+              <input
+                type="text"
+                id="clerkUsername"
+                name="clerkUsername"
+                placeholder="Enter clerk username..."
+                value={formData.clerkUsername}
+                onChange={handleChange}
+                className="form-input"
+                autoComplete="username"
+              />
+            </div>
+
             <div className="form-group">
               <label htmlFor="email">Email</label>
               <input
@@ -58,11 +67,9 @@ export default function SignUpPage() {
               />
             </div>
 
-             <form onSubmit={handleLogin}>
-            <button onClick={handleLogin} className="login-button">
+            <button type="submit" className="login-button">
               Log In
             </button>
-           </form>
           </form>
         </div>
       </div>

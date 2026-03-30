@@ -47,6 +47,23 @@ const Express = () => {
     return isPastDue(dueDate) ? amount * 0.05 : 0;
   };
 
+  const parseAmountInput = (str) => {
+    if (str == null || String(str).trim() === '') return null;
+    const n = Number(String(str).trim());
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const requiredPaymentTotal = selectedTxn
+    ? Number(selectedTxn.amount) + Number(penaltyInput || 0)
+    : 0;
+  const paidParsed = parseAmountInput(paidAmountInput);
+  const paidEntered = paidParsed !== null ? paidParsed : 0;
+  const showInsufficientPayment =
+    viewMode === 'edit' &&
+    selectedTxn &&
+    paidParsed !== null &&
+    paidParsed + 0.001 < requiredPaymentTotal;
+
   const filteredData = useMemo(() => {
     return transactions.filter((row) => {
       const matchesPayment = filterPayment === 'All' || row.payment_status === filterPayment;
@@ -63,6 +80,8 @@ const Express = () => {
     if (!selectedTxn) return;
     const paidAmount = Number(paidAmountInput) || 0;
     const penalty = Number(penaltyInput) || 0;
+    const required = selectedTxn.amount + penalty;
+    if (paidAmount < required) return;
 
     updateTransactionPaidAmount(
       selectedTxn.id,
@@ -239,7 +258,21 @@ const Express = () => {
                   value={paidAmountInput}
                   disabled={viewMode === 'view'}
                   onChange={(e) => setPaidAmountInput(e.target.value)}
+                  min={0}
+                  step="0.01"
                 />
+
+                {showInsufficientPayment && (
+                  <div className="modal-payment-error" role="alert">
+                    <span className="modal-payment-error-icon" aria-hidden="true">
+                      !
+                    </span>
+                    <p className="modal-payment-error-text">
+                      <strong>Insufficient payment.</strong> Enter at least{' '}
+                      <strong>₱{requiredPaymentTotal.toFixed(2)}</strong> before marking as paid.
+                    </p>
+                  </div>
+                )}
 
                 <label><strong>Penalty:</strong></label>
                 <input
@@ -251,17 +284,15 @@ const Express = () => {
                   onChange={(e) => setPenaltyInput(e.target.value)}
                 />
 
-                {viewMode === 'edit' && paidAmountInput && (
+                {viewMode === 'edit' && paidParsed !== null && (
                   <p className="change-balance">
-                    {Number(paidAmountInput) >= selectedTxn.amount + Number(penaltyInput || 0) ? (
+                    {paidEntered >= requiredPaymentTotal ? (
                       <>
-                        Change: ₱
-                        {(Number(paidAmountInput) - selectedTxn.amount - Number(penaltyInput || 0)).toFixed(2)}
+                        Change: ₱{(paidEntered - requiredPaymentTotal).toFixed(2)}
                       </>
                     ) : (
                       <>
-                        Balance: ₱
-                        {(selectedTxn.amount + Number(penaltyInput || 0) - Number(paidAmountInput)).toFixed(2)}
+                        Balance: ₱{(requiredPaymentTotal - paidEntered).toFixed(2)}
                       </>
                     )}
                   </p>
@@ -288,8 +319,14 @@ const Express = () => {
 
               {viewMode === 'edit' && (
                 <button
+                  type="button"
                   onClick={handleMarkPaid}
-                  disabled={selectedTxn.payment_status === 'paid'}
+                  disabled={
+                    selectedTxn.payment_status === 'paid' ||
+                    showInsufficientPayment ||
+                    !String(paidAmountInput || '').trim() ||
+                    parseAmountInput(paidAmountInput) === null
+                  }
                   className="modal-btn primary"
                 >
                   Mark as Paid
