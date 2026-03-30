@@ -1,15 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { BsGrid1X2Fill, BsCart3, BsBoxSeam, BsReceiptCutoff, BsDoorOpen, BsCashStack, BsLightningCharge, BsArchive, BsList } from 'react-icons/bs';
 import '../componentstyle/sidebarstyle.css';
 
 const Sidebar = ({ sidebarOpen, toggleSidebar }) => {
     const navigate = useNavigate();
+    const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
-    const handleLogout = (e) => {
-        e.preventDefault();
+    const confirmLogout = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        setShowLogoutConfirm(false);
         navigate('/');
     };
 
@@ -72,10 +73,42 @@ const Sidebar = ({ sidebarOpen, toggleSidebar }) => {
                     <div className="account-role">Admin</div>
                 </div>
                 <hr className="sidebar-separator" />
-                <a href="/logout" onClick={handleLogout} className="sidebar-logout-link">
+                <a
+                    href="/logout"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        setShowLogoutConfirm(true);
+                    }}
+                    className="sidebar-logout-link"
+                >
                     <BsDoorOpen className='icon'/><span>Log Out</span>
                 </a>
             </div>
+
+            {showLogoutConfirm && (
+                <div className="logout-confirm-overlay" onClick={() => setShowLogoutConfirm(false)}>
+                    <div className="logout-confirm-modal" onClick={(e) => e.stopPropagation()}>
+                        <h3>Confirm Logout</h3>
+                        <p>Are you sure you want to log out?</p>
+                        <div className="logout-confirm-actions">
+                            <button
+                                type="button"
+                                className="logout-confirm-cancel"
+                                onClick={() => setShowLogoutConfirm(false)}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="logout-confirm-ok"
+                                onClick={confirmLogout}
+                            >
+                                Log Out
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </aside>
     );
 };

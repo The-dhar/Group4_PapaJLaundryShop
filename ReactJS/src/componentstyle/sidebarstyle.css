@@ -246,3 +246,57 @@
         width: 68px;
     }
 }
+
+.logout-confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+.logout-confirm-modal {
+    width: min(92vw, 360px);
+    background: #fff;
+    border-radius: 12px;
+    padding: 18px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+}
+
+.logout-confirm-modal h3 {
+    margin: 0 0 8px;
+    color: #1f2937;
+    font-size: 20px;
+}
+
+.logout-confirm-modal p {
+    margin: 0 0 14px;
+    color: #4b5563;
+}
+
+.logout-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.logout-confirm-cancel,
+.logout-confirm-ok {
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.logout-confirm-cancel {
+    background: #e5e7eb;
+    color: #111827;
+}
+
+.logout-confirm-ok {
+    background: #ef4444;
+    color: #fff;
+}

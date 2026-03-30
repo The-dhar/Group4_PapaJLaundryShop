@@ -11,6 +11,7 @@ export default function LoginPage() {
     email: '',
     password: ''
   });
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleChange = (e) => {
 
@@ -24,6 +25,8 @@ export default function LoginPage() {
   const handleLogin = async (e) => {
 
     e.preventDefault();
+    if (isLoading) return;
+    setIsLoading(true);
 
     try {
 
@@ -47,11 +50,13 @@ export default function LoginPage() {
 
       if (!response.ok) {
         alert(data.message || "Login failed");
+        setIsLoading(false);
         return;
       }
 
       if (data.user.role !== "manager") {
         alert("Only branch accounts can login here");
+        setIsLoading(false);
         return;
       }
 
@@ -66,6 +71,8 @@ export default function LoginPage() {
       console.error(error);
       alert("Server error");
 
+    } finally {
+      setIsLoading(false);
     }
 
   };
@@ -112,8 +119,15 @@ export default function LoginPage() {
 
             </div>
 
-            <button type="submit" className="login-button">
-              Log In
+            <button type="submit" className="login-button" disabled={isLoading}>
+              {isLoading ? (
+                <span className="login-button-content">
+                  <span className="login-spinner" />
+                  Logging in...
+                </span>
+              ) : (
+                "Log In"
+              )}
             </button>
 
           </form>
