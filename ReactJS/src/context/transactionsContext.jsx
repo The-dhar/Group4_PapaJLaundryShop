@@ -1,257 +1,274 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { API_URL } from "../config/api";
 
-const TransactionsContext = createContext();
+const TransactionsContext = createContext(null);
+
+const normalizeTransaction = (txn) => {
+  const services = Array.isArray(txn.receipt_items)
+    ? txn.receipt_items.map((item) => ({
+        id: item.id,
+        serviceName: item.serviceName,
+        laundryType: item.laundryType,
+        rate: Number(item.rate) || 0,
+        kilos: Number(item.kilos) || 0,
+        total: Number(item.total) || 0,
+      }))
+    : [];
+
+  return {
+    ...txn,
+    amount: Number(txn.amount) || 0,
+    paid_amount: Number(txn.paid_amount) || 0,
+    weight: txn.total_weight ?? txn.weight ?? 0,
+    services,
+  };
+};
 
 export const TransactionsProvider = ({ children }) => {
-
   const [transactions, setTransactions] = useState([]);
-  const [archivedTransactions, setArchivedTransactions] = useState([]);
+
+  const archivedTransactions = useMemo(
+    () => transactions.filter((t) => t.archived === true),
+    [transactions]
+  );
 
   const fetchTransactions = async () => {
-
     try {
-
-      const token = localStorage.getItem("token");
-      if (!token) return;
-
-      const res = await fetch(`${API_URL}/transactions`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      if (!res.ok) {
-        throw new Error("Failed to fetch transactions");
-      }
-
-      const data = await res.json();
-
-      console.log("Fetched transactions:", data);
-
-      setTransactions(data);
-
-    } catch (error) {
-
-      console.error("Error fetching transactions:", error);
-
-    }
-
-  };
-
-  const fetchArchivedTransactions = async () => {
-
-    try {
-
       const token = localStorage.getItem("token");
       if (!token) return;
 
       const res = await fetch(`${API_URL}/transactions?include_archived=1`, {
-        method: "GET",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        }
+          Authorization: `Bearer ${token}`,
+        },
       });
 
-      if (!res.ok) {
-        throw new Error("Failed to fetch archived transactions");
-      }
+      if (!res.ok) throw new Error("Failed to fetch transactions");
 
       const data = await res.json();
-
-      setArchivedTransactions(data.filter((row) => row.archived === true));
-
+      setTransactions(data.map(normalizeTransaction));
     } catch (error) {
-
-      console.error("Error fetching archived transactions:", error);
-
+      console.error("Error fetching transactions:", error);
     }
-
   };
 
   useEffect(() => {
     fetchTransactions();
-    fetchArchivedTransactions();
   }, []);
 
-  const markTransactionPaid = async (id) => {
-
+  const createTransaction = async ({
+    customer_name,
+    customer_address,
+    services,
+    weight,
+    amount,
+    due_date,
+    extra_charge_type = "none",
+    discount_amount = 0,
+    additional_amount = 0,
+    active_extras = null,
+    sub_extras = null,
+    payment_status = "unpaid",
+    payment_method = "",
+    paid_amount = 0,
+    subtotal = 0,
+  }) => {
     try {
-
       const token = localStorage.getItem("token");
+      if (!token) throw new Error("Not authenticated");
 
+      const isRush = active_extras?.express || false;
+      const extras =
+        (isRush ? 100 : 0) +
+        ((sub_extras?.extra_detergent || 0) * 20) +
+        ((sub_extras?.extra_softener || 0) * 20) +
+        (sub_extras?.stain_removal ? 50 : 0) -
+        (discount_amount || 0);
+
+      const res = await fetch(`${API_URL}/transactions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          customer_name,
+          customer_address,
+          services: (services || []).map((s) => ({
+            serviceName: s.serviceName,
+            laundryType: s.laundryType,
+            rate: s.rate,
+            kilos: s.kilos,
+            total: s.total,
+          })),
+          weight: weight || 0,
+          subtotal: subtotal || amount,
+          extras,
+          amount,
+          payment_status,
+          payment_method,
+          paid_amount: paid_amount || 0,
+          due_date,
+          is_rush: isRush,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Failed to create transaction");
+      }
+
+      const result = await res.json();
+      await fetchTransactions();
+      return result;
+    } catch (error) {
+      console.error("Error creating transaction:", error);
+      throw error;
+    }
+  };
+
+  const markTransactionPaid = async (id) => {
+    try {
+      const token = localStorage.getItem("token");
       const res = await fetch(`${API_URL}/transactions/${id}/mark-paid`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      if (!res.ok) {
-        throw new Error("Failed to mark transaction as paid");
-      }
-
-      await Promise.all([fetchTransactions(), fetchArchivedTransactions()]);
-
-    } catch (error) {
-
-      console.error("Error marking paid:", error);
-
-    }
-
-  };
-
-  const updateTransactionPaidAmount = async (
-    id,
-    paidAmount,
-    penalty,
-    paymentMethod
-  ) => {
-
-    try {
-
-      const token = localStorage.getItem("token");
-
-      const res = await fetch(`${API_URL}/transactions/${id}/update-payment`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          paid_amount: paidAmount,
-          penalty: penalty,
-          payment_method: paymentMethod
-        })
       });
-
-      if (!res.ok) {
-        throw new Error("Failed to update payment");
-      }
-
-      await Promise.all([fetchTransactions(), fetchArchivedTransactions()]);
-
+      if (!res.ok) throw new Error("Failed to mark transaction as paid");
+      await fetchTransactions();
     } catch (error) {
-
-      console.error("Error updating payment:", error);
-
+      console.error("Error marking paid:", error);
     }
-
   };
 
-  const archiveTransaction = async (id) => {
-
+  const markTransactionPickedUp = async (id) => {
     try {
-
       const token = localStorage.getItem("token");
-
-      const res = await fetch(`${API_URL}/transactions/${id}/archive`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      if (!res.ok) {
-        throw new Error("Failed to archive transaction");
-      }
-
-      await Promise.all([fetchTransactions(), fetchArchivedTransactions()]);
-
-    } catch (error) {
-
-      console.error("Error archiving transaction:", error);
-
-    }
-
-  };
-
-  const restoreTransaction = async (id) => {
-
-    try {
-
-      const token = localStorage.getItem("token");
-      if (!token) return;
-
-      const res = await fetch(`${API_URL}/transactions/${id}/restore`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      if (!res.ok) {
-        throw new Error("Failed to restore transaction");
-      }
-
-      await Promise.all([fetchTransactions(), fetchArchivedTransactions()]);
-
-    } catch (error) {
-
-      console.error("Error restoring transaction:", error);
-
-    }
-
-  };
-
-  const updateTransaction = async (id, payload) => {
-
-    try {
-
-      const token = localStorage.getItem("token");
-      if (!token) return;
-
       const res = await fetch(`${API_URL}/transactions/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ inventory_status: "picked_up" }),
       });
-
-      if (!res.ok) {
-        throw new Error("Failed to update transaction");
-      }
-
-      await Promise.all([fetchTransactions(), fetchArchivedTransactions()]);
-
+      if (!res.ok) throw new Error("Failed to mark as picked up");
+      await fetchTransactions();
     } catch (error) {
-
-      console.error("Error updating transaction:", error);
-
+      console.error("Error marking picked up:", error);
     }
-
   };
 
-  return (
+  const updateTransactionPaidAmount = async (id, paidAmount, penalty, paymentMethod) => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/transactions/${id}/update-payment`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          paid_amount: paidAmount,
+          penalty,
+          payment_method: paymentMethod,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to update payment");
+      await fetchTransactions();
+    } catch (error) {
+      console.error("Error updating payment:", error);
+    }
+  };
 
-    <TransactionsContext.Provider
-      value={{
-        transactions,
-        archivedTransactions,
-        fetchTransactions,
-        fetchArchivedTransactions,
-        markTransactionPaid,
-        updateTransactionPaidAmount,
-        archiveTransaction,
-        restoreTransaction,
-        updateTransaction
-      }}
-    >
+  const archiveTransaction = async (id) => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/transactions/${id}/archive`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) throw new Error("Failed to archive transaction");
+      await fetchTransactions();
+    } catch (error) {
+      console.error("Error archiving transaction:", error);
+    }
+  };
 
-      {children}
+  const restoreTransaction = async (id) => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/transactions/${id}/restore`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) throw new Error("Failed to restore transaction");
+      await fetchTransactions();
+    } catch (error) {
+      console.error("Error restoring transaction:", error);
+    }
+  };
 
-    </TransactionsContext.Provider>
+  const updateTransaction = async (id, payload) => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/transactions/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("Failed to update transaction");
+      await fetchTransactions();
+    } catch (error) {
+      console.error("Error updating transaction:", error);
+    }
+  };
 
+  const deleteTransaction = async (id) => {
+    await archiveTransaction(id);
+  };
+
+  const value = useMemo(
+    () => ({
+      transactions,
+      archivedTransactions,
+      fetchTransactions,
+      createTransaction,
+      markTransactionPaid,
+      markTransactionPickedUp,
+      deleteTransaction,
+      archiveTransaction,
+      restoreTransaction,
+      updateTransactionPaidAmount,
+      updateTransaction,
+    }),
+    [transactions, archivedTransactions]
   );
 
+  return (
+    <TransactionsContext.Provider value={value}>
+      {children}
+    </TransactionsContext.Provider>
+  );
 };
 
-export const useTransactions = () => useContext(TransactionsContext);
+export const useTransactions = () => {
+  const context = useContext(TransactionsContext);
+  if (!context) {
+    throw new Error("useTransactions must be used within TransactionsProvider");
+  }
+  return context;
+};

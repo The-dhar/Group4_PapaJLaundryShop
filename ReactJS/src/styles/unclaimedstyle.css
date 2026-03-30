@@ -2,6 +2,14 @@
    📋 UNCLAIMED ITEMS STYLES
    ============================ */
 
+/* Center the eye / action button in the Action column */
+.unclaimed-action-cell {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    min-height: 36px;
+}
 
 /* ====== Unclaimed Table Container ====== */
 

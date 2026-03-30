@@ -11,29 +11,80 @@
     z-index: 1000;
 }
 
+
+/* Increase the modal height and width */
+
 .modal-content {
     background: white;
     border-radius: 12px;
-    padding: 24px;
-    max-width: 500px;
-    width: 90%;
-    max-height: 80vh;
+    padding: 30px;
+    /* Added more internal breathing room */
+    max-width: 600px;
+    /* Slightly wider */
+    width: 95%;
+    max-height: 90vh;
+    /* Increased vertical space */
     overflow-y: auto;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
     position: relative;
+    display: flex;
+    flex-direction: column;
 }
 
 .modal-header {
-    margin-bottom: 24px;
-    padding-bottom: 15px;
-    border-bottom: 1px solid #e0e0e0;
+    margin-bottom: 25px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid #f0f0f0;
 }
 
-.modal-header h2 {
-    margin: 0;
-    font-size: 24px;
-    font-weight: 700;
-    color: #000;
+.modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    /* Adds consistent spacing between input groups */
+    margin-bottom: 30px;
+    flex-grow: 1;
+    /* Pushes the footer to the bottom if needed */
+}
+
+
+/* Ensure inputs behave well */
+
+.modal-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.modal-kilos-input {
+    width: 100%;
+    padding: 12px;
+    /* Taller input fields */
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 16px;
+    box-sizing: border-box;
+    /* Crucial so padding doesn't push width out */
+}
+
+.modal-label {
+    font-weight: 600;
+    color: #444;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 15px;
+    border-top: 1px solid #e0e0e0;
+    padding-top: 20px;
+}
+
+.modal-btn {
+    padding: 12px 28px;
+    font-size: 16px;
+    border-radius: 6px;
+    cursor: pointer;
 }
 
 .modal-body {

@@ -1,25 +1,33 @@
 import React, { useMemo, useState } from 'react';
 import DataTable from 'react-data-table-component';
 import DashboardLayout from '../components/dashboardlayout';
-import { BsEye, BsPencil } from 'react-icons/bs';
+import { BsPencil } from 'react-icons/bs';
 import { useTransactions } from '../context/transactionsContext';
 import '../styles/archivestyle.css';
+import '../styles/inventorystyle.css';
+
+function formatInventoryStatus(status) {
+  if (status == null || status === '') return '—';
+  const map = { in_shop: 'In Shop', picked_up: 'Pick Up' };
+  const key = String(status).toLowerCase();
+  if (map[key]) return map[key];
+  return String(status)
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
 
 const Archive = () => {
-  const {
-    archivedTransactions = [],
-    restoreTransaction = () => {}
-  } = useTransactions() || {};
+  const { transactions, restoreTransaction } = useTransactions();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTxn, setSelectedTxn] = useState(null);
 
   const archivedData = useMemo(() => {
-    const source = Array.isArray(archivedTransactions) ? archivedTransactions : [];
-    return source.filter((row) => (
+    return transactions.filter((row) => row.archived === true && (
       row.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       row.receipt.toLowerCase().includes(searchTerm.toLowerCase())
     ));
-  }, [archivedTransactions, searchTerm]);
+  }, [transactions, searchTerm]);
 
   const columns = [
     { name: 'Receipt ID', selector: (row) => row.receipt, sortable: true },
@@ -34,25 +42,22 @@ const Archive = () => {
     {
       name: 'Status',
       cell: (row) => (
-        <span className={`status-pill status-${row.inventory_status} status-archived`}>{row.inventory_status}</span>
+        <span className={`status-pill status-${row.inventory_status} status-archived`}>
+          {formatInventoryStatus(row.inventory_status)}
+        </span>
       ),
     },
-    { name: 'Amount', selector: (row) => `₱${Number(row.amount || 0).toFixed(2)}` },
+    { name: 'Amount', selector: (row) => `₱${row.amount.toFixed(2)}` },
     {
       name: 'Action',
+      center: true,
       cell: (row) => (
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
           <button
-            className="inventory-action-btn view"
-            title="View"
-            onClick={() => setSelectedTxn(row)}
-          >
-            <BsEye />
-          </button>
-          <button
+            type="button"
             className="inventory-action-btn edit"
-            title="Restore"
-            onClick={() => { restoreTransaction(row.id); }}
+            title="View details"
+            onClick={() => setSelectedTxn(row)}
           >
             <BsPencil />
           </button>
@@ -97,44 +102,70 @@ const Archive = () => {
           </div>
         </div>
 
-        {/* MODAL for viewing with Restore action */}
         {selectedTxn && (
           <div className="inventory-modal">
             <div className="inventory-modal-content">
-              {(() => {
-                const services = selectedTxn.receipt_items ?? selectedTxn.services ?? [];
-                return (
-                  <>
-              <h3>Receipt: {selectedTxn.receipt}</h3>
-              <p><strong>Customer:</strong> {selectedTxn.customer_name}</p>
-              <p><strong>Address:</strong> {selectedTxn.customer_address}</p>
+              <div className="inventory-modal-body">
+                <h3>Receipt: {selectedTxn.receipt}</h3>
+                <p><strong>Customer:</strong> {selectedTxn.customer_name}</p>
+                <p><strong>Address:</strong> {selectedTxn.customer_address}</p>
 
-              <p><strong>Services:</strong>
-                <ul>
-                  {services.map((svc) => (
-                    <li key={svc.id}>
-                      ({svc.serviceName}) {svc.kilos} kg @ ₱{Number(svc.rate).toFixed(2)} = ₱{Number(svc.total).toFixed(2)}
-                    </li>
-                  ))}
-                </ul>
-              </p>
+                <p>
+                  <strong>Services:</strong>
+                  <ul>
+                    {selectedTxn.services.map((svc) => (
+                      <li key={svc.id}>
+                        ({svc.serviceName}) {svc.kilos} kg @ ₱{svc.rate.toFixed(2)} = ₱{svc.total.toFixed(2)}
+                      </li>
+                    ))}
+                  </ul>
+                </p>
 
-              <p><strong>Total Amount:</strong> ₱{Number(selectedTxn.amount || 0).toFixed(2)}</p>
-              <p><strong>Payment Status:</strong> {selectedTxn.payment_status}</p>
-              <p><strong>Inventory Status:</strong> {selectedTxn.inventory_status}</p>
+                <p><strong>Total Weight:</strong> {selectedTxn.weight} kg</p>
+                <p><strong>Total Amount:</strong> ₱{selectedTxn.amount.toFixed(2)}</p>
+                <p><strong>Payment Method:</strong> {selectedTxn.payment_method || 'Cash'}</p>
+                <p><strong>Paid Amount:</strong> ₱{(Number(selectedTxn.paid_amount) || 0).toFixed(2)}</p>
+                <p><strong>Penalty:</strong> ₱{(Number(selectedTxn.penalty) || 0).toFixed(2)}</p>
+                <p><strong>Payment Status:</strong> {selectedTxn.payment_status}</p>
+                <p><strong>Inventory Status:</strong> {formatInventoryStatus(selectedTxn.inventory_status)}</p>
+                <p>
+                  <strong>Remaining Balance:</strong>{' '}
+                  <span
+                    style={{
+                      color:
+                        selectedTxn.amount +
+                          (Number(selectedTxn.penalty) || 0) -
+                          (Number(selectedTxn.paid_amount) || 0) >
+                        0
+                          ? 'red'
+                          : 'green',
+                    }}
+                  >
+                    ₱
+                    {(
+                      selectedTxn.amount +
+                      (Number(selectedTxn.penalty) || 0) -
+                      (Number(selectedTxn.paid_amount) || 0)
+                    ).toFixed(2)}
+                  </span>
+                </p>
+              </div>
 
               <div className="modal-actions">
-                <button onClick={() => setSelectedTxn(null)} className="modal-btn secondary">Close</button>
+                <button type="button" onClick={() => setSelectedTxn(null)} className="modal-btn secondary">
+                  Close
+                </button>
                 <button
-                  onClick={() => { restoreTransaction(selectedTxn.id); setSelectedTxn(null); }}
+                  type="button"
+                  onClick={() => {
+                    restoreTransaction(selectedTxn.id);
+                    setSelectedTxn(null);
+                  }}
                   className="modal-btn primary"
                 >
                   Restore Transaction
                 </button>
               </div>
-                  </>
-                );
-              })()}
             </div>
           </div>
         )}

@@ -9,18 +9,19 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
 
   useEffect(() => {
     if (isOpen && item) {
-      setKilos(1);
-      setNotes("");
+      setKilos(item.initialKilos || 1);
+      setNotes(item.initialNotes || "");
 
-      // AUTO-SET LAUNDRY TYPE BASED ON CARD NAME
-      if (item.name.toLowerCase().includes("dry")) {
+      if (item.initialType) {
+        setLaundryType(item.initialType);
+      } else if (item.name.toLowerCase().includes("dry")) {
         setLaundryType("dry-only");
       } else {
         setLaundryType("wash-and-fold");
       }
 
       // INITIAL PRICE
-      const initialInfo = calculatePriceInfo(1);
+      const initialInfo = calculatePriceInfo(item.initialKilos || 1);
       setSelectedTier(initialInfo);
     }
   }, [isOpen, item]);
@@ -109,6 +110,31 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
     }
 
     /** ----------------------------------------
+     * COMFORTERS
+     * ---------------------------------------- */
+    if (name.includes("comforter")) {
+      if (kv <= 3) return { computedTotal: 150, label: "₱150 (1–3 kg)" };
+
+      if (kv > 3 && kv <= 5) {
+        const extra = (kv - 3) * 50;
+        const total = 150 + extra;
+        return {
+          computedTotal: total,
+          label: `₱${total.toFixed(2)} (₱50 per succeeding kg)`
+        };
+      }
+
+      if (kv > 5) {
+        const cycles = Math.ceil(kv / 5);
+        const total = cycles * 150;
+        return {
+          computedTotal: total,
+          label: `₱${total.toFixed(2)} (${cycles} cycles)`
+        };
+      }
+    }
+
+    /** ----------------------------------------
      * REGULAR CLOTHES
      * ---------------------------------------- */
     if (name.includes("regular")) {
@@ -162,7 +188,8 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
       null,
       kilos,
       laundryType,
-      { computedTotal: selectedTier.computedTotal, unit: "computed" }
+      { computedTotal: selectedTier.computedTotal, unit: "computed" },
+      notes
     );
 
     handleCancel();

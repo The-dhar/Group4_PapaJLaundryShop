@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BsClockHistory, BsBoxSeam, BsExclamationTriangle } from 'react-icons/bs';
+import { BsBoxSeam, BsExclamationTriangle, BsCreditCard } from 'react-icons/bs';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Card from '../components/card';
 import DashboardLayout from '../components/dashboardlayout';
@@ -7,24 +7,23 @@ import '../styles/dashboardstyle.css';
 
 const Dashboard = () => {
   const [viewType, setViewType] = useState('week');
-
-  // WEEKLY DATA
+// WEEKLY DATA
   const weekData = [
-    { name: 'Monday', revenue: 4000 },
-    { name: 'Tuesday', revenue: 3000 },
-    { name: 'Wednesday', revenue: 2000 },
-    { name: 'Thursday', revenue: 2780 },
-    { name: 'Friday', revenue: 1890 },
-    { name: 'Saturday', revenue: 2390 },
-    { name: 'Sunday', revenue: 3090 },
+    { name: 'Mon', revenue: 4000, unpaid: 1200 },
+    { name: 'Tue', revenue: 3000, unpaid: 800 },
+    { name: 'Wed', revenue: 2000, unpaid: 1500 },
+    { name: 'Thu', revenue: 2780, unpaid: 600 },
+    { name: 'Fri', revenue: 1890, unpaid: 400 },
+    { name: 'Sat', revenue: 2390, unpaid: 200 },
+    { name: 'Sun', revenue: 3090, unpaid: 900 },
   ];
 
-  // MONTHLY DATA (Week 1–4)
+  // MONTHLY DATA
   const monthData = [
-    { name: 'Week 1', revenue: 12000 },
-    { name: 'Week 2', revenue: 15000 },
-    { name: 'Week 3', revenue: 11000 },
-    { name: 'Week 4', revenue: 18000 },
+    { name: 'Week 1', revenue: 12000, unpaid: 3500 },
+    { name: 'Week 2', revenue: 15000, unpaid: 2000 },
+    { name: 'Week 3', revenue: 11000, unpaid: 4500 },
+    { name: 'Week 4', revenue: 18000, unpaid: 1500 },
   ];
 
   const chartData = viewType === 'week' ? weekData : monthData;
@@ -52,12 +51,15 @@ const Dashboard = () => {
           </div>
 
           <div className='chart-pending'>
-            <div className="chart-title">Pending Sales</div>
+            <div className="chart-title"> Debit Sales</div>
             <div className="icon-value">
-              <BsClockHistory className="icon" />
+              <BsCreditCard className="icon" />
               <span>{transactions.filter(t => t.status === 'Unpaid').length}</span>
             </div>
           </div>
+
+        
+         
 
           <div className='card-items'>
             <div className="chart-title">Items in Shop</div>
@@ -66,7 +68,7 @@ const Dashboard = () => {
               <span>5</span>
             </div>
           </div>
-
+          
           <div className='card-inshop'>
             <div className="chart-title">Overdue Items</div>
             <div className="icon-value">
@@ -94,20 +96,33 @@ const Dashboard = () => {
           </div>
 
           <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis tickFormatter={(value) => `₱${value}`} />
-              <Tooltip formatter={(value) => formatPeso(value)} />
-              <Line 
-                type="monotone"
-                dataKey="revenue"
-                stroke="#185BCB"
-                strokeWidth={3}
-                dot={{ r: 5 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+  <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+    <CartesianGrid strokeDasharray="3 3" />
+    <XAxis dataKey="name" />
+    <YAxis tickFormatter={(value) => `₱${value}`} />
+    <Tooltip formatter={(value) => formatPeso(value)} />
+    
+    {/* Revenue Line (Blue) */}
+    <Line 
+      type="monotone"
+      dataKey="revenue"
+      name="Revenue"
+      stroke="#185BCB"
+      strokeWidth={3}
+      dot={{ r: 4 }}
+    />
+
+    {/* Unpaid/Debit Line (Red) */}
+    <Line 
+      type="monotone"
+      dataKey="unpaid"
+      name="Debit Sales"
+      stroke="#E63946" 
+      strokeWidth={3}
+      dot={{ r: 4 }}
+    />
+  </LineChart>
+</ResponsiveContainer>
         </Card>
 
         {/* RECENT TRANSACTIONS TABLE */}
