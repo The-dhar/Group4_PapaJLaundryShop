@@ -36,35 +36,19 @@
     /* keeps content from centering vertically */
     width: calc(100% - 250px);
     min-height: 100vh;
-    padding: 20px;
+    padding: 12px;
     box-sizing: border-box;
 }
-
-.header {
-    background-color: #fff;
-    height: 80px;
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    box-sizing: border-box;
-    padding: 0 20px;
-}
-
 
 /* === MAIN CONTENT === */
 
 .main-content {
     flex-grow: 1;
-    padding: 0px;
+    padding: 0;
     overflow-y: auto;
     overflow-x: hidden;
     height: 100%;
-    border-radius: 15px;
+    border-radius: 12px;
     width: 100%;
     box-sizing: border-box;
 }
@@ -101,28 +85,19 @@
 
 /* When sidebar is open */
 
-.sidebar-open .main-wrapper {
-    margin-left: 240px;
-    /* same as sidebar width */
-}
+.sidebar-open .main-wrapper { margin-left: 250px; }
 
 
 /* When sidebar is closed */
 
-.sidebar-closed .main-wrapper {
-    margin-left: 0;
-}
+.sidebar-closed .main-wrapper { margin-left: 78px; }
 
 
 /* === RESPONSIVE === */
 
 @media (max-width: 1024px) {
-    .sidebar {
-        width: 200px;
-    }
-    .main-wrapper {
-        margin-left: 200px;
-    }
+    .main-wrapper { margin-left: 220px; }
+    .sidebar-closed .main-wrapper { margin-left: 72px; }
 }
 
 @media (max-width: 768px) {

@@ -459,6 +459,11 @@ body {
     background: #166534;
 }
 
+.for-receipt-savebtn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
 .error-text {
     color: #dc2626;
     font-weight: 600;

@@ -35,6 +35,7 @@ const POs = () => {
   const [paymentStatus, setPaymentStatus] = useState('later');
   const [paymentMethod, setPaymentMethod] = useState('');
   const [amountPaid, setAmountPaid] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const [subExtras, setSubExtras] = useState({
     extra_detergent: 0,
     extra_softener: 0,
@@ -399,7 +400,7 @@ const POs = () => {
     window.open(doc.output('bloburl'));
   };
 
-  const handleCompleteTransaction = () => {
+  const handleCompleteTransaction = async () => {
     setSaveError('');
     if (!firstName.trim() || !lastName.trim() || !street.trim() || !barangay.trim() || !city.trim()) {
       Swal.fire({ title: "Missing Information", text: "Please complete all customer details.", icon: "warning", width: 350 });
@@ -417,26 +418,38 @@ const POs = () => {
     const fullName = `${firstName.trim()} ${lastName.trim()}`;
     const fullAddress = `${street.trim()}, ${barangay.trim()}, ${city.trim()}`;
 
-    const newTransaction = createTransaction({
-      customer_name: fullName,
-      customer_address: fullAddress,
-      services: selectedServices,
-      weight: totalWeight,
-      amount: Number(totalPayment.toFixed(2)),
-      due_date: dueDate,
-      extra_charge_type: Object.keys(activeExtras).filter(k => activeExtras[k]).join(', ') || 'none',
-      discount_amount: activeExtras.discount ? Number(discountAmount) : 0,
-      additional_amount: 0,
-      active_extras: activeExtras,
-      sub_extras: subExtras,
-      payment_status: paymentStatus === 'full' ? 'paid' : 'unpaid',
-      payment_method: paymentMethod,
-      paid_amount: Number(amountPaid) || 0,
-    });
+    try {
+      setIsSaving(true);
+      const newTransaction = await createTransaction({
+        customer_name: fullName,
+        customer_address: fullAddress,
+        services: selectedServices,
+        weight: totalWeight,
+        amount: Number(totalPayment.toFixed(2)),
+        due_date: dueDate,
+        extra_charge_type: Object.keys(activeExtras).filter(k => activeExtras[k]).join(', ') || 'none',
+        discount_amount: activeExtras.discount ? Number(discountAmount) : 0,
+        additional_amount: 0,
+        active_extras: activeExtras,
+        sub_extras: subExtras,
+        payment_status: paymentStatus === 'full' ? 'paid' : 'unpaid',
+        payment_method: paymentMethod,
+        paid_amount: Number(amountPaid) || 0,
+      });
 
-    printThermalReceipt(newTransaction);
-    Swal.fire({ title: "Transaction Saved!", icon: "success", width: 350 });
-    resetForm();
+      printThermalReceipt(newTransaction);
+      Swal.fire({ title: "Transaction Saved!", icon: "success", width: 350 });
+      resetForm();
+    } catch (error) {
+      Swal.fire({
+        title: "Save failed",
+        text: error?.message || "Unable to save transaction. Please check backend CORS/deploy status and try again.",
+        icon: "error",
+        width: 420
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -692,7 +705,9 @@ const POs = () => {
 
             <div className="for-receipt-button">
               <button className="for-receipt-clear" onClick={resetForm}>Clear</button>
-              <button onClick={handleCompleteTransaction} className="for-receipt-savebtn">Complete and Save</button>
+              <button onClick={handleCompleteTransaction} className="for-receipt-savebtn" disabled={isSaving}>
+                {isSaving ? 'Saving...' : 'Complete and Save'}
+              </button>
             </div>
           </section>
         </div>
