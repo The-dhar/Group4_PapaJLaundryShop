@@ -69,7 +69,7 @@ body {
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
     cursor: pointer;
-    background: #87b5d5;
+    background: #ffffff;
     text-align: center;
 }
 
@@ -276,7 +276,8 @@ body {
     color: #333;
 }
 
-.payment-option input[type="radio"] {
+.payment-option input[type="radio"],
+.payment-option input[type="checkbox"] {
     cursor: pointer;
 }
 

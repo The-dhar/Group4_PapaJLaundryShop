@@ -1,28 +1,17 @@
 .laundry-card {
-    border: 1px solid #ddd;
-    padding: 10px;
-    border-radius: 10px;
     width: 100%;
     height: auto;
-    background: #87b5d5;
+    border: 1px solid #ddd;
+    padding: 15px;
+    border-radius: 12px;
+    background: #fff;
+    cursor: pointer;
     transition: 0.3s;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     text-align: center;
-    all: unset;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    border: 1px solid #ddd;
-    padding: 15px;
-    border-radius: 12px;
-    cursor: pointer;
-}
-
-.laundry-card * {
-    all: revert;
 }
 
 .laundry-card:hover {
