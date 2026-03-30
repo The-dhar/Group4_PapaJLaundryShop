@@ -7,6 +7,7 @@ const LaundryPriceManager = () => {
   type Tier = { range: string; price: number; description: string };
   type Service = { id: number; name: string; category: string; tiers: Tier[]; updatedAt: string | null; effectiveDate: string | null };
   type NewService = { name: string; category: string; tiers: { range: string; price: string; description: string }[] };
+  type ExtraAddon = { id: string; name: string; price: number };
 
   const [services, setServices] = useState<Service[]>([
     {
@@ -94,6 +95,14 @@ const LaundryPriceManager = () => {
       effectiveDate: null,
     },
   ]);
+
+  const [extraAddons, setExtraAddons] = useState<ExtraAddon[]>([
+    { id: 'extra-detergent', name: 'Extra Detergent', price: 20 },
+    { id: 'extra-softener', name: 'Extra Softener', price: 20 },
+    { id: 'stain-removal', name: 'Stain Removal', price: 50 },
+  ]);
+  const [editingAddon, setEditingAddon] = useState<ExtraAddon | null>(null);
+  const [addonPriceDraft, setAddonPriceDraft] = useState('');
 
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
@@ -220,6 +229,27 @@ const LaundryPriceManager = () => {
       setNewService({ ...newService, tiers: updated });
     }
   };
+
+  const openEditAddon = (addon: ExtraAddon) => {
+    setEditingAddon(addon);
+    setAddonPriceDraft(addon.price === 0 ? '' : String(addon.price));
+  };
+
+  const handleSaveAddonPrice = () => {
+    if (!editingAddon) return;
+    const price = parseFloat(addonPriceDraft) || 0;
+    setExtraAddons((prev) =>
+      prev.map((a) => (a.id === editingAddon.id ? { ...a, price } : a))
+    );
+    setEditingAddon(null);
+    setAddonPriceDraft('');
+  };
+
+  const closeAddonModal = () => {
+    setEditingAddon(null);
+    setAddonPriceDraft('');
+  };
+
   const router = useRouter();
   const [open, setOpen] = useState(false);
    
@@ -282,8 +312,32 @@ const LaundryPriceManager = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Services List */}
+          {/* Services List: add-ons use same card format as Regular Clothes */}
           <View style={styles.servicesList}>
+            {extraAddons.map((addon) => (
+              <View key={addon.id} style={styles.serviceCard}>
+                <View style={styles.serviceHeader}>
+                  <View style={styles.serviceInfo}>
+                    <Text style={styles.serviceName}>{addon.name}</Text>
+                    <Text style={styles.serviceCategory}>Add-on</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => openEditAddon(addon)} style={styles.editButton}>
+                    <Ionicons name="create-outline" size={20} color="#fff" />
+                    <Text style={styles.editButtonText}>Edit</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.tiersContainer}>
+                  <View style={styles.tierItem}>
+                    <View style={styles.tierInfo}>
+                      <Text style={styles.tierRange}>Standard rate</Text>
+                      <Text style={styles.tierDescription}>Per add-on request</Text>
+                    </View>
+                    <Text style={styles.tierPrice}>₱{addon.price.toFixed(2)}</Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+
             {services.map((service) => (
               <View key={service.id} style={styles.serviceCard}>
                 {/* Service Header */}
@@ -585,6 +639,48 @@ const LaundryPriceManager = () => {
                 style={[styles.footerButton, styles.saveButton]}
               >
                 <Text style={styles.saveButtonText}>Create Service</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit single add-on (same pattern as Penalty tier) */}
+      <Modal visible={!!editingAddon} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit {editingAddon?.name ?? ''}</Text>
+              <TouchableOpacity onPress={closeAddonModal} style={styles.closeButton}>
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
+              <View style={styles.tierEditCard}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Price (₱)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter price"
+                    value={addonPriceDraft}
+                    onChangeText={setAddonPriceDraft}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+              </View>
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                onPress={closeAddonModal}
+                style={[styles.footerButton, styles.cancelButton]}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSaveAddonPrice}
+                style={[styles.footerButton, styles.saveButton]}
+              >
+                <Text style={styles.saveButtonText}>Save Changes</Text>
               </TouchableOpacity>
             </View>
           </View>

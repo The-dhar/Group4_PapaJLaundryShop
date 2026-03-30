@@ -31,14 +31,14 @@ export default function LoginScreen() {
   </View>
 
   <View style={styles.logoTextContainer}>
-    <Text style={styles.brandName}>PAPA J's</Text>
+    <Text style={styles.brandName}>PAPA J&apos;s</Text>
     <Text style={styles.brandSubtitle}>Laundry Shop</Text>
   </View>
 </View>
 
         {/* Welcome Text */}
         <Text style={styles.welcomeText}>Welcome Back</Text>
-        <Text style={styles.welcomeSubtext}>to Papa J's</Text>
+        <Text style={styles.welcomeSubtext}>to Papa J&apos;s</Text>
 
         {/* Email Input */}
         <View style={styles.inputContainer}>

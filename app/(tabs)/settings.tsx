@@ -24,6 +24,7 @@ const BranchList = () => {
   const [page, setPage] = useState(1);
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
@@ -60,6 +61,7 @@ const BranchList = () => {
     if (username && password) {
       // Handle update logic here
       console.log('Updating branch:', selectedBranch?.name, { username, password });
+      setConfirmModalVisible(false);
       setModalVisible(false);
       setUsername('');
       setPassword('');
@@ -235,10 +237,50 @@ const BranchList = () => {
 
                 <TouchableOpacity
                   style={styles.confirmButton}
+                  onPress={() => setConfirmModalVisible(true)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.confirmButtonText}>Update</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Confirmation Modal */}
+      <Modal visible={confirmModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmModalBox}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Confirm Update</Text>
+              <TouchableOpacity
+                style={styles.modalCloseBtn}
+                onPress={() => setConfirmModalVisible(false)}
+              >
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalContent}>
+              <Text style={styles.confirmText}>
+                Are you sure you want to update the information?
+              </Text>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={styles.cancelConfirmButton}
+                  onPress={() => setConfirmModalVisible(false)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.cancelConfirmButtonText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.confirmButton}
                   onPress={handleConfirm}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.confirmButtonText}>Confirm</Text>
+                  <Text style={styles.confirmButtonText}>Yes</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -594,6 +636,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#1e293b",
     fontWeight: "600",
+  },
+  confirmModalBox: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 20,
+  },
+  confirmText: {
+    fontSize: 16,
+    color: '#475569',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 24,
+  },
+  cancelConfirmButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelConfirmButtonText: {
+    color: '#1e293b',
+    fontWeight: '700',
+    fontSize: 16,
   },
 });
 

@@ -3,10 +3,20 @@ import { Modal,SafeAreaView,StyleSheet,Text,TouchableOpacity,View, ScrollView} f
 import Ionicons from "react-native-vector-icons/Ionicons";
 const ROWS_PER_PAGE = 5;
 
+type TransactionRow = {
+  id: string;
+  receipt: string;
+  customer_name: string;
+  payment_status: string;
+  inventory_status: string;
+  amount: number;
+  due_date: string;
+};
+
 // -----------------------------
 // Mock Data
 // -----------------------------
-const mockTransactions = [
+const mockTransactions: TransactionRow[] = [
   {
     id: "1",receipt: "REC-001",customer_name: "John Doe",payment_status: "paid",inventory_status: "picked_up",amount: 350.0,due_date: "2025-11-25"},
   {id: "2",receipt: "REC-002",customer_name: "Jane Smith",payment_status: "unpaid",inventory_status: "in_shop",amount: 500.0,due_date: "2025-11-26",},
@@ -19,17 +29,17 @@ const mockTransactions = [
 // -----------------------------
 // Helpers
 // -----------------------------
-const getPaymentColor = (status) =>
+const getPaymentColor = (status: string) =>
   status === "paid" ? "#22C55E" : "#EF4444";
 
-const getInventoryColor = (status) =>
+const getInventoryColor = (status: string) =>
   status === "picked_up" ? "#2563EB" : "#F59E0B";
 
 // -----------------------------
 // Main Component
 // -----------------------------
 export default function TransactionDeviceList() {
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelected] = useState<TransactionRow | null>(null);
   const [page, setPage] = useState(1);
 
   const totalPages = Math.ceil(mockTransactions.length / ROWS_PER_PAGE);

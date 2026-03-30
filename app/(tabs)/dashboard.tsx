@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Dimensions, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Pressable, Alert } from "react-native";
+import { Dimensions, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Pressable, Alert, TextInput } from "react-native";
 import { BarChart, LineChart } from "react-native-chart-kit";
 import { useRouter } from "expo-router";
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -7,7 +7,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 // BarChart typing workaround to allow runtime onDataPointClick
 const AnyBarChart: any = BarChart;
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+const { width: screenWidth } = Dimensions.get("window");
 const isSmallScreen = screenWidth < 375;
 const chartPadding = isSmallScreen ? 40 : 60;
 const chartWidth = screenWidth - chartPadding;
@@ -19,8 +19,72 @@ const getResponsiveChartWidth = (labels: string[]) => {
   return Math.max(chartWidth, computed);
 };
 
+const getFormattedDate = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+const getDateDaysAgo = (days: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return getFormattedDate(d);
+};
+
+const predefinedRanges = [
+  { label: "Today", startOffset: 0, endOffset: 0 },
+  { label: "Yesterday", startOffset: 1, endOffset: 1 },
+  { label: "Last 2-3 Days", startOffset: 3, endOffset: 2 },
+  { label: "Last 2-5 Days", startOffset: 5, endOffset: 2 },
+  { label: "Last 4-7 Days", startOffset: 7, endOffset: 4 },
+  { label: "Last 7 Days", startOffset: 7, endOffset: 0 },
+  { label: "Last 10 Days", startOffset: 10, endOffset: 0 },
+  { label: "Last 14 Days", startOffset: 14, endOffset: 0 },
+  { label: "Last 21 Days", startOffset: 21, endOffset: 0 },
+  { label: "Last 30 Days", startOffset: 30, endOffset: 0 },
+  { label: "Last 45 Days", startOffset: 45, endOffset: 0 },
+  { label: "Last 60 Days", startOffset: 60, endOffset: 0 },
+  { label: "Last 90 Days", startOffset: 90, endOffset: 0 },
+];
+
+const RangeSelector = ({
+  startDate, setStartDate, endDate, setEndDate
+}: {
+  startDate: string, setStartDate: (s: string) => void, endDate: string, setEndDate: (s: string) => void
+}) => {
+  return (
+    <View style={styles.rangeSelectorContainer}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rangePillsScroll}>
+        {predefinedRanges.map((preset, index) => {
+          const presetStart = getDateDaysAgo(preset.startOffset);
+          const presetEnd = getDateDaysAgo(preset.endOffset);
+          const isActive = startDate === presetStart && endDate === presetEnd;
+          return (
+            <TouchableOpacity 
+              key={index} 
+              style={[styles.rangePill, isActive && styles.rangePillActive]}
+              onPress={() => {
+                setStartDate(presetStart);
+                setEndDate(presetEnd);
+              }}
+            >
+              <Text style={[styles.rangePillText, isActive && styles.rangePillTextActive]}>{preset.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+      <View style={styles.rangePickerInputs}>
+        <Text style={styles.rangeLabel}>Start:</Text>
+        <TextInput style={styles.rangeInput} value={startDate} onChangeText={setStartDate} placeholder="YYYY-MM-DD" />
+        <Text style={styles.rangeLabel}>End:</Text>
+        <TextInput style={styles.rangeInput} value={endDate} onChangeText={setEndDate} placeholder="YYYY-MM-DD" />
+      </View>
+    </View>
+  );
+};
+
 export default function DashboardAnalytics() {
-  const [activeTab, setActiveTab] = useState("dashboard");
   const [revenueView, setRevenueView] = useState("weekly");
   const [branchView, setBranchView] = useState("weekly");
   const [tooltipPos, setTooltipPos] = useState({
@@ -42,6 +106,12 @@ export default function DashboardAnalytics() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
+  // Range states
+  const [revenueRangeStart, setRevenueRangeStart] = useState("2026-03-01");
+  const [revenueRangeEnd, setRevenueRangeEnd] = useState("2026-03-29");
+  const [branchRangeStart, setBranchRangeStart] = useState("2026-03-01");
+  const [branchRangeEnd, setBranchRangeEnd] = useState("2026-03-29");
+
   // Weekly Revenue Data
   const weeklyRevenueData = [20000, 85000, 45000, 15000, 5000, 35000, 55000,];
   const weeklyLabels = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",];
@@ -53,8 +123,8 @@ export default function DashboardAnalytics() {
   const yearlyRevenueData = [120000, 110000, 130000, 140000, 150000, 160000, 170000, 180000, 190000, 200000, 210000, 220000];
   const yearlyRevenueLabels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-  const currentRevenue = revenueView === "weekly" ? weeklyRevenueData : revenueView === "monthly" ? monthlyRevenueData : yearlyRevenueData;
-  const currentLabels = revenueView === "weekly" ? weeklyLabels : revenueView === "monthly" ? monthlyLabels : yearlyRevenueLabels;
+  const currentRevenue = revenueView === "weekly" ? weeklyRevenueData : revenueView === "monthly" ? monthlyRevenueData : revenueView === "yearly" ? yearlyRevenueData : [50000, 120000, 80000];
+  const currentLabels = revenueView === "weekly" ? weeklyLabels : revenueView === "monthly" ? monthlyLabels : revenueView === "yearly" ? yearlyRevenueLabels : [revenueRangeStart, "Mid", revenueRangeEnd];
 
   const weeklyBranchData = [300, 400, 700, 1000, 300, 500, 800, 800, 300, 300, 300];
   const weeklyBranchLabels = [
@@ -91,8 +161,8 @@ export default function DashboardAnalytics() {
   const yearlyBranchData = [120000, 250000, 300000, 400000, 500000, 600000, 100000, 350000, 100000, 400000, 500000];
   const yearlyBranchLabels = monthlyBranchLabels;
 
-  const currentBranchValues = branchView === "weekly" ? weeklyBranchData : branchView === "monthly" ? monthlyBranchData : yearlyBranchData;
-  const currentBranchLabels = branchView === "weekly" ? weeklyBranchLabels : branchView === "monthly" ? monthlyBranchLabels : yearlyBranchLabels;
+  const currentBranchValues = branchView === "weekly" ? weeklyBranchData : branchView === "monthly" ? monthlyBranchData : branchView === "yearly" ? yearlyBranchData : [25000, 40000, 30000, 50000, 70000, 80000, 15000, 20000, 35000, 45000, 55000];
+  const currentBranchLabels = branchView === "weekly" ? weeklyBranchLabels : branchView === "monthly" ? monthlyBranchLabels : branchView === "yearly" ? yearlyBranchLabels : monthlyBranchLabels;
 
   // Compute responsive chart widths so x-axis labels fit on narrow screens
   const revenueChartWidth = getResponsiveChartWidth(currentLabels);
@@ -215,6 +285,13 @@ export default function DashboardAnalytics() {
                 >
                   <Text style={[styles.switchText, revenueView === "yearly" && styles.switchTextActive]}>Yearly</Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity 
+                  onPress={() => setRevenueView("range")}
+                  style={[styles.switchBtn, revenueView === "range" && styles.switchActive]}
+                >
+                  <Text style={[styles.switchText, revenueView === "range" && styles.switchTextActive]}>Range</Text>
+                </TouchableOpacity>
               </View>
 
                 {!isSmallScreen && (
@@ -226,6 +303,14 @@ export default function DashboardAnalytics() {
             </View>
           </View>
           <View style={{ alignItems: "center" }}>
+            {revenueView === "range" && (
+              <RangeSelector 
+                startDate={revenueRangeStart} 
+                setStartDate={setRevenueRangeStart} 
+                endDate={revenueRangeEnd} 
+                setEndDate={setRevenueRangeEnd} 
+              />
+            )}
 
             {/* Tooltip */}
             {tooltipPos.visible && (
@@ -319,6 +404,13 @@ export default function DashboardAnalytics() {
                   >
                     <Text style={[styles.switchText, branchView === "yearly" && styles.switchTextActive]}>Yearly</Text>
                   </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    onPress={() => setBranchView("range")}
+                    style={[styles.switchBtn, branchView === "range" && styles.switchActive]}
+                  >
+                    <Text style={[styles.switchText, branchView === "range" && styles.switchTextActive]}>Range</Text>
+                  </TouchableOpacity>
                 </View>
 
                 {!isSmallScreen && (
@@ -330,6 +422,14 @@ export default function DashboardAnalytics() {
               </View>
             </View>
             <View style={{ alignItems: "center" }}>
+              {branchView === "range" && (
+                <RangeSelector 
+                  startDate={branchRangeStart} 
+                  setStartDate={setBranchRangeStart} 
+                  endDate={branchRangeEnd} 
+                  setEndDate={setBranchRangeEnd} 
+                />
+              )}
 
               {/* Branch Tooltip */}
               {branchTooltip.visible && (
@@ -426,6 +526,13 @@ export default function DashboardAnalytics() {
                 >
                   <Text style={[styles.switchText, branchView === "yearly" && styles.switchTextActive]}>Yearly</Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity 
+                  onPress={() => setBranchView("range")}
+                  style={[styles.switchBtn, branchView === "range" && styles.switchActive]}
+                >
+                  <Text style={[styles.switchText, branchView === "range" && styles.switchTextActive]}>Range</Text>
+                </TouchableOpacity>
               </View>
 
               {!isSmallScreen && (
@@ -437,6 +544,14 @@ export default function DashboardAnalytics() {
             </View>
           </View>
           <View style={styles.barChartWrapper}>
+            {branchView === "range" && (
+              <RangeSelector 
+                startDate={branchRangeStart} 
+                setStartDate={setBranchRangeStart} 
+                endDate={branchRangeEnd} 
+                setEndDate={setBranchRangeEnd} 
+              />
+            )}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center', marginLeft: 0 }}>
               <BarChart
                 data={{
@@ -714,5 +829,61 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#1e293b",
     fontWeight: "600",
+  },
+  rangeSelectorContainer: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 12,
+    marginTop: 0,
+  },
+  rangePillsScroll: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    flexDirection: 'row',
+  },
+  rangePill: {
+    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    marginRight: 8,
+  },
+  rangePillActive: {
+    backgroundColor: "#3b82f6",
+    borderColor: "#3b82f6",
+  },
+  rangePillText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#475569",
+  },
+  rangePillTextActive: {
+    color: "#ffffff",
+  },
+  rangePickerInputs: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  rangeLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748b",
+    marginHorizontal: 8,
+  },
+  rangeInput: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    fontSize: 12,
+    color: "#1e293b",
+    width: 100,
+    backgroundColor: "#f8fafc",
   },
 });
