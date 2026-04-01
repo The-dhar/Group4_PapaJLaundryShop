@@ -17,6 +17,15 @@ function formatInventoryStatus(status) {
     .join(' ');
 }
 
+/** Rush / express extra: matches DB `is_rush` and optional client-only fields on older rows */
+function isRushOrder(row) {
+  if (row.is_rush === true || row.is_rush === 1) return true;
+  if (row.active_extras?.express) return true;
+  const ect = row.extra_charge_type;
+  if (typeof ect === 'string' && ect.toLowerCase().includes('express')) return true;
+  return false;
+}
+
 const Express = () => {
   const { 
     transactions, 
@@ -66,12 +75,14 @@ const Express = () => {
 
   const filteredData = useMemo(() => {
     return transactions.filter((row) => {
+      if (row.archived) return false;
+      if (!isRushOrder(row)) return false;
       const matchesPayment = filterPayment === 'All' || row.payment_status === filterPayment;
       const matchesInventory = filterInventory === 'All' || row.inventory_status === filterInventory;
       const matchesSearch =
         row.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         row.receipt.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesPayment && matchesInventory && matchesSearch && !row.archived;
+      return matchesPayment && matchesInventory && matchesSearch;
     });
   }, [transactions, filterPayment, filterInventory, searchTerm]);
 
@@ -191,6 +202,11 @@ const Express = () => {
                 pagination
                 paginationPerPage={10}
                 paginationRowsPerPageOptions={[5, 10, 20, 50]}
+                noDataComponent={
+                  <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
+                    No rush orders yet. This list only shows orders with the <strong>Rush</strong> extra (express).
+                  </div>
+                }
               />
             </div>
           </div>
