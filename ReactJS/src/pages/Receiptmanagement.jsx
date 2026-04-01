@@ -26,9 +26,14 @@ const Receiptmanagement = () => {
   const [selectedReceipt, setSelectedReceipt] = useState(null);
   const [viewMode, setViewMode] = useState('view'); // 'view' or 'edit'
 
-  // Filter for paid items (ready for viewing, or already picked_up ready for printing)
+  // Receipt Management: paid transactions only (unpaid belong in POS / collection flow)
   const readyReceipts = useMemo(
-    () => transactions.filter((txn) => (txn.payment_status === 'paid' || txn.payment_status === 'unpaid') && !txn.archived),
+    () =>
+      transactions.filter((txn) => {
+        if (txn.archived) return false;
+        const ps = String(txn.payment_status || '').toLowerCase();
+        return ps === 'paid';
+      }),
     [transactions]
   );
 
@@ -366,7 +371,7 @@ const Receiptmanagement = () => {
               pagination
               paginationPerPage={10}
               paginationRowsPerPageOptions={[5, 10, 20, 50]}
-              noDataComponent="No receipts found. Create one in POs first."
+              noDataComponent="No paid receipts yet. Record payment in POS or Transaction Log first."
             />
           </div>
         </div>
