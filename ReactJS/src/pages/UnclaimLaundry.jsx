@@ -44,20 +44,27 @@ const UnclaimLaundry = () => {
     return Math.floor((today - due) / (86400000));
   };
 
-  /** Overdue: due date is before today (not same-day / future) */
-  const isPastDue = (dueDate) => getDaysPastDue(dueDate) >= 1;
+  /** Due date was at least 3 calendar days ago (still counts as “unclaimed window” for this page) */
+  const isAtLeastThreeDaysPastDue = (dueDate) => getDaysPastDue(dueDate) >= 3;
+
+  /** Shown on Due column / row highlight: same 3-day rule */
+  const showUnclaimedWarning = (dueDate) => isAtLeastThreeDaysPastDue(dueDate);
 
   const overdueAlertKeyRef = useRef('');
 
-  // Filter table data
+  // Filter table data: only items still in shop, unclaimed ≥3 days past due date
   const filteredData = useMemo(() => {
     return transactions.filter((row) => {
+      if (row.archived) return false;
+      if (row.inventory_status !== 'in_shop') return false;
+      if (!isAtLeastThreeDaysPastDue(row.due_date)) return false;
+
       const matchesPayment = filterPayment === 'All' || row.payment_status === filterPayment;
       const matchesInventory = filterInventory === 'All' || row.inventory_status === filterInventory;
       const matchesSearch =
         row.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         row.receipt.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesPayment && matchesInventory && matchesSearch && !row.archived;
+      return matchesPayment && matchesInventory && matchesSearch;
     });
   }, [transactions, filterPayment, filterInventory, searchTerm]);
 
@@ -72,13 +79,13 @@ const UnclaimLaundry = () => {
     return data;
   }, [filteredData, sortOrder]);
 
-  // Alert when any in-shop item is past due (depends on full transactions, not only length)
+  // Alert when any in-shop item is ≥3 days past due (same rule as this page)
   useEffect(() => {
     const overdueItems = transactions.filter(
       (row) =>
         !row.archived &&
         row.inventory_status === 'in_shop' &&
-        isPastDue(row.due_date)
+        isAtLeastThreeDaysPastDue(row.due_date)
     );
     if (overdueItems.length === 0) return;
 
@@ -94,7 +101,7 @@ const UnclaimLaundry = () => {
       title: 'Overdue Laundry Alert',
       html: `
             <div style="text-align:left; font-size:15px; line-height:1.6;">
-              <b>${overdueItems.length}</b> item${overdueItems.length !== 1 ? 's are' : ' is'} past the due date and still <b>In Shop</b>.<br><br>
+              <b>${overdueItems.length}</b> item${overdueItems.length !== 1 ? 's are' : ' is'} at least <b>3 days</b> past the due date and still <b>In Shop</b>.<br><br>
 
               <b>Receipt ID(s):</b><br>
               ${receiptList}<br><br>
@@ -137,10 +144,10 @@ const UnclaimLaundry = () => {
       cell: (row) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span>{row.due_date}</span>
-          {isPastDue(row.due_date) && (
+          {showUnclaimedWarning(row.due_date) && (
             <BsExclamationTriangle
               className="overdue-alert-icon"
-              title="Past due (due date has passed)"
+              title="At least 3 days past due — unclaimed"
             />
           )}
         </div>
@@ -203,7 +210,8 @@ const UnclaimLaundry = () => {
                 conditionalRowStyles={[
                   {
                     when: (row) =>
-                      row.inventory_status === 'in_shop' && isPastDue(row.due_date),
+                      row.inventory_status === 'in_shop' &&
+                      isAtLeastThreeDaysPastDue(row.due_date),
                     style: {
                       backgroundColor: '#fecaca',
                       borderLeft: '4px solid #dc2626',
@@ -211,6 +219,12 @@ const UnclaimLaundry = () => {
                     classNames: ['overdue-row'],
                   },
                 ]}
+                noDataComponent={
+                  <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
+                    No unclaimed items at least 3 days past the due date. Items appear here once they are still
+                    In Shop and the due date was 3 or more days ago.
+                  </div>
+                }
               />
             </div>
           </div>
