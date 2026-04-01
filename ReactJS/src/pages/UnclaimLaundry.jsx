@@ -27,7 +27,10 @@ const UnclaimLaundry = () => {
   const [sortOrder, setSortOrder] = useState('none');
   const [selectedTxn, setSelectedTxn] = useState(null);
 
-  /** Local calendar days past due (avoids UTC off-by-one on YYYY-MM-DD) */
+  /**
+   * Full calendar days after the due date (0 = due today, 1 = 1 day past due, …).
+   * Uses local date parsing so YYYY-MM-DD stays aligned with the calendar.
+   */
   const getDaysPastDue = (dueDate) => {
     if (!dueDate) return -Infinity;
     const s = String(dueDate).trim();
@@ -44,20 +47,20 @@ const UnclaimLaundry = () => {
     return Math.floor((today - due) / (86400000));
   };
 
-  /** Due date was at least 3 calendar days ago (still counts as “unclaimed window” for this page) */
-  const isAtLeastThreeDaysPastDue = (dueDate) => getDaysPastDue(dueDate) >= 3;
+  /** Unclaimed page: only if due date is 3+ days in the past (3+ days past due date). */
+  const isThreeOrMoreDaysPastDueDate = (dueDate) => getDaysPastDue(dueDate) >= 3;
 
-  /** Shown on Due column / row highlight: same 3-day rule */
-  const showUnclaimedWarning = (dueDate) => isAtLeastThreeDaysPastDue(dueDate);
+  /** Due column icon / row highlight — same “3 days past due date” rule */
+  const showUnclaimedWarning = (dueDate) => isThreeOrMoreDaysPastDueDate(dueDate);
 
   const overdueAlertKeyRef = useRef('');
 
-  // Filter table data: only items still in shop, unclaimed ≥3 days past due date
+  // Still In Shop + 3+ calendar days past due_date only
   const filteredData = useMemo(() => {
     return transactions.filter((row) => {
       if (row.archived) return false;
       if (row.inventory_status !== 'in_shop') return false;
-      if (!isAtLeastThreeDaysPastDue(row.due_date)) return false;
+      if (!isThreeOrMoreDaysPastDueDate(row.due_date)) return false;
 
       const matchesPayment = filterPayment === 'All' || row.payment_status === filterPayment;
       const matchesInventory = filterInventory === 'All' || row.inventory_status === filterInventory;
@@ -79,13 +82,13 @@ const UnclaimLaundry = () => {
     return data;
   }, [filteredData, sortOrder]);
 
-  // Alert when any in-shop item is ≥3 days past due (same rule as this page)
+  // Alert: in-shop orders that are 3+ days past due date
   useEffect(() => {
     const overdueItems = transactions.filter(
       (row) =>
         !row.archived &&
         row.inventory_status === 'in_shop' &&
-        isAtLeastThreeDaysPastDue(row.due_date)
+        isThreeOrMoreDaysPastDueDate(row.due_date)
     );
     if (overdueItems.length === 0) return;
 
@@ -101,7 +104,7 @@ const UnclaimLaundry = () => {
       title: 'Overdue Laundry Alert',
       html: `
             <div style="text-align:left; font-size:15px; line-height:1.6;">
-              <b>${overdueItems.length}</b> item${overdueItems.length !== 1 ? 's are' : ' is'} at least <b>3 days</b> past the due date and still <b>In Shop</b>.<br><br>
+              <b>${overdueItems.length}</b> item${overdueItems.length !== 1 ? 's are' : ' is'} <b>3 or more days past the due date</b> and still <b>In Shop</b>.<br><br>
 
               <b>Receipt ID(s):</b><br>
               ${receiptList}<br><br>
@@ -147,7 +150,7 @@ const UnclaimLaundry = () => {
           {showUnclaimedWarning(row.due_date) && (
             <BsExclamationTriangle
               className="overdue-alert-icon"
-              title="At least 3 days past due — unclaimed"
+              title="3+ days past due date — still unclaimed"
             />
           )}
         </div>
@@ -211,7 +214,7 @@ const UnclaimLaundry = () => {
                   {
                     when: (row) =>
                       row.inventory_status === 'in_shop' &&
-                      isAtLeastThreeDaysPastDue(row.due_date),
+                      isThreeOrMoreDaysPastDueDate(row.due_date),
                     style: {
                       backgroundColor: '#fecaca',
                       borderLeft: '4px solid #dc2626',
@@ -221,8 +224,8 @@ const UnclaimLaundry = () => {
                 ]}
                 noDataComponent={
                   <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
-                    No unclaimed items at least 3 days past the due date. Items appear here once they are still
-                    In Shop and the due date was 3 or more days ago.
+                    No orders here yet. This list only shows laundry that is still <strong>In Shop</strong> and{' '}
+                    <strong>3 or more calendar days past the due date</strong>.
                   </div>
                 }
               />
