@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import DataTable from 'react-data-table-component';
 import DashboardLayout from '../components/dashboardlayout';
+import TransactionExtrasSummary from '../components/TransactionExtrasSummary';
 import { BsPencil } from 'react-icons/bs';
 import { useTransactions } from '../context/transactionsContext';
 import '../styles/archivestyle.css';
@@ -120,6 +121,8 @@ const Archive = () => {
                     ))}
                   </ul>
                 </p>
+
+                <TransactionExtrasSummary txn={selectedTxn} />
 
                 <p><strong>Total Weight:</strong> {selectedTxn.weight} kg</p>
                 <p><strong>Total Amount:</strong> ₱{selectedTxn.amount.toFixed(2)}</p>

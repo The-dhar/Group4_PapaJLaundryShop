@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import DataTable from 'react-data-table-component';
 import { BsEye, BsPrinter, BsCheck } from 'react-icons/bs';
 import DashboardLayout from '../components/dashboardlayout';
+import TransactionExtrasSummary from '../components/TransactionExtrasSummary';
 import { useTransactions } from '../context/transactionsContext';
 import '../styles/receiptstyle.css';
 import { jsPDF } from 'jspdf';
@@ -386,6 +387,9 @@ const Receiptmanagement = () => {
             >
               ✕
             </button>
+            <div style={{ padding: '0 12px 12px', textAlign: 'left' }}>
+              <TransactionExtrasSummary txn={selectedReceipt} />
+            </div>
             <div className="thermal-receipt">
               <div className="tr-header">
                 <h3 className="tr-shop-name">PAPA J'S LAUNDRY SHOP</h3>

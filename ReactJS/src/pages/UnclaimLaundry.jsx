@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import DataTable from 'react-data-table-component';
 import DashboardLayout from '../components/dashboardlayout';
+import TransactionExtrasSummary from '../components/TransactionExtrasSummary';
 import { BsEye, BsExclamationTriangle } from 'react-icons/bs';
 import { useTransactions } from '../context/transactionsContext';
 import Swal from 'sweetalert2';
@@ -252,6 +253,8 @@ const UnclaimLaundry = () => {
                   ))}
                 </ul>
               </p>
+
+              <TransactionExtrasSummary txn={selectedTxn} />
 
               <p><strong>Total Weight:</strong> {selectedTxn.weight} kg</p>
               <p><strong>Total Amount:</strong> ₱{selectedTxn.amount.toFixed(2)}</p>

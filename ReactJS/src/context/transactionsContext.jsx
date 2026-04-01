@@ -18,6 +18,8 @@ const normalizeTransaction = (txn) => {
   return {
     ...txn,
     amount: Number(txn.amount) || 0,
+    subtotal: Number(txn.subtotal) || 0,
+    extras: Number(txn.extras) || 0,
     paid_amount: Number(txn.paid_amount) || 0,
     weight: txn.total_weight ?? txn.weight ?? 0,
     services,

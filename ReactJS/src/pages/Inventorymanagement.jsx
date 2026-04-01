@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import DataTable from 'react-data-table-component';
 import DashboardLayout from '../components/dashboardlayout';
+import TransactionExtrasSummary from '../components/TransactionExtrasSummary';
 import { BsEye,BsCashStack} from 'react-icons/bs';
 import { useTransactions } from '../context/transactionsContext';
 import '../styles/inventorystyle.css';
@@ -221,7 +222,8 @@ const Inventorymanagement = () => {
               ))}
             </ul>
             </p>
-           
+
+            <TransactionExtrasSummary txn={selectedTxn} />
 
             <p><strong>Total Weight:</strong> {selectedTxn.weight} kg</p>
             <p><strong>Total Amount:</strong> ₱{selectedTxn.amount.toFixed(2)}</p>
