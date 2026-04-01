@@ -35,8 +35,6 @@ const Express = () => {
     archiveTransaction 
   } = useTransactions();
 
-  const [filterPayment, setFilterPayment] = useState('All');
-  const [filterInventory, setFilterInventory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTxn, setSelectedTxn] = useState(null);
   const [viewMode, setViewMode] = useState('view');
@@ -79,14 +77,14 @@ const Express = () => {
       if (row.archived) return false;
       if (!isRushOrder(row)) return false;
       if (String(row.payment_status || '').toLowerCase() === 'paid') return false;
-      const matchesPayment = filterPayment === 'All' || row.payment_status === filterPayment;
-      const matchesInventory = filterInventory === 'All' || row.inventory_status === filterInventory;
+      const q = searchTerm.toLowerCase().trim();
       const matchesSearch =
-        row.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        row.receipt.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesPayment && matchesInventory && matchesSearch;
+        !q ||
+        row.customer_name.toLowerCase().includes(q) ||
+        row.receipt.toLowerCase().includes(q);
+      return matchesSearch;
     });
-  }, [transactions, filterPayment, filterInventory, searchTerm]);
+  }, [transactions, searchTerm]);
 
   // Mark paid logic with fixed payment_method = Cash
   const handleMarkPaid = () => {
@@ -175,23 +173,14 @@ const Express = () => {
         <div className="table-container">
           <div className="background-table">
             
-            {/* Search + Filters */}
-            <div className="search-filter-row">
+            <div className="search-filter-row express-search-only">
               <input
                 type="text"
                 placeholder="Search receipt or customer..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                aria-label="Search receipt or customer"
               />
-              <select value={filterPayment} onChange={(e) => setFilterPayment(e.target.value)}>
-                <option value="All">All (unpaid rush)</option>
-                <option value="unpaid">Unpaid</option>
-              </select>
-              <select value={filterInventory} onChange={(e) => setFilterInventory(e.target.value)}>
-                <option value="All">All Inventory</option>
-                <option value="in_shop">In Shop</option>
-                <option value="picked_up">Picked Up</option>
-              </select>
             </div>
 
             {/* TABLE */}
