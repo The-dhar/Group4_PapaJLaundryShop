@@ -15,7 +15,7 @@ use App\Http\Controllers\Api\EmployeeController;
 |--------------------------------------------------------------------------
 */
 
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 
 Route::middleware('auth:sanctum')->group(function () {
 
@@ -31,8 +31,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/transactions', [TransactionController::class, 'store']);
 
     Route::post('/customers', [CustomerController::class, 'store']);
+    Route::get('/customers/search/{name}', [CustomerController::class, 'search']);
 
-    Route::middleware('auth:sanctum')->get('/transactions', [TransactionController::class, 'index']);
+    Route::get('/transactions', [TransactionController::class, 'index']);
 
     Route::put('/transactions/{id}/mark-paid', [TransactionController::class, 'markPaid']);
     Route::put('/transactions/{id}/update-payment', [TransactionController::class, 'updatePayment']);
@@ -48,7 +49,5 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/employees', [EmployeeController::class, 'store']);
     Route::put('/employees/{id}', [EmployeeController::class, 'update']);
     Route::put('/employees/{id}/assign-branch', [EmployeeController::class, 'assignBranch']);
-    
-});
 
-Route::get('/customers/search/{name}', [CustomerController::class, 'search']);
+});
