@@ -78,6 +78,7 @@ const Express = () => {
     return transactions.filter((row) => {
       if (row.archived) return false;
       if (!isRushOrder(row)) return false;
+      if (String(row.payment_status || '').toLowerCase() === 'paid') return false;
       const matchesPayment = filterPayment === 'All' || row.payment_status === filterPayment;
       const matchesInventory = filterInventory === 'All' || row.inventory_status === filterInventory;
       const matchesSearch =
@@ -183,9 +184,8 @@ const Express = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
               <select value={filterPayment} onChange={(e) => setFilterPayment(e.target.value)}>
-                <option value="All">All Payments</option>
+                <option value="All">All (unpaid rush)</option>
                 <option value="unpaid">Unpaid</option>
-                <option value="paid">Paid</option>
               </select>
               <select value={filterInventory} onChange={(e) => setFilterInventory(e.target.value)}>
                 <option value="All">All Inventory</option>
@@ -205,7 +205,7 @@ const Express = () => {
                 paginationRowsPerPageOptions={[5, 10, 20, 50]}
                 noDataComponent={
                   <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
-                    No rush orders yet. This list only shows orders with the <strong>Rush</strong> extra (express).
+                    No unpaid rush orders. This list shows rush (express) orders that are still <strong>unpaid</strong>.
                   </div>
                 }
               />

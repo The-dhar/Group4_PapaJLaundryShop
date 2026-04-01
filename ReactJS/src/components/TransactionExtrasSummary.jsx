@@ -2,22 +2,35 @@ import React from 'react';
 
 const RUSH_FEE = 100;
 
+function sumServiceLines(txn) {
+  if (!Array.isArray(txn.services)) return 0;
+  return txn.services.reduce((s, x) => {
+    const line = Number(x.total) || Number(x.rate) || 0;
+    return s + line;
+  }, 0);
+}
+
 /**
- * Shows rush + combined extras (from DB) in transaction view modals.
- * Detailed detergent/softener/stain lines are not stored separately — only rolled into `extras`.
+ * Shows rush + combined extras. Uses DB `extras` when set; otherwise infers from total_amount − subtotal
+ * (fixes older rows where `is_rush` was saved but `extras` stayed 0).
  */
 export default function TransactionExtrasSummary({ txn }) {
-  const extrasTotal = Number(txn.extras) || 0;
+  const storedExtras = Number(txn.extras) || 0;
+  const totalAmt = Number(txn.amount) || 0;
+  const subFromDb = Number(txn.subtotal) || 0;
+  const lineSum = sumServiceLines(txn);
+  const baseSub = subFromDb > 0 ? subFromDb : lineSum;
+
+  const derivedExtras = Math.max(0, totalAmt - baseSub);
+  const extrasTotal = storedExtras > 0.0001 ? storedExtras : derivedExtras;
+  const inferredFromTotal = storedExtras <= 0.0001 && derivedExtras > 0.0001;
+
   const hasRush =
     txn.is_rush === true ||
     txn.is_rush === 1 ||
     txn.active_extras?.express === true;
-  const rushLine = hasRush ? RUSH_FEE : 0;
-  const otherExtras = hasRush ? extrasTotal - rushLine : extrasTotal;
 
-  const servicesSub =
-    Number(txn.subtotal) ||
-    (Array.isArray(txn.services) ? txn.services.reduce((s, x) => s + (Number(x.total) || 0), 0) : 0);
+  const otherExtras = hasRush ? extrasTotal - RUSH_FEE : extrasTotal;
 
   const showOtherLine = (() => {
     if (!hasRush) return Math.abs(extrasTotal) > 0.0001;
@@ -38,6 +51,8 @@ export default function TransactionExtrasSummary({ txn }) {
     );
   }
 
+  const servicesSub = baseSub > 0 ? baseSub : lineSum;
+
   return (
     <div style={{ marginTop: '12px', marginBottom: '8px' }}>
       <p>
@@ -55,10 +70,10 @@ export default function TransactionExtrasSummary({ txn }) {
         )}
         <li>
           <strong>Total extras (net):</strong> ₱{extrasTotal.toFixed(2)}
-          {extrasTotal === 0 && hasRush && (
+          {inferredFromTotal && (
             <span style={{ fontWeight: 'normal', color: '#64748b' }}>
               {' '}
-              (rush is on; combined total may appear in order amount)
+              (order total − services subtotal; `extras` was not stored in the database for this receipt)
             </span>
           )}
         </li>
