@@ -73,12 +73,6 @@
     width: 100%;
 }
 
-/* Rush Orders: search only (no dropdowns) */
-.express-search-only input[type='text'] {
-    width: 100%;
-    max-width: 100%;
-}
-
 .search-filter-row input[type='text'] {
     flex: 1;
     min-width: 300px;

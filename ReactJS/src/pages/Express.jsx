@@ -35,6 +35,8 @@ const Express = () => {
     archiveTransaction 
   } = useTransactions();
 
+  const [filterPayment, setFilterPayment] = useState('All');
+  const [filterInventory, setFilterInventory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTxn, setSelectedTxn] = useState(null);
   const [viewMode, setViewMode] = useState('view');
@@ -76,15 +78,14 @@ const Express = () => {
     return transactions.filter((row) => {
       if (row.archived) return false;
       if (!isRushOrder(row)) return false;
-      if (String(row.payment_status || '').toLowerCase() === 'paid') return false;
-      const q = searchTerm.toLowerCase().trim();
+      const matchesPayment = filterPayment === 'All' || row.payment_status === filterPayment;
+      const matchesInventory = filterInventory === 'All' || row.inventory_status === filterInventory;
       const matchesSearch =
-        !q ||
-        row.customer_name.toLowerCase().includes(q) ||
-        row.receipt.toLowerCase().includes(q);
-      return matchesSearch;
+        row.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        row.receipt.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesPayment && matchesInventory && matchesSearch;
     });
-  }, [transactions, searchTerm]);
+  }, [transactions, filterPayment, filterInventory, searchTerm]);
 
   // Mark paid logic with fixed payment_method = Cash
   const handleMarkPaid = () => {
@@ -173,14 +174,24 @@ const Express = () => {
         <div className="table-container">
           <div className="background-table">
             
-            <div className="search-filter-row express-search-only">
+            {/* Search + Filters */}
+            <div className="search-filter-row">
               <input
                 type="text"
                 placeholder="Search receipt or customer..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                aria-label="Search receipt or customer"
               />
+              <select value={filterPayment} onChange={(e) => setFilterPayment(e.target.value)}>
+                <option value="All">All Payments</option>
+                <option value="unpaid">Unpaid</option>
+                <option value="paid">Paid</option>
+              </select>
+              <select value={filterInventory} onChange={(e) => setFilterInventory(e.target.value)}>
+                <option value="All">All Inventory</option>
+                <option value="in_shop">In Shop</option>
+                <option value="picked_up">Picked Up</option>
+              </select>
             </div>
 
             {/* TABLE */}
@@ -194,7 +205,7 @@ const Express = () => {
                 paginationRowsPerPageOptions={[5, 10, 20, 50]}
                 noDataComponent={
                   <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
-                    No unpaid rush orders. This list shows rush (express) orders that are still <strong>unpaid</strong>.
+                    No rush orders yet. This list only shows orders with the <strong>Rush</strong> extra (express).
                   </div>
                 }
               />
