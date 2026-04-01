@@ -204,7 +204,8 @@
     padding: 0 0 12px 0;
     margin: 0;
     box-shadow: none;
-    max-height: min(360px, 55vh);
+    /* ~1 header row + 5 data rows visible; more rows via scroll */
+    max-height: min(278px, 42vh);
     overflow-y: auto;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
