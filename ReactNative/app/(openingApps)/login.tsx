@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
@@ -20,9 +21,12 @@ import { API_URL } from "../../config/api";
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const router = useRouter();
 
   const handleLogin = async () => {
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
     try {
 
       const response = await fetch(`${API_URL}/login`, {
@@ -56,6 +60,8 @@ export default function LoginScreen() {
     } catch (error) {
       console.error(error);
       Alert.alert('Error', 'Cannot connect to server');
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -102,6 +108,7 @@ export default function LoginScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              editable={!isLoggingIn}
             />
           </View>
 
@@ -117,12 +124,25 @@ export default function LoginScreen() {
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}
+              editable={!isLoggingIn}
             />
           </View>
 
           {/* Button */}
-          <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-            <Text style={styles.loginButtonText}>Log In</Text>
+          <TouchableOpacity
+            style={[styles.loginButton, isLoggingIn && styles.loginButtonDisabled]}
+            onPress={handleLogin}
+            disabled={isLoggingIn}
+            activeOpacity={0.85}
+          >
+            {isLoggingIn ? (
+              <View style={styles.loginButtonInner}>
+                <ActivityIndicator color="#fff" size="small" style={styles.loginSpinner} />
+                <Text style={styles.loginButtonText}>Logging in...</Text>
+              </View>
+            ) : (
+              <Text style={styles.loginButtonText}>Log In</Text>
+            )}
           </TouchableOpacity>
 
         </ScrollView>
@@ -234,6 +254,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 10,
+  },
+
+  loginButtonDisabled: {
+    opacity: 0.85,
+  },
+
+  loginButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  loginSpinner: {
+    marginRight: 10,
   },
 
   loginButtonText: {

@@ -3,9 +3,21 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { BsGrid1X2Fill, BsCart3, BsBoxSeam, BsReceiptCutoff, BsDoorOpen, BsCashStack, BsLightningCharge, BsArchive, BsList } from 'react-icons/bs';
 import '../componentstyle/sidebarstyle.css';
 
+function getUserFromStorage() {
+    try {
+        const raw = localStorage.getItem('user');
+        if (!raw) return null;
+        return JSON.parse(raw);
+    } catch {
+        return null;
+    }
+}
+
 const Sidebar = ({ sidebarOpen, toggleSidebar }) => {
     const navigate = useNavigate();
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+    const user = getUserFromStorage();
+    const branchDisplayName = user?.name?.trim() || 'Branch';
 
     const confirmLogout = () => {
         localStorage.removeItem('token');
@@ -69,7 +81,7 @@ const Sidebar = ({ sidebarOpen, toggleSidebar }) => {
 
             <div className="sidebar-footer">
                 <div className="sidebar-account">
-                    <div className="account-name">Branch Name</div>
+                    <div className="account-name">{branchDisplayName}</div>
                     <div className="account-role">Admin</div>
                 </div>
                 <hr className="sidebar-separator" />
