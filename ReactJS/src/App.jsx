@@ -6,6 +6,7 @@ import POS from './pages/POs';
 import Inventory from './pages/Inventorymanagement';
 import Receipt from './pages/Receiptmanagement';
 import Dashboardlayout from './components/dashboardlayout';
+import ProtectedRoute from './components/ProtectedRoute';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { TransactionsProvider } from './context/transactionsContext';
 import Unclaimed from './pages/UnclaimLaundry';
@@ -18,14 +19,78 @@ function App() {
         <Routes>
           <Route path="/" element={<LogIn />} />
           <Route path="/signup" element={<SignUp />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/POS" element={<POS />} />
-          <Route path="/Unclaimed" element={<Unclaimed />} />
-          <Route path="/Inventory" element={<Inventory />} />
-          <Route path="/Receipt" element={<Receipt />} />
-          <Route path="/Express" element={<Express/>} />
-          <Route path="/Archive" element={<Archive/>} />
-          <Route path="/dashboardlayout" element={<Dashboardlayout />} />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/POS"
+            element={
+              <ProtectedRoute>
+                <POS />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/pos"
+            element={
+              <ProtectedRoute>
+                <POS />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/Unclaimed"
+            element={
+              <ProtectedRoute>
+                <Unclaimed />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/Inventory"
+            element={
+              <ProtectedRoute>
+                <Inventory />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/Receipt"
+            element={
+              <ProtectedRoute>
+                <Receipt />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/Express"
+            element={
+              <ProtectedRoute>
+                <Express />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/Archive"
+            element={
+              <ProtectedRoute>
+                <Archive />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboardlayout"
+            element={
+              <ProtectedRoute>
+                <Dashboardlayout />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </Router>
     </TransactionsProvider>
