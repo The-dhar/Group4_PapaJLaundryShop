@@ -119,7 +119,7 @@ const Dashboard = () => {
         {/* SMALL CARDS */}
         <div className='card-small'>
           <div className="card-total">
-            <div className="chart-title">Total Orders</div>
+            <div className="chart-title">Total Sales</div>
             <div className="icon-value">
               <span>{formatPeso(paidTotal)}</span>
             </div>

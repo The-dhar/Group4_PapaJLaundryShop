@@ -18,6 +18,10 @@ const Sidebar = ({ sidebarOpen, toggleSidebar }) => {
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
     const user = getUserFromStorage();
     const branchDisplayName = user?.name?.trim() || 'Branch';
+    const accountUsername =
+        user?.email?.trim() ||
+        user?.clerk_username?.trim() ||
+        '';
 
     const confirmLogout = () => {
         localStorage.removeItem('token');
@@ -82,7 +86,7 @@ const Sidebar = ({ sidebarOpen, toggleSidebar }) => {
             <div className="sidebar-footer">
                 <div className="sidebar-account">
                     <div className="account-name">{branchDisplayName}</div>
-                    <div className="account-role">Admin</div>
+                    <div className="account-role">{accountUsername || '—'}</div>
                 </div>
                 <hr className="sidebar-separator" />
                 <a
