@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Modal,
   SafeAreaView,
   ScrollView,
@@ -21,7 +23,12 @@ type Branch = {
   id: number;
   name: string;
   email: string;
-  clerk_username?: string;
+  clerk_username?: string | null;
+  is_active?: boolean;
+};
+
+type AuthUser = {
+  role?: string;
 };
 
 const BranchList = () => {
@@ -40,32 +47,57 @@ const BranchList = () => {
 
   const [open, setOpen] = useState(false);
 
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   // LOAD BRANCHES FROM BACKEND
   const loadBranches = async () => {
-
     try {
-
       const token = await AsyncStorage.getItem("token");
+      if (!token) return;
 
       const response = await fetch(`${API_URL}/branches`, {
         headers: {
           Authorization: `Bearer ${token}`,
-          Accept: "application/json"
-        }
+          Accept: "application/json",
+        },
       });
 
+      if (!response.ok) {
+        return;
+      }
+
       const data = await response.json();
-
-      setBranches(data);
-
+      setBranches(Array.isArray(data) ? data : []);
     } catch (error) {
       console.log(error);
     }
+  };
 
+  const loadCurrentUser = async () => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/user`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
+
+      if (response.status !== 200) return;
+
+      const data = await response.json();
+      setCurrentUser({ role: data?.role });
+    } catch (error) {
+      console.log(error);
+    }
   };
 
   useEffect(() => {
     loadBranches();
+    loadCurrentUser();
   }, []);
 
   const totalPages = Math.ceil(branches.length / ROWS_PER_PAGE);
@@ -73,12 +105,15 @@ const BranchList = () => {
   const pageData = branches.slice(startIndex, startIndex + ROWS_PER_PAGE);
 
   const handleEdit = (branch: Branch) => {
+    if (branch.is_active === false) {
+      Alert.alert("Inactive branch", "This account is deactivated and cannot be edited.");
+      return;
+    }
 
     setSelectedBranch(branch);
     setUsername(branch.email);
-    setClerkUsername(branch.clerk_username ?? '');
+    setClerkUsername(branch.clerk_username ?? "");
     setModalVisible(true);
-
   };
 
   const handleDelete = () => {
@@ -88,40 +123,148 @@ const BranchList = () => {
     setSelectedBranch(null);
   };
 
-  // UPDATE BRANCH
-  const handleConfirm = async () => {
+  const isOwner = currentUser?.role === "owner";
 
+  // UPDATE ACCOUNT (branch login + clerk)
+  const handleUpdateAccount = async () => {
     try {
-
       const token = await AsyncStorage.getItem("token");
+      if (!selectedBranch?.id || !token) {
+        Alert.alert("Error", "Missing session or branch.");
+        return;
+      }
 
-      if (!selectedBranch?.id) return;
+      const email = username.trim();
+      if (!email) {
+        Alert.alert("Error", "Username (email) is required.");
+        return;
+      }
 
-      await fetch(`${API_URL}/branches/${selectedBranch.id}/clerk`, {
+      const body: { email: string; password?: string; clerk_username: string } = {
+        email,
+        clerk_username: clerkUsername.trim(),
+      };
+      if (password.trim().length > 0) {
+        body.password = password.trim();
+      }
 
+      setIsSubmitting(true);
+
+      const response = await fetch(`${API_URL}/branches/${selectedBranch.id}`, {
         method: "PUT",
-
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
-          Accept: "application/json"
+          Accept: "application/json",
         },
-
-        body: JSON.stringify({
-          clerk_username: clerkUsername
-        })
-
+        body: JSON.stringify(body),
       });
 
-      await loadBranches();
+      if (response.status !== 200) {
+        let message = `Update failed (${response.status}).`;
+        try {
+          const err = await response.json();
+          if (err?.message) {
+            message = typeof err.message === "string" ? err.message : message;
+          }
+        } catch {
+          /* ignore */
+        }
+        Alert.alert("Could not update account", message);
+        return;
+      }
+
+      const updated: Branch = await response.json();
+
+      setBranches((prev) =>
+        prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b))
+      );
 
       setModalVisible(false);
       setSelectedBranch(null);
-
+      setUsername("");
+      setClerkUsername("");
+      setPassword("");
     } catch (error) {
       console.log(error);
+      Alert.alert("Error", "Something went wrong. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
+  };
 
+  const handleDeactivateAccount = () => {
+    if (!selectedBranch?.id) return;
+
+    Alert.alert(
+      "Deactivate account",
+      "This branch will no longer be able to log in. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Deactivate",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem("token");
+              if (!token) {
+                Alert.alert("Error", "Missing session.");
+                return;
+              }
+
+              setIsSubmitting(true);
+
+              const response = await fetch(
+                `${API_URL}/branches/${selectedBranch.id}/deactivate`,
+                {
+                  method: "PUT",
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    Accept: "application/json",
+                  },
+                }
+              );
+
+              if (response.status !== 200) {
+                let message = `Deactivate failed (${response.status}).`;
+                try {
+                  const err = await response.json();
+                  if (err?.message) {
+                    message = typeof err.message === "string" ? err.message : message;
+                  }
+                } catch {
+                  /* ignore */
+                }
+                Alert.alert("Could not deactivate", message);
+                return;
+              }
+
+              const payload = await response.json();
+              const updated: Branch | undefined = payload?.user;
+
+              if (updated?.id != null) {
+                setBranches((prev) =>
+                  prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b))
+                );
+              } else {
+                await loadBranches();
+              }
+
+              setModalVisible(false);
+              setSelectedBranch(null);
+              setUsername("");
+              setClerkUsername("");
+              setPassword("");
+            } catch (error) {
+              console.log(error);
+              Alert.alert("Error", "Something went wrong. Please try again.");
+            } finally {
+              setIsSubmitting(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleProfile = () => {
@@ -212,9 +355,14 @@ const BranchList = () => {
                   </View>
 
                   <View>
-                    <Text style={styles.branchName}>{branch.name}</Text>
+                    <Text style={styles.branchName}>
+                      {branch.name}
+                      {branch.is_active === false ? (
+                        <Text style={styles.inactiveLabel}> (Inactive)</Text>
+                      ) : null}
+                    </Text>
 
-                    <Text style={{color:"#64748b"}}>
+                    <Text style={{ color: "#64748b" }}>
                       Clerk: {branch.clerk_username ?? "Not assigned"}
                     </Text>
 
@@ -223,10 +371,18 @@ const BranchList = () => {
                 </View>
 
                 <TouchableOpacity
-                  style={styles.editButton}
+                  style={[
+                    styles.editButton,
+                    branch.is_active === false && styles.editButtonDisabled,
+                  ]}
                   onPress={() => handleEdit(branch)}
+                  disabled={branch.is_active === false}
                 >
-                  <Ionicons name="create-outline" size={22} color="#3b82f6" />
+                  <Ionicons
+                    name="create-outline"
+                    size={22}
+                    color={branch.is_active === false ? "#94a3b8" : "#3b82f6"}
+                  />
                 </TouchableOpacity>
 
               </View>
@@ -248,7 +404,7 @@ const BranchList = () => {
           <View style={styles.modalBox}>
 
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Edit Branch</Text>
+              <Text style={styles.modalTitle}>Update account</Text>
 
               <TouchableOpacity
                 style={styles.modalCloseBtn}
@@ -301,20 +457,36 @@ const BranchList = () => {
               <View style={styles.modalButtons}>
 
                 <TouchableOpacity
-                  style={styles.deleteButton}
+                  style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
                   onPress={handleDelete}
+                  disabled={isSubmitting}
                 >
                   <Text style={styles.deleteButtonText}>Cancel</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.confirmButton}
-                  onPress={handleConfirm}
+                  style={[styles.confirmButton, isSubmitting && styles.buttonDisabled]}
+                  onPress={handleUpdateAccount}
+                  disabled={isSubmitting}
                 >
-                  <Text style={styles.confirmButtonText}>Confirm</Text>
+                  {isSubmitting ? (
+                    <ActivityIndicator color="#ffffff" />
+                  ) : (
+                    <Text style={styles.confirmButtonText}>Update account</Text>
+                  )}
                 </TouchableOpacity>
 
               </View>
+
+              {isOwner ? (
+                <TouchableOpacity
+                  style={[styles.deactivateAccountBtn, isSubmitting && styles.buttonDisabled]}
+                  onPress={handleDeactivateAccount}
+                  disabled={isSubmitting}
+                >
+                  <Text style={styles.deactivateAccountText}>Deactivate account</Text>
+                </TouchableOpacity>
+              ) : null}
 
             </View>
 
@@ -441,6 +613,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.2,
   },
+  inactiveLabel: {
+    fontSize: 15,
+    color: '#94a3b8',
+    fontWeight: '600',
+  },
   editButton: {
     padding: 10,
     borderRadius: 12,
@@ -450,6 +627,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  editButtonDisabled: {
+    opacity: 0.55,
   },
   pagination: {
     flexDirection: 'row',
@@ -614,6 +794,23 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 16,
     letterSpacing: 0.3,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  deactivateAccountBtn: {
+    marginTop: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#dc2626',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  deactivateAccountText: {
+    color: '#dc2626',
+    fontWeight: '700',
+    fontSize: 15,
   },
   header: {
     flexDirection: "row",

@@ -13,6 +13,7 @@ export default function RevenueDashboard() {
   const router = useRouter(); 
   const { branchId, branchName } = useLocalSearchParams<{ branchId?: string; branchName?: string }>();
   const [receipts, setReceipts] = useState<any[]>([]);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const [tooltipPos, setTooltipPos] = useState({
     x: 0,
@@ -22,9 +23,14 @@ export default function RevenueDashboard() {
   });
 
   const loadBranchTransactions = useCallback(async () => {
+    setFetchError(null);
     try {
       const token = await AsyncStorage.getItem("token");
-      if (!token) return;
+      if (!token) {
+        setReceipts([]);
+        setFetchError("You are not signed in. Please log in again.");
+        return;
+      }
 
       const response = await fetch(`${API_URL}/transactions?include_archived=1`, {
         headers: {
@@ -33,15 +39,30 @@ export default function RevenueDashboard() {
         },
       });
 
-      if (!response.ok) return;
+      if (!response.ok) {
+        setReceipts([]);
+        setFetchError(`Could not load branch data (error ${response.status}).`);
+        return;
+      }
 
-      const data = await response.json();
-      const branchTx = (Array.isArray(data) ? data : []).filter((txn: any) =>
-        String(txn.branch_id) === String(branchId || '')
+      let data: unknown;
+      try {
+        data = await response.json();
+      } catch {
+        setReceipts([]);
+        setFetchError("Received an invalid response from the server.");
+        return;
+      }
+
+      const list = Array.isArray(data) ? data : [];
+      const branchTx = list.filter(
+        (txn: any) => String(txn.branch_id) === String(branchId || "")
       );
       setReceipts(branchTx);
     } catch (error) {
       console.log(error);
+      setReceipts([]);
+      setFetchError("Something went wrong. Check your connection and try again.");
     }
   }, [branchId]);
 
@@ -98,6 +119,19 @@ export default function RevenueDashboard() {
             <View style={styles.headerAccent} />
           </View>
            </View>
+
+        {fetchError ? (
+          <View style={styles.errorBanner} accessibilityRole="alert">
+            <Text style={styles.errorBannerText}>{fetchError}</Text>
+            <TouchableOpacity
+              style={styles.errorRetryButton}
+              onPress={() => loadBranchTransactions()}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.errorRetryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {/* Revenue Card */}
         <View style={styles.revenueCard}>
@@ -266,6 +300,34 @@ const styles = StyleSheet.create({
     height: 4,
     backgroundColor: '#3b82f6',
     borderRadius: 2,
+  },
+
+  errorBanner: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: '#fef2f2',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  errorBannerText: {
+    fontSize: 14,
+    color: '#991b1b',
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  errorRetryButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  errorRetryText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 14,
   },
 
   revenueCard: {
