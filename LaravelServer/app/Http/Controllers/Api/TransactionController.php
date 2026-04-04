@@ -154,6 +154,11 @@ class TransactionController extends Controller
         $user = $request->user();
         $includeArchived = $request->boolean('include_archived');
 
+        $request->validate([
+            'date_from' => 'nullable|date_format:Y-m-d',
+            'date_to' => 'nullable|date_format:Y-m-d',
+        ]);
+
         $query = Transaction::with([
             'items',
             'branch:id,name,clerk_username',
@@ -165,6 +170,14 @@ class TransactionController extends Controller
 
         if (! $includeArchived) {
             $query->where('archived', false);
+        }
+
+        if ($request->filled('date_from')) {
+            $query->whereDate('created_at', '>=', $request->input('date_from'));
+        }
+
+        if ($request->filled('date_to')) {
+            $query->whereDate('created_at', '<=', $request->input('date_to'));
         }
 
         $transactions = $query->get();

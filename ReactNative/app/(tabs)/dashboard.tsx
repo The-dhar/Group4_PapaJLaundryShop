@@ -1,11 +1,66 @@
-import React, { useCallback, useState } from "react";
-import { Dimensions, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Pressable, Alert } from "react-native";
+import React, { useCallback, useMemo, useState } from "react";
+import {
+  Alert,
+  Dimensions,
+  Modal,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { BarChart, LineChart } from "react-native-chart-kit";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from "../../config/api";
+
+/** Backend expects `Y-m-d` for `date_from` / `date_to` on GET /transactions */
+function toYmd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function parseYmd(ymd: string): Date {
+  const [yy, mm, dd] = ymd.split("-").map((v) => parseInt(v, 10));
+  return new Date(yy, mm - 1, dd);
+}
+
+function defaultRangeStartYmd(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 6);
+  return toYmd(d);
+}
+
+function eachYmdInRange(fromYmd: string, toYmd: string): string[] {
+  const out: string[] = [];
+  const cur = parseYmd(fromYmd);
+  const end = parseYmd(toYmd);
+  cur.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+  while (cur <= end) {
+    out.push(toYmd(new Date(cur)));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+}
+
+function formatRangeSummary(fromYmd: string, toYmd: string): string {
+  const a = parseYmd(fromYmd);
+  const b = parseYmd(toYmd);
+  const o: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+  if (a.getFullYear() !== b.getFullYear()) {
+    return `${a.toLocaleDateString("en-US", { ...o, year: "numeric" })} – ${b.toLocaleDateString("en-US", { ...o, year: "numeric" })}`;
+  }
+  return `${a.toLocaleDateString("en-US", o)} – ${b.toLocaleDateString("en-US", o)}, ${b.getFullYear()}`;
+}
 
 // BarChart typing workaround to allow runtime onDataPointClick
 const AnyBarChart: any = BarChart;
@@ -23,8 +78,11 @@ const getResponsiveChartWidth = (labels: string[]) => {
 };
 
 export default function DashboardAnalytics() {
-  const [revenueView, setRevenueView] = useState("weekly");
-  const [branchView, setBranchView] = useState("weekly");
+  const [rangeFrom, setRangeFrom] = useState<string>(defaultRangeStartYmd);
+  const [rangeTo, setRangeTo] = useState<string>(() => toYmd(new Date()));
+  const [pickerTarget, setPickerTarget] = useState<null | "from" | "to">(null);
+  const [iosPickerDraft, setIosPickerDraft] = useState<Date>(() => new Date());
+
   const [tooltipPos, setTooltipPos] = useState({
     x: 0,
     y: 0,
@@ -47,17 +105,27 @@ export default function DashboardAnalytics() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
 
-  const weeklyLabels = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-  const monthlyLabels = ["W1", "W2", "W3", "W4"];
-  const yearlyRevenueLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
   const loadDashboard = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem("token");
       if (!token) return;
 
+      let from = rangeFrom;
+      let to = rangeTo;
+      if (from > to) {
+        const t = from;
+        from = to;
+        to = t;
+      }
+
+      const qs = new URLSearchParams({
+        include_archived: "1",
+        date_from: from,
+        date_to: to,
+      });
+
       const [txRes, brRes] = await Promise.all([
-        fetch(`${API_URL}/transactions?include_archived=1`, {
+        fetch(`${API_URL}/transactions?${qs.toString()}`, {
           headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
         }),
         fetch(`${API_URL}/branches`, {
@@ -73,7 +141,7 @@ export default function DashboardAnalytics() {
     } catch (error) {
       console.log(error);
     }
-  }, []);
+  }, [rangeFrom, rangeTo]);
 
   useFocusEffect(
     useCallback(() => {
@@ -81,104 +149,39 @@ export default function DashboardAnalytics() {
     }, [loadDashboard])
   );
 
-  const now = new Date();
-
-  const getWeeklyRevenue = () => {
-    const values = [0, 0, 0, 0, 0, 0, 0];
-    const monday = new Date(now);
-    const day = monday.getDay();
-    const diffToMonday = (day + 6) % 7;
-    monday.setDate(monday.getDate() - diffToMonday);
-    monday.setHours(0, 0, 0, 0);
-
-    transactions.forEach((txn) => {
-      const created = new Date(txn.created_at || now);
-      const diffDays = Math.floor((created.getTime() - monday.getTime()) / (1000 * 60 * 60 * 24));
-      if (diffDays >= 0 && diffDays < 7) {
-        values[diffDays] += Number(txn.amount || 0);
-      }
+  const dailyRevenue = useMemo(() => {
+    const days = eachYmdInRange(rangeFrom <= rangeTo ? rangeFrom : rangeTo, rangeFrom <= rangeTo ? rangeTo : rangeFrom);
+    const labels = days.map((day) => {
+      const d = parseYmd(day);
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
     });
+    const values = days.map((day) =>
+      transactions.reduce((sum, txn) => {
+        if (!txn.created_at) return sum;
+        if (toYmd(new Date(txn.created_at)) === day) return sum + Number(txn.amount || 0);
+        return sum;
+      }, 0)
+    );
+    return { labels, values };
+  }, [transactions, rangeFrom, rangeTo]);
 
-    return values;
-  };
-
-  const getMonthlyRevenue = () => {
-    const values = [0, 0, 0, 0];
-    transactions.forEach((txn) => {
-      const created = new Date(txn.created_at || now);
-      if (created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear()) {
-        const bucket = Math.min(3, Math.floor((created.getDate() - 1) / 7));
-        values[bucket] += Number(txn.amount || 0);
-      }
-    });
-    return values;
-  };
-
-  const getYearlyRevenue = () => {
-    const values = Array(12).fill(0);
-    transactions.forEach((txn) => {
-      const created = new Date(txn.created_at || now);
-      if (created.getFullYear() === now.getFullYear()) {
-        values[created.getMonth()] += Number(txn.amount || 0);
-      }
-    });
-    return values;
-  };
-
-  const weeklyRevenueData = getWeeklyRevenue();
-  const monthlyRevenueData = getMonthlyRevenue();
-  const yearlyRevenueData = getYearlyRevenue();
-
-  const currentRevenue =
-    revenueView === "weekly"
-      ? weeklyRevenueData
-      : revenueView === "monthly"
-      ? monthlyRevenueData
-      : yearlyRevenueData;
-  const currentLabels =
-    revenueView === "weekly"
-      ? weeklyLabels
-      : revenueView === "monthly"
-      ? monthlyLabels
-      : yearlyRevenueLabels;
+  const currentLabels = dailyRevenue.labels;
+  const currentRevenue = dailyRevenue.values;
 
   const branchNames = branches.map((b) => b.name);
   const currentBranchLabels = branchNames.length > 0 ? branchNames : ["No Branches"];
 
-  const getBranchRevenueForView = () => {
+  const currentBranchValues = useMemo(() => {
     const totals = new Map<number, number>();
     branches.forEach((branch) => totals.set(Number(branch.id), 0));
-
     transactions.forEach((txn) => {
-      const created = new Date(txn.created_at || now);
-      const amount = Number(txn.amount || 0);
       const branchId = Number(txn.branch_id);
       if (!totals.has(branchId)) return;
-
-      let include = true;
-      if (branchView === "weekly") {
-        const monday = new Date(now);
-        const day = monday.getDay();
-        const diffToMonday = (day + 6) % 7;
-        monday.setDate(monday.getDate() - diffToMonday);
-        monday.setHours(0, 0, 0, 0);
-        include = created >= monday;
-      } else if (branchView === "monthly") {
-        include = created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
-      } else {
-        include = created.getFullYear() === now.getFullYear();
-      }
-
-      if (include) {
-        totals.set(branchId, (totals.get(branchId) || 0) + amount);
-      }
+      totals.set(branchId, (totals.get(branchId) || 0) + Number(txn.amount || 0));
     });
-
     if (branches.length === 0) return [0];
     return branches.map((branch) => Number((totals.get(Number(branch.id)) || 0).toFixed(2)));
-  };
-
-  const currentBranchValues = getBranchRevenueForView();
+  }, [transactions, branches]);
 
   // Compute responsive chart widths so x-axis labels fit on narrow screens
   const revenueChartWidth = getResponsiveChartWidth(currentLabels);
@@ -198,6 +201,31 @@ export default function DashboardAnalytics() {
   const handleLogout = () => {
     setOpen(false);
     router.push("/login");
+  };
+
+  const applyPickedDate = (d: Date, target: "from" | "to") => {
+    const y = toYmd(d);
+    let nf = target === "from" ? y : rangeFrom;
+    let nt = target === "to" ? y : rangeTo;
+    if (nf > nt) {
+      const s = nf;
+      nf = nt;
+      nt = s;
+    }
+    setRangeFrom(nf);
+    setRangeTo(nt);
+  };
+
+  const openDatePicker = (target: "from" | "to") => {
+    setPickerTarget(target);
+    setIosPickerDraft(parseYmd(target === "from" ? rangeFrom : rangeTo));
+  };
+
+  const onAndroidPickerChange = (event: { type?: string }, date?: Date) => {
+    const target = pickerTarget;
+    setPickerTarget(null);
+    if (!target || event?.type === "dismissed" || !date) return;
+    applyPickedDate(date, target);
   };
 
   const handlePrint = (section: string) => {
@@ -275,41 +303,75 @@ export default function DashboardAnalytics() {
           </View>
         </View>
 
+        <View style={styles.dateRangeCard}>
+          <Text style={styles.dateRangeTitle}>Date range</Text>
+          <Text style={styles.dateRangeSummary}>{formatRangeSummary(rangeFrom, rangeTo)}</Text>
+          <View style={styles.dateRangeRow}>
+            <TouchableOpacity style={styles.dateChip} onPress={() => openDatePicker("from")} activeOpacity={0.85}>
+              <Text style={styles.dateChipLabel}>From</Text>
+              <Text style={styles.dateChipValue}>
+                {parseYmd(rangeFrom).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.dateChip} onPress={() => openDatePicker("to")} activeOpacity={0.85}>
+              <Text style={styles.dateChipLabel}>To</Text>
+              <Text style={styles.dateChipValue}>
+                {parseYmd(rangeTo).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {pickerTarget && Platform.OS === "android" ? (
+          <DateTimePicker
+            value={parseYmd(pickerTarget === "from" ? rangeFrom : rangeTo)}
+            mode="date"
+            display="default"
+            onChange={onAndroidPickerChange}
+          />
+        ) : null}
+
+        {pickerTarget && Platform.OS === "ios" ? (
+          <Modal transparent animationType="fade" visible>
+            <View style={styles.iosPickerOverlay}>
+              <View style={styles.iosPickerSheet}>
+                <View style={styles.iosPickerHeader}>
+                  <TouchableOpacity onPress={() => setPickerTarget(null)}>
+                    <Text style={styles.iosPickerCancel}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (pickerTarget) applyPickedDate(iosPickerDraft, pickerTarget);
+                      setPickerTarget(null);
+                    }}
+                  >
+                    <Text style={styles.iosPickerDone}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+                <DateTimePicker
+                  value={iosPickerDraft}
+                  mode="date"
+                  display="spinner"
+                  onChange={(_, d) => d && setIosPickerDraft(d)}
+                  style={{ alignSelf: "stretch" }}
+                />
+              </View>
+            </View>
+          </Modal>
+        ) : null}
+
         {/* REVENUE */}
         <View style={styles.chartBox}>
           <View style={styles.chartHeader}>
             <Text style={styles.chartTitle}>Revenue</Text>
-            <View style={styles.headerRight}>
-              <View style={styles.switchBox}>
-                <TouchableOpacity 
-                  onPress={() => setRevenueView("weekly")}
-                  style={[styles.switchBtn, revenueView === "weekly" && styles.switchActive]}
-                >
-                  <Text style={[styles.switchText, revenueView === "weekly" && styles.switchTextActive]}>Weekly</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  onPress={() => setRevenueView("monthly")}
-                  style={[styles.switchBtn, revenueView === "monthly" && styles.switchActive]}
-                >
-                  <Text style={[styles.switchText, revenueView === "monthly" && styles.switchTextActive]}>Monthly</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  onPress={() => setRevenueView("yearly")}
-                  style={[styles.switchBtn, revenueView === "yearly" && styles.switchActive]}
-                >
-                  <Text style={[styles.switchText, revenueView === "yearly" && styles.switchTextActive]}>Yearly</Text>
+            {!isSmallScreen ? (
+              <View style={styles.headerRight}>
+                <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint("Revenue")}>
+                  <Ionicons name="print-outline" size={14} color="#1e293b" />
+                  <Text style={styles.printText}>Print</Text>
                 </TouchableOpacity>
               </View>
-
-                {!isSmallScreen && (
-                  <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint('Revenue')}>
-                    <Ionicons name="print-outline" size={14} color="#1e293b" />
-                    <Text style={styles.printText}>Print</Text>
-                  </TouchableOpacity>
-                )}
-            </View>
+            ) : null}
           </View>
           <View style={{ alignItems: "center" }}>
 
@@ -383,37 +445,14 @@ export default function DashboardAnalytics() {
           <View style={styles.chartBox}>
             <View style={styles.chartHeader}>
               <Text style={styles.chartTitle}>Branch Revenue Comparison</Text>
-              <View style={styles.headerRight}>
-                <View style={styles.switchBox}>
-                  <TouchableOpacity 
-                    onPress={() => setBranchView("weekly")}
-                    style={[styles.switchBtn, branchView === "weekly" && styles.switchActive]}
-                  >
-                    <Text style={[styles.switchText, branchView === "weekly" && styles.switchTextActive]}>Weekly</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity 
-                    onPress={() => setBranchView("monthly")}
-                    style={[styles.switchBtn, branchView === "monthly" && styles.switchActive]}
-                  >
-                    <Text style={[styles.switchText, branchView === "monthly" && styles.switchTextActive]}>Monthly</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity 
-                    onPress={() => setBranchView("yearly")}
-                    style={[styles.switchBtn, branchView === "yearly" && styles.switchActive]}
-                  >
-                    <Text style={[styles.switchText, branchView === "yearly" && styles.switchTextActive]}>Yearly</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {!isSmallScreen && (
-                  <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint('Branch Revenue Comparison')}>
+              {!isSmallScreen ? (
+                <View style={styles.headerRight}>
+                  <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint("Branch Revenue Comparison")}>
                     <Ionicons name="print-outline" size={14} color="#1e293b" />
                     <Text style={styles.printText}>Print</Text>
                   </TouchableOpacity>
-                )}
-              </View>
+                </View>
+              ) : null}
             </View>
             <View style={{ alignItems: "center" }}>
 
@@ -490,37 +529,14 @@ export default function DashboardAnalytics() {
         <View style={styles.branchPerformanceBox}>
           <View style={styles.branchPerformanceHeader}>
             <Text style={styles.branchPerformanceTitle}>Branch Performance</Text>
-            <View style={styles.headerRight}>
-              <View style={styles.switchBox}>
-                <TouchableOpacity 
-                  onPress={() => setBranchView("weekly")}
-                  style={[styles.switchBtn, branchView === "weekly" && styles.switchActive]}
-                >
-                  <Text style={[styles.switchText, branchView === "weekly" && styles.switchTextActive]}>Weekly</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  onPress={() => setBranchView("monthly")}
-                  style={[styles.switchBtn, branchView === "monthly" && styles.switchActive]}
-                >
-                  <Text style={[styles.switchText, branchView === "monthly" && styles.switchTextActive]}>Monthly</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  onPress={() => setBranchView("yearly")}
-                  style={[styles.switchBtn, branchView === "yearly" && styles.switchActive]}
-                >
-                  <Text style={[styles.switchText, branchView === "yearly" && styles.switchTextActive]}>Yearly</Text>
-                </TouchableOpacity>
-              </View>
-
-              {!isSmallScreen && (
-                <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint('Branch Performance')}>
+            {!isSmallScreen ? (
+              <View style={styles.headerRight}>
+                <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint("Branch Performance")}>
                   <Ionicons name="print-outline" size={14} color="#1e293b" />
                   <Text style={styles.printText}>Print</Text>
                 </TouchableOpacity>
-              )}
-            </View>
+              </View>
+            ) : null}
           </View>
           <View style={styles.barChartWrapper}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center', marginLeft: 0 }}>
@@ -657,6 +673,86 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
+  dateRangeCard: {
+    backgroundColor: "#ffffff",
+    marginHorizontal: 20,
+    marginTop: 8,
+    padding: 18,
+    borderRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  dateRangeTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#1e293b",
+    marginBottom: 6,
+  },
+  dateRangeSummary: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#64748b",
+    marginBottom: 14,
+  },
+  dateRangeRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  dateChip: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  dateChipLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748b",
+    marginBottom: 4,
+  },
+  dateChipValue: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1e293b",
+  },
+  iosPickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  iosPickerSheet: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 24,
+  },
+  iosPickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  iosPickerCancel: {
+    fontSize: 16,
+    color: "#64748b",
+    fontWeight: "600",
+  },
+  iosPickerDone: {
+    fontSize: 16,
+    color: "#3b82f6",
+    fontWeight: "700",
+  },
   chartBox: {
     backgroundColor: "#ffffff",
     marginHorizontal: 20,
@@ -683,17 +779,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     marginBottom: 12,
   },
-  switchBox: {
-    flexDirection: "row",
-    backgroundColor: "#e0e7ff",
-    borderRadius: 12,
-    padding: 4,
-    shadowColor: "#3b82f6",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
@@ -715,28 +800,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#1e293b",
     fontWeight: "600",
-  },
-  switchBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  switchActive: {
-    backgroundColor: "#3b82f6",
-    shadowColor: "#3b82f6",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  switchText: {
-    color: "#6366f1",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  switchTextActive: {
-    color: "#ffffff",
-    fontWeight: "700",
   },
   branchPerformanceBox: {
     backgroundColor: "#ffffff",
