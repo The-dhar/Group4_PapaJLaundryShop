@@ -100,7 +100,12 @@ const BranchList = () => {
     loadCurrentUser();
   }, []);
 
-  const totalPages = Math.ceil(branches.length / ROWS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(branches.length / ROWS_PER_PAGE));
+
+  useEffect(() => {
+    setPage((p) => (p > totalPages ? totalPages : p < 1 ? 1 : p));
+  }, [totalPages]);
+
   const startIndex = (page - 1) * ROWS_PER_PAGE;
   const pageData = branches.slice(startIndex, startIndex + ROWS_PER_PAGE);
 
@@ -390,6 +395,30 @@ const BranchList = () => {
             ))}
 
           </View>
+
+          {totalPages > 1 && (
+            <View style={styles.pagination}>
+              <TouchableOpacity
+                style={[styles.pageBtn, page <= 1 && styles.disabledBtn]}
+                onPress={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+              >
+                <Text style={[styles.pageText, page <= 1 && styles.disabledText]}>Prev</Text>
+              </TouchableOpacity>
+              <View style={styles.pageNumberContainer}>
+                <Text style={styles.pageNumber}>
+                  {page} / {totalPages}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.pageBtn, page >= totalPages && styles.disabledBtn]}
+                onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+              >
+                <Text style={[styles.pageText, page >= totalPages && styles.disabledText]}>Next</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
         </View>
 

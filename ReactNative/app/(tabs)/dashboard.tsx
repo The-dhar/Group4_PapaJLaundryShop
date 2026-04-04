@@ -39,10 +39,10 @@ function defaultRangeStartYmd(): string {
   return toYmd(d);
 }
 
-function eachYmdInRange(fromYmd: string, toYmd: string): string[] {
+function eachYmdInRange(startYmd: string, endYmd: string): string[] {
   const out: string[] = [];
-  const cur = parseYmd(fromYmd);
-  const end = parseYmd(toYmd);
+  const cur = parseYmd(startYmd);
+  const end = parseYmd(endYmd);
   cur.setHours(0, 0, 0, 0);
   end.setHours(0, 0, 0, 0);
   while (cur <= end) {
@@ -52,9 +52,9 @@ function eachYmdInRange(fromYmd: string, toYmd: string): string[] {
   return out;
 }
 
-function formatRangeSummary(fromYmd: string, toYmd: string): string {
-  const a = parseYmd(fromYmd);
-  const b = parseYmd(toYmd);
+function formatRangeSummary(startYmd: string, endYmd: string): string {
+  const a = parseYmd(startYmd);
+  const b = parseYmd(endYmd);
   const o: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
   if (a.getFullYear() !== b.getFullYear()) {
     return `${a.toLocaleDateString("en-US", { ...o, year: "numeric" })} – ${b.toLocaleDateString("en-US", { ...o, year: "numeric" })}`;
@@ -65,7 +65,7 @@ function formatRangeSummary(fromYmd: string, toYmd: string): string {
 // BarChart typing workaround to allow runtime onDataPointClick
 const AnyBarChart: any = BarChart;
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+const { width: screenWidth } = Dimensions.get("window");
 const isSmallScreen = screenWidth < 375;
 const chartPadding = isSmallScreen ? 40 : 60;
 const chartWidth = screenWidth - chartPadding;

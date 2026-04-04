@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
+  Dimensions,
   Modal,
   SafeAreaView,
   ScrollView,
@@ -10,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { BarChart } from "react-native-chart-kit";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
@@ -28,6 +30,7 @@ type EmployeeHistory = {
   branch_name: string | null;
   role: string | null;
   period_label: string | null;
+  revenue_outcome?: string | null;
 };
 
 type Employee = {
@@ -118,6 +121,31 @@ export default function EmployeesScreen() {
     if (!selectedBranchName) return employees;
     return employees.filter((employee) => employee.branch_name === selectedBranchName);
   }, [employees, selectedBranchName]);
+
+  /**
+   * Previous clerks graph: convert absolute net revenue (PHP) into % of team total
+   * so bars compare relative contribution instead of raw peso scale.
+   */
+  const clerkSharePercentChart = useMemo(() => {
+    const list = filteredEmployees;
+    if (list.length === 0) {
+      return { labels: [""], data: [0] };
+    }
+    const amounts = list.map((e) => Math.max(0, Number(e.net_revenue_php || 0)));
+    const sum = amounts.reduce((a, b) => a + b, 0);
+    const data =
+      sum > 0
+        ? amounts.map((a) => Number(((a / sum) * 100).toFixed(1)))
+        : amounts.map(() => 0);
+    const labels = list.map((e) => {
+      const n = (e.name || e.username || "?").trim();
+      return n.length > 9 ? `${n.slice(0, 8)}…` : n;
+    });
+    return { labels, data };
+  }, [filteredEmployees]);
+
+  const chartWindowW = Dimensions.get("window").width;
+  const clerkChartWidth = Math.max(chartWindowW - 48, clerkSharePercentChart.labels.length * 56);
 
   const resetCreate = () => {
     setCreateName("");
@@ -307,15 +335,47 @@ export default function EmployeesScreen() {
           </View>
         </View>
 
+        {filteredEmployees.length > 0 ? (
+          <View style={styles.chartSection}>
+            <Text style={styles.chartSectionTitle}>Previous clerks — revenue share</Text>
+            <Text style={styles.chartSectionSub}>
+              Each bar is % of total net revenue for clerks in this list (not peso amounts).
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <BarChart
+                data={{
+                  labels: clerkSharePercentChart.labels,
+                  datasets: [{ data: clerkSharePercentChart.data }],
+                }}
+                width={clerkChartWidth}
+                height={220}
+                chartConfig={{
+                  backgroundColor: "#ffffff",
+                  backgroundGradientFrom: "#ffffff",
+                  backgroundGradientTo: "#ffffff",
+                  decimalPlaces: 1,
+                  color: () => "rgba(37, 99, 235, 1)",
+                  labelColor: () => "#334155",
+                  formatYLabel: (y: string) => `${y}%`,
+                  propsForLabels: { fontSize: 11 },
+                  propsForBackgroundLines: { stroke: "#e2e8f0", strokeWidth: 1 },
+                }}
+                style={styles.barChart}
+                fromZero
+                showValuesOnTopOfBars
+                verticalLabelRotation={0}
+              />
+            </ScrollView>
+          </View>
+        ) : null}
+
         {filteredEmployees.map((employee) => (
           <View key={employee.id} style={styles.card}>
             <View style={styles.cardTop}>
-              <View style={{ flex: 1 }}>
+              <View style={styles.cardMain}>
                 <Text style={styles.name}>{employee.name}</Text>
                 <Text style={styles.sub}>@{employee.username}</Text>
-                <Text style={styles.sub}>
-                  {employee.role} • {employee.status}
-                </Text>
+                <Text style={styles.sub}>{employee.status}</Text>
                 <Text style={styles.sub}>Branch: {employee.branch_name || "Unassigned"}</Text>
                 <Text style={[styles.sub, { color: getOutcomeColor(employee.revenue_outcome) }]}>
                   Outcome: {employee.revenue_outcome || "n/a"}
@@ -539,6 +599,17 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: "#1e3a8a", borderColor: "#1e3a8a" },
   chipText: { fontSize: 12, fontWeight: "700", color: "#475569" },
   chipTextActive: { color: "#fff" },
+  chartSection: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 14,
+    marginBottom: 14,
+  },
+  chartSectionTitle: { fontSize: 15, fontWeight: "800", color: "#0f172a" },
+  chartSectionSub: { fontSize: 11, color: "#64748b", marginTop: 4, marginBottom: 8 },
+  barChart: { borderRadius: 12, marginVertical: 4 },
   card: {
     backgroundColor: "#ffffff",
     borderRadius: 16,
@@ -547,7 +618,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
   },
-  cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
+  cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
+  cardMain: { flex: 1, minWidth: 0 },
   name: { fontSize: 16, fontWeight: "800", color: "#0f172a" },
   sub: { fontSize: 12, color: "#64748b", marginTop: 2 },
   assignBtn: {
@@ -558,11 +630,13 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 8,
+    flexShrink: 0,
   },
   assignBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
-  metrics: { flexDirection: "row", marginTop: 12, gap: 8 },
+  metrics: { flexDirection: "row", marginTop: 12, gap: 10, alignItems: "stretch" },
   metric: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: "#f8fafc",
     borderRadius: 12,
     borderWidth: 1,

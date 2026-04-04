@@ -22,9 +22,36 @@ import { API_URL } from "../../config/api";
 /** Scroll area max height so the sheet scrolls internally; avoids the footer clipping the last controls. */
 const CREATE_SERVICE_SCROLL_MAX_H = Math.round(Dimensions.get("window").height * 0.52);
 
+type PriceTier = { range: string; price: number; description: string };
+type PriceService = {
+  id: number;
+  name: string;
+  category: string;
+  tiers: PriceTier[];
+  updatedAt: string | null;
+  effectiveDate: string | null;
+};
+
+function mapServiceRows(data: unknown): PriceService[] {
+  return (Array.isArray(data) ? data : []).map((item: any) => ({
+    id: Number(item.id),
+    name: String(item.name),
+    category: String(item.category),
+    tiers: Array.isArray(item.tiers)
+      ? item.tiers.map((t: any) => ({
+          range: String(t.range || ""),
+          price: Number(t.price || 0),
+          description: String(t.description || ""),
+        }))
+      : [],
+    updatedAt: item.updated_at || null,
+    effectiveDate: item.effective_date || null,
+  }));
+}
+
 const LaundryPriceManager = () => {
-  type Tier = { range: string; price: number; description: string };
-  type Service = { id: number; name: string; category: string; tiers: Tier[]; updatedAt: string | null; effectiveDate: string | null };
+  type Tier = PriceTier;
+  type Service = PriceService;
   type NewService = { name: string; category: string; tiers: { range: string; price: string; description: string }[] };
 
   const [services, setServices] = useState<Service[]>([]);
@@ -43,22 +70,6 @@ const LaundryPriceManager = () => {
     category: 'Wash & Fold',
     tiers: [{ range: '', price: '', description: '' }],
   });
-
-  const mapServiceRows = (data: unknown): Service[] =>
-    (Array.isArray(data) ? data : []).map((item: any) => ({
-      id: Number(item.id),
-      name: String(item.name),
-      category: String(item.category),
-      tiers: Array.isArray(item.tiers)
-        ? item.tiers.map((t: any) => ({
-            range: String(t.range || ''),
-            price: Number(t.price || 0),
-            description: String(t.description || ''),
-          }))
-        : [],
-      updatedAt: item.updated_at || null,
-      effectiveDate: item.effective_date || null,
-    }));
 
   const loadServices = useCallback(async () => {
     setLoadError(null);
