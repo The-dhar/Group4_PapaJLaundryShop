@@ -75,6 +75,8 @@ export const TransactionsProvider = ({ children }) => {
     payment_method = "",
     paid_amount = 0,
     subtotal = 0,
+    /** Required when the logged-in API user is `owner` (manager accounts omit this). */
+    branch_id,
   }) => {
     try {
       const token = localStorage.getItem("token");
@@ -88,32 +90,38 @@ export const TransactionsProvider = ({ children }) => {
         (sub_extras?.stain_removal ? 50 : 0) -
         (discount_amount || 0);
 
+      const payload = {
+        customer_name,
+        customer_address,
+        services: (services || []).map((s) => ({
+          serviceName: s.serviceName,
+          laundryType: s.laundryType,
+          rate: s.rate,
+          kilos: s.kilos,
+          total: s.total,
+        })),
+        weight: weight || 0,
+        subtotal: subtotal || amount,
+        extras,
+        amount,
+        payment_status,
+        payment_method,
+        paid_amount: paid_amount || 0,
+        due_date,
+        is_rush: isRush,
+      };
+
+      if (branch_id != null && branch_id !== "") {
+        payload.branch_id = Number(branch_id);
+      }
+
       const res = await fetch(`${API_URL}/transactions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          customer_name,
-          customer_address,
-          services: (services || []).map((s) => ({
-            serviceName: s.serviceName,
-            laundryType: s.laundryType,
-            rate: s.rate,
-            kilos: s.kilos,
-            total: s.total,
-          })),
-          weight: weight || 0,
-          subtotal: subtotal || amount,
-          extras,
-          amount,
-          payment_status,
-          payment_method,
-          paid_amount: paid_amount || 0,
-          due_date,
-          is_rush: isRush,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {

@@ -17,6 +17,10 @@ class ServicePriceController extends Controller
 
     public function store(Request $request)
     {
+        if (! $request->user()->isOwner()) {
+            return response()->json(['message' => 'Only the owner can create service prices.'], 403);
+        }
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'category' => 'required|string|max:255',
@@ -34,6 +38,10 @@ class ServicePriceController extends Controller
 
     public function update(Request $request, $id)
     {
+        if (! $request->user()->isOwner()) {
+            return response()->json(['message' => 'Only the owner can update service prices.'], 403);
+        }
+
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'category' => 'sometimes|required|string|max:255',

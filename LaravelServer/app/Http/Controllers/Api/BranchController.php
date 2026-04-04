@@ -9,13 +9,27 @@ use Illuminate\Support\Facades\Hash;
 
 class BranchController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return User::where('role', 'manager')->get();
+        $user = $request->user();
+
+        if ($user->isOwner()) {
+            return User::where('role', 'manager')->get();
+        }
+
+        if ($user->isManager()) {
+            return User::where('role', 'manager')->whereKey($user->id)->get();
+        }
+
+        abort(403);
     }
 
     public function store(Request $request)
     {
+        if (! $request->user()->isOwner()) {
+            return response()->json(['message' => 'Only the owner can create branch accounts.'], 403);
+        }
+
         $request->validate([
             'branchName' => 'required',
             'username' => 'required|unique:users,email',
@@ -34,6 +48,16 @@ class BranchController extends Controller
 
     public function updateClerk(Request $request, $id)
     {
+        $user = $request->user();
+        $branchId = (int) $id;
+
+        if ($user->isManager() && $branchId !== (int) $user->id) {
+            return response()->json(['message' => 'You can only update clerk settings for your own branch.'], 403);
+        }
+
+        if (! $user->isOwner() && ! $user->isManager()) {
+            abort(403);
+        }
 
         $request->validate([
             'clerk_username' => 'required'

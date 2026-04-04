@@ -7,10 +7,44 @@ use Illuminate\Http\Request;
 use App\Models\Transaction;
 use App\Models\TransactionItem;
 use App\Models\Customer;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class TransactionController extends Controller
 {
+    /**
+     * Managers may only act on transactions for their branch (branch_id = user id).
+     * Owners may access all branches.
+     */
+    protected function resolveBranchIdForStore(Request $request, User $user): int
+    {
+        if ($user->isOwner()) {
+            $validated = $request->validate([
+                'branch_id' => 'required|integer|exists:users,id',
+            ]);
+            $branch = User::findOrFail($validated['branch_id']);
+            if (! $branch->isManager()) {
+                throw ValidationException::withMessages([
+                    'branch_id' => ['The selected account must be a branch (manager) user.'],
+                ]);
+            }
+
+            return (int) $branch->id;
+        }
+
+        return (int) $user->id;
+    }
+
+    protected function transactionForUser(User $user, int $id): Transaction
+    {
+        $query = Transaction::where('id', $id);
+        if ($user->isManager()) {
+            $query->where('branch_id', $user->id);
+        }
+
+        return $query->firstOrFail();
+    }
 
     public function store(Request $request)
     {
@@ -24,6 +58,8 @@ class TransactionController extends Controller
         // get logged in branch user
         $user = $request->user();
 
+        $branchId = $this->resolveBranchIdForStore($request, $user);
+
         DB::beginTransaction();
 
         try {
@@ -32,8 +68,9 @@ class TransactionController extends Controller
             if ($request->customer_name) {
 
                 Customer::create([
+                    'branch_id' => $branchId,
                     'name' => $request->customer_name,
-                    'address' => $request->customer_address
+                    'address' => $request->customer_address,
                 ]);
 
             }
@@ -46,8 +83,8 @@ class TransactionController extends Controller
 
                 'receipt_number' => $receipt,
 
-                //(branch comes from logged user)
-                'branch_id' => $user->id,
+                // Branch: manager = self; owner = selected branch_id
+                'branch_id' => $branchId,
 
                 'customer_name' => $request->customer_name,
                 'customer_address' => $request->customer_address,
@@ -114,12 +151,17 @@ class TransactionController extends Controller
 
     public function index(Request $request)
     {
+        $user = $request->user();
         $includeArchived = $request->boolean('include_archived');
 
         $query = Transaction::with([
             'items',
             'branch:id,name,clerk_username',
         ]);
+
+        if ($user->isManager()) {
+            $query->where('branch_id', $user->id);
+        }
 
         if (! $includeArchived) {
             $query->where('archived', false);
@@ -161,9 +203,9 @@ class TransactionController extends Controller
         }));
     }
 
-    public function markPaid($id)
+    public function markPaid(Request $request, $id)
     {
-        $transaction = Transaction::findOrFail($id);
+        $transaction = $this->transactionForUser($request->user(), (int) $id);
 
         $transaction->payment_status = 'paid';
 
@@ -176,7 +218,7 @@ class TransactionController extends Controller
 
     public function updatePayment(Request $request, $id)
     {
-        $transaction = Transaction::findOrFail($id);
+        $transaction = $this->transactionForUser($request->user(), (int) $id);
 
         $transaction->paid_amount = $request->paid_amount;
         $transaction->payment_method = $request->payment_method;
@@ -188,9 +230,9 @@ class TransactionController extends Controller
         ]);
     }
 
-    public function archive($id)
+    public function archive(Request $request, $id)
     {
-        $transaction = Transaction::findOrFail($id);
+        $transaction = $this->transactionForUser($request->user(), (int) $id);
 
         $transaction->archived = true;
 
@@ -201,9 +243,9 @@ class TransactionController extends Controller
         ]);
     }
 
-    public function restore($id)
+    public function restore(Request $request, $id)
     {
-        $transaction = Transaction::findOrFail($id);
+        $transaction = $this->transactionForUser($request->user(), (int) $id);
 
         $transaction->archived = false;
         $transaction->save();
@@ -219,7 +261,7 @@ class TransactionController extends Controller
             'inventory_status' => 'nullable|in:in_shop,picked_up',
         ]);
 
-        $transaction = Transaction::findOrFail($id);
+        $transaction = $this->transactionForUser($request->user(), (int) $id);
 
         if (array_key_exists('inventory_status', $validated)) {
             $transaction->inventory_status = $validated['inventory_status'];
