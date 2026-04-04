@@ -1,9 +1,26 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, TextInput,Alert,StyleSheet,SafeAreaView,StatusBar} from 'react-native';
+import React, { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  Dimensions,
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  Modal,
+  TextInput,
+  Alert,
+  StyleSheet,
+  SafeAreaView,
+  StatusBar,
+} from 'react-native';
 import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from "../../config/api";
+
+/** Scroll area max height so the sheet scrolls internally; avoids the footer clipping the last controls. */
+const CREATE_SERVICE_SCROLL_MAX_H = Math.round(Dimensions.get("window").height * 0.52);
 
 const LaundryPriceManager = () => {
   type Tier = { range: string; price: number; description: string };
@@ -11,6 +28,11 @@ const LaundryPriceManager = () => {
   type NewService = { name: string; category: string; tiers: { range: string; price: string; description: string }[] };
 
   const [services, setServices] = useState<Service[]>([]);
+  const [isLoadingPrices, setIsLoadingPrices] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isMutating, setIsMutating] = useState(false);
+  const [confirmKind, setConfirmKind] = useState<'edit' | 'create' | null>(null);
+  const [pendingEffectiveDate, setPendingEffectiveDate] = useState<Date | null>(null);
 
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
@@ -22,43 +44,70 @@ const LaundryPriceManager = () => {
     tiers: [{ range: '', price: '', description: '' }],
   });
 
-  React.useEffect(() => {
-    const loadServices = async () => {
-      try {
-        const token = await AsyncStorage.getItem("token");
-        if (!token) return;
-
-        const response = await fetch(`${API_URL}/service-prices`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-        });
-
-        if (!response.ok) return;
-
-        const data = await response.json();
-        const mapped: Service[] = (Array.isArray(data) ? data : []).map((item: any) => ({
-          id: Number(item.id),
-          name: String(item.name),
-          category: String(item.category),
-          tiers: Array.isArray(item.tiers) ? item.tiers.map((t: any) => ({
+  const mapServiceRows = (data: unknown): Service[] =>
+    (Array.isArray(data) ? data : []).map((item: any) => ({
+      id: Number(item.id),
+      name: String(item.name),
+      category: String(item.category),
+      tiers: Array.isArray(item.tiers)
+        ? item.tiers.map((t: any) => ({
             range: String(t.range || ''),
             price: Number(t.price || 0),
             description: String(t.description || ''),
-          })) : [],
-          updatedAt: item.updated_at || null,
-          effectiveDate: item.effective_date || null,
-        }));
+          }))
+        : [],
+      updatedAt: item.updated_at || null,
+      effectiveDate: item.effective_date || null,
+    }));
 
-        setServices(mapped);
-      } catch (error) {
-        console.log(error);
+  const loadServices = useCallback(async () => {
+    setLoadError(null);
+    setIsLoadingPrices(true);
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        setServices([]);
+        setLoadError('You are not signed in.');
+        return;
       }
-    };
 
-    loadServices();
+      const response = await fetch(`${API_URL}/service-prices`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        setServices([]);
+        setLoadError(`Could not load prices (error ${response.status}).`);
+        return;
+      }
+
+      let data: unknown;
+      try {
+        data = await response.json();
+      } catch {
+        setServices([]);
+        setLoadError('Invalid response from server.');
+        return;
+      }
+
+      setServices(mapServiceRows(data));
+    } catch (error) {
+      console.log(error);
+      setServices([]);
+      setLoadError('Something went wrong. Check your connection.');
+    } finally {
+      setIsLoadingPrices(false);
+    }
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadServices();
+    }, [loadServices])
+  );
 
   const handleEditService = (service: Service) => {
     setSelectedService(service);
@@ -78,11 +127,11 @@ const LaundryPriceManager = () => {
     setEditedTiers(updated);
   };
 
-  const handleSaveChanges = async () => {
+  const handleSaveChanges = () => {
     if (!selectedService) return;
-    
+
     const hasChanges = JSON.stringify(editedTiers) !== JSON.stringify(selectedService.tiers);
-    
+
     if (!hasChanges) {
       setIsEditModalOpen(false);
       return;
@@ -90,64 +139,69 @@ const LaundryPriceManager = () => {
 
     const effectiveDate = new Date();
     effectiveDate.setDate(effectiveDate.getDate() + 7);
+    setPendingEffectiveDate(effectiveDate);
+    setConfirmKind('edit');
+  };
 
-    Alert.alert(
-      'Confirm Price Update',
-      `New prices will be effective on ${effectiveDate.toLocaleDateString('en-US', { 
-        month: 'long', 
-        day: 'numeric', 
-        year: 'numeric' 
-      })}\n\n(7 days from now)\n\nDo you want to proceed?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Proceed',
-          onPress: async () => {
-            try {
-              const token = await AsyncStorage.getItem("token");
-              if (!token) return;
+  const submitEditAfterConfirm = async () => {
+    if (!selectedService || !pendingEffectiveDate) return;
 
-              const response = await fetch(`${API_URL}/service-prices/${selectedService.id}`, {
-                method: "PUT",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${token}`,
-                  Accept: "application/json",
-                },
-                body: JSON.stringify({
-                  tiers: editedTiers,
-                  effective_date: effectiveDate.toISOString().slice(0, 10),
-                }),
-              });
+    setIsMutating(true);
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        Alert.alert("Error", "Not signed in.");
+        return;
+      }
 
-              if (!response.ok) {
-                Alert.alert("Error", "Failed to update pricing.");
-                return;
-              }
+      const response = await fetch(`${API_URL}/service-prices/${selectedService.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          tiers: editedTiers,
+          effective_date: pendingEffectiveDate.toISOString().slice(0, 10),
+        }),
+      });
 
-              const updated = await response.json();
-
-              const updatedServices = services.map((service) =>
-                service.id === selectedService.id
-                  ? {
-                      ...service,
-                      tiers: Array.isArray(updated.tiers) ? updated.tiers : editedTiers,
-                      updatedAt: updated.updated_at || new Date().toISOString(),
-                      effectiveDate: updated.effective_date || effectiveDate.toISOString(),
-                    }
-                  : service
-              );
-
-              setServices(updatedServices);
-              setIsEditModalOpen(false);
-            } catch (error) {
-              console.log(error);
-              Alert.alert("Error", "Failed to update pricing.");
-            }
-          }
+      if (!response.ok) {
+        let msg = "Failed to update pricing.";
+        try {
+          const err = await response.json();
+          if (err?.message) msg = typeof err.message === "string" ? err.message : msg;
+        } catch {
+          /* ignore */
         }
-      ]
-    );
+        Alert.alert("Error", msg);
+        return;
+      }
+
+      const updated = await response.json();
+
+      const updatedServices = services.map((service) =>
+        service.id === selectedService.id
+          ? {
+              ...service,
+              tiers: Array.isArray(updated.tiers) ? updated.tiers : editedTiers,
+              updatedAt: updated.updated_at || new Date().toISOString(),
+              effectiveDate: updated.effective_date || pendingEffectiveDate.toISOString(),
+            }
+          : service
+      );
+
+      setServices(updatedServices);
+      setConfirmKind(null);
+      setPendingEffectiveDate(null);
+      setIsEditModalOpen(false);
+    } catch (error) {
+      console.log(error);
+      Alert.alert("Error", "Failed to update pricing.");
+    } finally {
+      setIsMutating(false);
+    }
   };
 
   const handleAddTier = () => {
@@ -161,15 +215,22 @@ const LaundryPriceManager = () => {
     }
   };
 
-  const handleCreateService = async () => {
-    if (!newService.name || newService.tiers.some(t => !t.range || !t.price)) {
-      Alert.alert('Error', 'Please fill in all required fields');
+  const handleCreateService = () => {
+    if (!newService.name || newService.tiers.some((t) => !t.range || !t.price)) {
+      Alert.alert("Error", "Please fill in all required fields");
       return;
     }
+    setConfirmKind("create");
+  };
 
+  const submitCreateAfterConfirm = async () => {
+    setIsMutating(true);
     try {
       const token = await AsyncStorage.getItem("token");
-      if (!token) return;
+      if (!token) {
+        Alert.alert("Error", "Not signed in.");
+        return;
+      }
 
       const response = await fetch(`${API_URL}/service-prices`, {
         method: "POST",
@@ -181,16 +242,23 @@ const LaundryPriceManager = () => {
         body: JSON.stringify({
           name: newService.name,
           category: newService.category,
-          tiers: newService.tiers.map(t => ({
+          tiers: newService.tiers.map((t) => ({
             range: t.range,
             price: parseFloat(t.price) || 0,
-            description: t.description || '',
+            description: t.description || "",
           })),
         }),
       });
 
       if (!response.ok) {
-        Alert.alert("Error", "Failed to create service.");
+        let msg = "Failed to create service.";
+        try {
+          const err = await response.json();
+          if (err?.message) msg = typeof err.message === "string" ? err.message : msg;
+        } catch {
+          /* ignore */
+        }
+        Alert.alert("Error", msg);
         return;
       }
 
@@ -202,25 +270,28 @@ const LaundryPriceManager = () => {
         category: created.category,
         tiers: Array.isArray(created.tiers)
           ? created.tiers.map((t: any) => ({
-              range: String(t.range || ''),
+              range: String(t.range || ""),
               price: Number(t.price || 0),
-              description: String(t.description || ''),
+              description: String(t.description || ""),
             }))
           : [],
         updatedAt: created.updated_at || new Date().toISOString(),
         effectiveDate: created.effective_date || null,
       };
 
-      setServices([...services, service]);
+      setServices((prev) => [...prev, service]);
+      setConfirmKind(null);
       setIsCreateModalOpen(false);
       setNewService({
-        name: '',
-        category: 'Wash & Fold',
-        tiers: [{ range: '', price: '', description: '' }],
+        name: "",
+        category: "Wash & Fold",
+        tiers: [{ range: "", price: "", description: "" }],
       });
     } catch (error) {
       console.log(error);
       Alert.alert("Error", "Failed to create service.");
+    } finally {
+      setIsMutating(false);
     }
   };
 
@@ -299,11 +370,28 @@ const LaundryPriceManager = () => {
 
             <TouchableOpacity
               onPress={() => setIsCreateModalOpen(true)}
-              style={styles.createButton}
+              style={[styles.createButton, isMutating && styles.buttonDisabled]}
+              disabled={isMutating}
             >
               <Text style={styles.createButtonText}>+ Create</Text>
             </TouchableOpacity>
           </View>
+
+          {loadError ? (
+            <View style={styles.loadErrorBanner}>
+              <Text style={styles.loadErrorText}>{loadError}</Text>
+              <TouchableOpacity style={styles.loadRetryBtn} onPress={() => loadServices()} activeOpacity={0.85}>
+                <Text style={styles.loadRetryText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {isLoadingPrices && services.length === 0 && !loadError ? (
+            <View style={styles.listLoadingBox}>
+              <ActivityIndicator size="large" color="#3b82f6" />
+              <Text style={styles.listLoadingText}>Loading prices…</Text>
+            </View>
+          ) : null}
 
           {/* Services List */}
           <View style={styles.servicesList}>
@@ -324,7 +412,8 @@ const LaundryPriceManager = () => {
                   </View>
                   <TouchableOpacity
                     onPress={() => handleEditService(service)}
-                    style={styles.editButton}
+                    style={[styles.editButton, isMutating && styles.buttonDisabled]}
+                    disabled={isMutating}
                   >
                     <Ionicons name="create-outline" size={20} color="#fff" />
                     <Text style={styles.editButtonText}>Edit</Text>
@@ -363,8 +452,13 @@ const LaundryPriceManager = () => {
                 Edit {selectedService?.name}
               </Text>
               <TouchableOpacity
-                onPress={() => setIsEditModalOpen(false)}
+                onPress={() => {
+                  setConfirmKind(null);
+                  setPendingEffectiveDate(null);
+                  setIsEditModalOpen(false);
+                }}
                 style={styles.closeButton}
+                disabled={isMutating}
               >
                 <Text style={styles.closeButtonText}>✕</Text>
               </TouchableOpacity>
@@ -457,14 +551,20 @@ const LaundryPriceManager = () => {
             {/* Modal Footer */}
             <View style={styles.modalFooter}>
               <TouchableOpacity
-                onPress={() => setIsEditModalOpen(false)}
+                onPress={() => {
+                  setConfirmKind(null);
+                  setPendingEffectiveDate(null);
+                  setIsEditModalOpen(false);
+                }}
                 style={[styles.footerButton, styles.cancelButton]}
+                disabled={isMutating}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleSaveChanges}
-                style={[styles.footerButton, styles.saveButton]}
+                style={[styles.footerButton, styles.saveButton, isMutating && styles.buttonDisabled]}
+                disabled={isMutating}
               >
                 <Text style={styles.saveButtonText}>Save Changes</Text>
               </TouchableOpacity>
@@ -485,15 +585,24 @@ const LaundryPriceManager = () => {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Create New Service</Text>
               <TouchableOpacity
-                onPress={() => setIsCreateModalOpen(false)}
+                onPress={() => {
+                  setConfirmKind(null);
+                  setIsCreateModalOpen(false);
+                }}
                 style={styles.closeButton}
+                disabled={isMutating}
               >
                 <Text style={styles.closeButtonText}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Modal Body */}
-            <ScrollView style={styles.modalBody}>
+            {/* Modal Body — bounded height so "+ Add Tier" stays fully scrollable above the footer */}
+            <ScrollView
+              style={[styles.modalBody, { maxHeight: CREATE_SERVICE_SCROLL_MAX_H }]}
+              contentContainerStyle={styles.createModalScrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
+            >
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Service Name *</Text>
                 <TextInput
@@ -589,7 +698,8 @@ const LaundryPriceManager = () => {
 
               <TouchableOpacity
                 onPress={handleAddNewServiceTier}
-                style={styles.addTierButton}
+                style={[styles.addTierButton, styles.addTierButtonCreate]}
+                activeOpacity={0.85}
               >
                 <Text style={styles.addTierButtonText}>+ Add Tier</Text>
               </TouchableOpacity>
@@ -598,16 +708,74 @@ const LaundryPriceManager = () => {
             {/* Modal Footer */}
             <View style={styles.modalFooter}>
               <TouchableOpacity
-                onPress={() => setIsCreateModalOpen(false)}
+                onPress={() => {
+                  setConfirmKind(null);
+                  setIsCreateModalOpen(false);
+                }}
                 style={[styles.footerButton, styles.cancelButton]}
+                disabled={isMutating}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleCreateService}
-                style={[styles.footerButton, styles.saveButton]}
+                style={[styles.footerButton, styles.saveButton, isMutating && styles.buttonDisabled]}
+                disabled={isMutating}
               >
                 <Text style={styles.saveButtonText}>Create Service</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Confirm price change / create (blocks duplicate submits while saving) */}
+      <Modal visible={confirmKind !== null} animationType="fade" transparent>
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>
+              {confirmKind === "edit" ? "Confirm price update" : "Confirm new service"}
+            </Text>
+            {confirmKind === "edit" && pendingEffectiveDate ? (
+              <Text style={styles.confirmMessage}>
+                New prices will be effective on{" "}
+                {pendingEffectiveDate.toLocaleDateString("en-US", {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+                {"\n\n"}(7 days from now){"\n\n"}Apply this change to the server?
+              </Text>
+            ) : null}
+            {confirmKind === "create" ? (
+              <Text style={styles.confirmMessage}>
+                {newService.name} · {newService.category} · {newService.tiers.length} tier(s).{"\n\n"}
+                Create this service on the server?
+              </Text>
+            ) : null}
+            <View style={styles.confirmActions}>
+              <TouchableOpacity
+                style={[styles.confirmBtnSecondary, isMutating && styles.buttonDisabled]}
+                onPress={() => {
+                  if (!isMutating) setConfirmKind(null);
+                }}
+                disabled={isMutating}
+              >
+                <Text style={styles.confirmBtnSecondaryText}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmBtnPrimary, isMutating && styles.buttonDisabled]}
+                onPress={() => {
+                  if (confirmKind === "edit") submitEditAfterConfirm();
+                  else if (confirmKind === "create") submitCreateAfterConfirm();
+                }}
+                disabled={isMutating}
+              >
+                {isMutating ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={styles.confirmBtnPrimaryText}>Confirm</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -699,6 +867,44 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '700',
+  },
+  buttonDisabled: {
+    opacity: 0.55,
+  },
+  loadErrorBanner: {
+    padding: 20,
+    marginHorizontal: 20,
+    marginTop: 12,
+    backgroundColor: "#fef2f2",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+  },
+  loadErrorText: {
+    color: "#991b1b",
+    fontWeight: "600",
+    marginBottom: 12,
+  },
+  loadRetryBtn: {
+    alignSelf: "flex-start",
+    backgroundColor: "#3b82f6",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  loadRetryText: {
+    color: "#ffffff",
+    fontWeight: "700",
+  },
+  listLoadingBox: {
+    paddingVertical: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+  },
+  listLoadingText: {
+    color: "#64748b",
+    fontWeight: "600",
   },
   servicesList: {
     padding: 20,
@@ -813,7 +1019,10 @@ const styles = StyleSheet.create({
   },
   modalBody: {
     padding: 24,
-    
+  },
+  createModalScrollContent: {
+    paddingBottom: 32,
+    flexGrow: 1,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -895,6 +1104,14 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 8,
+  },
+  /** Create modal: taller tap target + spacing so the control is not clipped by the sheet/footer */
+  addTierButtonCreate: {
+    marginTop: 12,
+    marginBottom: 4,
+    paddingVertical: 18,
+    minHeight: 54,
+    justifyContent: 'center',
   },
   addTierButtonText: {
     color: '#3b82f6',
@@ -1039,6 +1256,64 @@ const styles = StyleSheet.create({
     height: 4,
     backgroundColor: "#3b82f6",
     borderRadius: 2,
+  },
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    padding: 24,
+  },
+  confirmCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 20,
+    padding: 24,
+    maxWidth: 400,
+    alignSelf: "center",
+    width: "100%",
+  },
+  confirmTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginBottom: 12,
+  },
+  confirmMessage: {
+    fontSize: 15,
+    color: "#475569",
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  confirmActions: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  confirmBtnSecondary: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+  },
+  confirmBtnSecondaryText: {
+    color: "#475569",
+    fontWeight: "700",
+    fontSize: 16,
+  },
+  confirmBtnPrimary: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: "#22c55e",
+    alignItems: "center",
+    minHeight: 48,
+    justifyContent: "center",
+  },
+  confirmBtnPrimaryText: {
+    color: "#ffffff",
+    fontWeight: "700",
+    fontSize: 16,
   },
 });
 
