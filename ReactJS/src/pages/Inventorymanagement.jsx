@@ -67,13 +67,24 @@ const Inventorymanagement = () => {
     paidParsed + 0.001 < requiredPaymentTotal;
 
   const filteredData = useMemo(() => {
-    return transactions.filter((row) => {
+    const rows = transactions.filter((row) => {
       const matchesPayment = filterPayment === 'All' || row.payment_status === filterPayment;
       const matchesInventory = filterInventory === 'All' || row.inventory_status === filterInventory;
       const matchesSearch =
         row.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         row.receipt.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesPayment && matchesInventory && matchesSearch && !row.archived;
+    });
+
+    const isPaid = (row) => String(row.payment_status || '').toLowerCase() === 'paid';
+    const rowTime = (row) =>
+      new Date(row.created_at || row.updated_at || 0).getTime();
+
+    return [...rows].sort((a, b) => {
+      const paidA = isPaid(a) ? 1 : 0;
+      const paidB = isPaid(b) ? 1 : 0;
+      if (paidA !== paidB) return paidA - paidB;
+      return rowTime(b) - rowTime(a);
     });
   }, [transactions, filterPayment, filterInventory, searchTerm]);
 
