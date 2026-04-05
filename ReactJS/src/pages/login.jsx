@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import '../styles/loginstyle.css';
 import { API_URL } from "../config/api";
 import Swal from 'sweetalert2';
+import { useTransactions } from '../context/transactionsContext';
 
 export default function LoginPage() {
 
   const navigate = useNavigate();
+  const { fetchTransactions } = useTransactions();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -72,6 +74,8 @@ export default function LoginPage() {
       localStorage.setItem("token", data.token);
 
       localStorage.setItem("user", JSON.stringify(data.user));
+
+      await fetchTransactions();
 
       navigate('/dashboard');
 
