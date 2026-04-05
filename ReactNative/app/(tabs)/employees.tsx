@@ -349,6 +349,8 @@ export default function EmployeesScreen() {
                 }}
                 width={clerkChartWidth}
                 height={220}
+                yAxisLabel=""
+                yAxisSuffix="%"
                 chartConfig={{
                   backgroundColor: "#ffffff",
                   backgroundGradientFrom: "#ffffff",

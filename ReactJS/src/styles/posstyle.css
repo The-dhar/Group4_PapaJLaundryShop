@@ -134,6 +134,12 @@ body {
     width: 100%;
 }
 
+.for-receipt-search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+}
+
 .for-receipt-searchbar {
     display: flex;
     align-items: center;
@@ -143,6 +149,46 @@ body {
     flex: 1;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     border: 1px solid #aaa;
+}
+
+.pos-customer-suggestions {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 4px);
+    z-index: 20;
+    max-height: 220px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+    margin: 0;
+    padding: 4px 0;
+    list-style: none;
+}
+
+.pos-customer-suggestions li button {
+    width: 100%;
+    text-align: left;
+    padding: 10px 14px;
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    cursor: pointer;
+    color: #222;
+}
+
+.pos-customer-suggestions li button:hover {
+    background: #e8f0fe;
+}
+
+.pos-customer-suggestions .pos-suggestion-meta {
+    display: block;
+    font-size: 12px;
+    color: #666;
+    font-weight: 400;
+    margin-top: 2px;
 }
 
 .for-receipt-searchicon {
@@ -181,17 +227,6 @@ body {
     justify-content: space-between;
     align-items: center;
     gap: 10px;
-}
-
-.for-receipt-generator {
-    font-weight: 600;
-    font-size: 14px;
-    color: #333;
-    background-color: rgb(199, 199, 199);
-    flex: 1;
-    border-radius: 10px;
-    padding: 10px 15px;
-    border: 1px solid #aaa;
 }
 
 .for-receipt-calendar {

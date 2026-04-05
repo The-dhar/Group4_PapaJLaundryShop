@@ -19,6 +19,9 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Sharing from "expo-sharing";
+import { cacheDirectory, writeAsStringAsync } from "expo-file-system/legacy";
+import * as XLSX from "xlsx";
 import { API_URL } from "../../config/api";
 
 function toYmd(d: Date): string {
@@ -200,6 +203,103 @@ function applyClientFilters(
   });
 }
 
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  if (typeof btoa !== "undefined") {
+    return btoa(binary);
+  }
+  const g = globalThis as unknown as {
+    Buffer?: { from: (data: Uint8Array) => { toString: (enc: string) => string } };
+  };
+  if (g.Buffer) {
+    return g.Buffer.from(Uint8Array.from(bytes)).toString("base64");
+  }
+  throw new Error("Base64 encoding is not available.");
+}
+
+function buildClerkLogsXlsxBytes(rows: ClerkLog[]): Uint8Array {
+  const data = rows.map((r) => ({
+    "Receipt ID": r.receipt_id,
+    Clerk: r.clerk_name,
+    Branch: r.branch,
+    Customer: r.customer_name,
+    Amount: r.amount,
+    Payment: r.status,
+    Inventory: r.inventory_status,
+    Due: r.due_date,
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Clerk Logs");
+  const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  return new Uint8Array(out);
+}
+
+/** Copy bytes into a plain `ArrayBuffer` for `Blob` (avoids SharedArrayBuffer typing issues). */
+function uint8ToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const out = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(out).set(bytes);
+  return out;
+}
+
+function downloadBlobWeb(blob: Blob, filename: string) {
+  if (typeof document === "undefined") return;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function exportClerkLogsExcel(rows: ClerkLog[]) {
+  const bytes = buildClerkLogsXlsxBytes(rows);
+  const stamp = new Date().toISOString().slice(0, 10);
+  const filename = `clerk-logs-${stamp}.xlsx`;
+  if (Platform.OS === "web") {
+    downloadBlobWeb(
+      new Blob([uint8ToArrayBuffer(bytes)], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+      filename
+    );
+    return;
+  }
+  if (!cacheDirectory) {
+    throw new Error("File storage is not available on this device.");
+  }
+  const uri = `${cacheDirectory}${filename}`;
+  await writeAsStringAsync(uri, uint8ToBase64(bytes), { encoding: "base64" });
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(uri, {
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      dialogTitle: "Export Clerk Logs",
+    });
+  } else {
+    Alert.alert("Export ready", `Saved: ${filename}`);
+  }
+}
+
+/**
+ * PDF export: web uses pdf-lib (download). Native uses expo-print + share sheet — no pdf-lib on device (Metro/tslib safe).
+ */
+async function exportClerkLogsPdf(rows: ClerkLog[]) {
+  if (Platform.OS === "web") {
+    const { exportClerkLogsPdf: run } = await import("../../lib/clerkLogsPdfExport.web");
+    await run(rows);
+    return;
+  }
+  const { exportClerkLogsPdf: run } = await import("../../lib/clerkLogsPdfExport.native");
+  await run(rows);
+}
+
 export default function ClerkLogsList() {
   const { height: windowHeight } = useWindowDimensions();
   const rowsPerPage = useMemo(
@@ -266,13 +366,26 @@ export default function ClerkLogsList() {
   const [open, setOpen] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
-  const runExport = (kind: "excel" | "pdf") => {
-    setExportMenuOpen(false);
-    Alert.alert(
-      kind === "excel" ? "Export Excel" : "Export PDF",
-      "Export will download your current Clerk Logs view. This feature will connect to the server in a later update."
-    );
-  };
+  const runExport = useCallback(
+    async (kind: "excel" | "pdf") => {
+      setExportMenuOpen(false);
+      if (filteredLogs.length === 0) {
+        Alert.alert("Nothing to export", "No transactions match your current filters.");
+        return;
+      }
+      try {
+        if (kind === "excel") {
+          await exportClerkLogsExcel(filteredLogs);
+        } else {
+          await exportClerkLogsPdf(filteredLogs);
+        }
+      } catch (e) {
+        console.error(e);
+        Alert.alert("Export failed", e instanceof Error ? e.message : "Could not export.");
+      }
+    },
+    [filteredLogs]
+  );
 
   const loadClerkLogs = useCallback(async () => {
     try {
@@ -471,14 +584,28 @@ export default function ClerkLogsList() {
 
         <View style={styles.tableCardWrap}>
           <View style={styles.tableOuter}>
+          {/*
+            Outer vertical ScrollView: horizontal ScrollView does not clip tall content on web/native,
+            so rows were painting over the pagination. Vertical scroll keeps overflow inside this region.
+          */}
+          <View style={styles.tableScrollRegion}>
+          <ScrollView
+            style={styles.tableVerticalScroll}
+            contentContainerStyle={styles.tableVerticalScrollContent}
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={Platform.OS !== "web"}
+            bounces={false}
+          >
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator
             bounces={false}
+            nestedScrollEnabled
             style={styles.tableHorizontalScroll}
             contentContainerStyle={styles.tableScrollInner}
           >
-            <View style={{ width: TABLE_MIN_WIDTH, minHeight: "100%" }}>
+            <View style={{ width: TABLE_MIN_WIDTH, alignSelf: "flex-start" }}>
               <View style={styles.tableHeader}>
                 <Text style={[styles.thCell, { width: COL.receipt }]}>Receipt ID</Text>
                 <Text style={[styles.thCell, { width: COL.clerk }]}>Clerk</Text>
@@ -553,6 +680,8 @@ export default function ClerkLogsList() {
               </View>
             </View>
           </ScrollView>
+          </ScrollView>
+          </View>
 
           <View style={styles.pagination}>
             <TouchableOpacity
@@ -1004,13 +1133,30 @@ const styles = StyleSheet.create({
   },
   tableOuter: {
     flex: 1,
+    flexDirection: "column",
     backgroundColor: "#ffffff",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#e2e8f0",
     overflow: "hidden",
   },
-  tableHorizontalScroll: { flex: 1 },
+  /** Fills space above pagination; outer vertical scroll clips tall tables. */
+  tableScrollRegion: {
+    flex: 1,
+    minHeight: 0,
+    overflow: "hidden",
+  },
+  tableVerticalScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  tableVerticalScrollContent: {
+    flexGrow: 1,
+    minWidth: "100%",
+  },
+  tableHorizontalScroll: {
+    width: "100%",
+  },
   tableScrollInner: { flexGrow: 1 },
   tableHeader: {
     flexDirection: "row",
@@ -1028,7 +1174,7 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   /** Space between last row and pagination bar */
-  tableBody: { paddingTop: 2, paddingBottom: 14, flexGrow: 1 },
+  tableBody: { paddingTop: 2, paddingBottom: 14 },
   tableRow: {
     flexDirection: "row",
     paddingVertical: 11,
@@ -1081,6 +1227,8 @@ const styles = StyleSheet.create({
   eyeButton: { alignItems: "center", justifyContent: "center" },
 
   pagination: {
+    flexShrink: 0,
+    flexGrow: 0,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",

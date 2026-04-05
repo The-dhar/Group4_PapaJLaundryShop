@@ -93,11 +93,13 @@ class BranchController extends Controller
         }
 
         $validated = $request->validate([
+            'name' => 'required|string|max:255',
             'email' => 'required|email|max:255|unique:users,email,'.$branch->id,
             'password' => 'nullable|string|min:6',
             'clerk_username' => 'nullable|string|max:255',
         ]);
 
+        $branch->name = $validated['name'];
         $branch->email = $validated['email'];
 
         if (! empty($validated['password'])) {
@@ -139,6 +141,30 @@ class BranchController extends Controller
 
         return response()->json([
             'message' => 'Branch account deactivated.',
+            'user' => $branch->fresh(),
+        ]);
+    }
+
+    /**
+     * Reactivate a branch manager account (owner only).
+     */
+    public function activate(Request $request, $id)
+    {
+        if (! $request->user()->isOwner()) {
+            return response()->json(['message' => 'Only the owner can activate branch accounts.'], 403);
+        }
+
+        $branch = User::findOrFail($id);
+
+        if (! $branch->isManager()) {
+            return response()->json(['message' => 'Invalid branch account.'], 404);
+        }
+
+        $branch->is_active = true;
+        $branch->save();
+
+        return response()->json([
+            'message' => 'Branch account activated.',
             'user' => $branch->fresh(),
         ]);
     }

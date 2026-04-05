@@ -51,7 +51,6 @@ const Archive = () => {
     { name: 'Amount', selector: (row) => `₱${row.amount.toFixed(2)}` },
     {
       name: 'Action',
-      center: true,
       cell: (row) => (
         <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
           <button
@@ -111,7 +110,7 @@ const Archive = () => {
                 <p><strong>Customer:</strong> {selectedTxn.customer_name}</p>
                 <p><strong>Address:</strong> {selectedTxn.customer_address}</p>
 
-                <p>
+                <div className="modal-services-block">
                   <strong>Services:</strong>
                   <ul>
                     {selectedTxn.services.map((svc) => (
@@ -120,7 +119,7 @@ const Archive = () => {
                       </li>
                     ))}
                   </ul>
-                </p>
+                </div>
 
                 <TransactionExtrasSummary txn={selectedTxn} />
 

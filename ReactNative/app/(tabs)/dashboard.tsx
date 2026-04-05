@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
 import {
-  Alert,
   Dimensions,
   Modal,
   Platform,
@@ -228,15 +227,6 @@ export default function DashboardAnalytics() {
     applyPickedDate(date, target);
   };
 
-  const handlePrint = (section: string) => {
-    // Simple, cross-platform fallback: use window.print on web, otherwise inform the user
-    if (typeof window !== 'undefined' && (window as any).print) {
-      (window as any).print();
-      return;
-    }
-    Alert.alert('Print', 'Printing is available on web. For mobile, please take a screenshot or use export feature.');
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -364,14 +354,6 @@ export default function DashboardAnalytics() {
         <View style={styles.chartBox}>
           <View style={styles.chartHeader}>
             <Text style={styles.chartTitle}>Revenue</Text>
-            {!isSmallScreen ? (
-              <View style={styles.headerRight}>
-                <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint("Revenue")}>
-                  <Ionicons name="print-outline" size={14} color="#1e293b" />
-                  <Text style={styles.printText}>Print</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
           </View>
           <View style={{ alignItems: "center" }}>
 
@@ -445,14 +427,6 @@ export default function DashboardAnalytics() {
           <View style={styles.chartBox}>
             <View style={styles.chartHeader}>
               <Text style={styles.chartTitle}>Branch Revenue Comparison</Text>
-              {!isSmallScreen ? (
-                <View style={styles.headerRight}>
-                  <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint("Branch Revenue Comparison")}>
-                    <Ionicons name="print-outline" size={14} color="#1e293b" />
-                    <Text style={styles.printText}>Print</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : null}
             </View>
             <View style={{ alignItems: "center" }}>
 
@@ -529,14 +503,6 @@ export default function DashboardAnalytics() {
         <View style={styles.branchPerformanceBox}>
           <View style={styles.branchPerformanceHeader}>
             <Text style={styles.branchPerformanceTitle}>Branch Performance</Text>
-            {!isSmallScreen ? (
-              <View style={styles.headerRight}>
-                <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint("Branch Performance")}>
-                  <Ionicons name="print-outline" size={14} color="#1e293b" />
-                  <Text style={styles.printText}>Print</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
           </View>
           <View style={styles.barChartWrapper}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center', marginLeft: 0 }}>
@@ -778,28 +744,6 @@ const styles = StyleSheet.create({
     color: "#1e293b",
     letterSpacing: -0.5,
     marginBottom: 12,
-  },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    justifyContent: "flex-start",
-  },
-  printBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    marginLeft: 8,
-    borderRadius: 6,
-    backgroundColor: "#f1f5f9",
-    maxWidth: 70,
-  },
-  printText: {
-    marginLeft: 4,
-    fontSize: 11,
-    color: "#1e293b",
-    fontWeight: "600",
   },
   branchPerformanceBox: {
     backgroundColor: "#ffffff",

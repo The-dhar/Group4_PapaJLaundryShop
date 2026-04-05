@@ -2,8 +2,81 @@ import React, { useEffect, useState } from "react";
 import "../componentstyle/smallcardModal.css";
 import '../componentstyle/customerModalstylesheet.css';
 import Swal from 'sweetalert2';
+import { API_URL } from "../config/api";
 
-const CustomerModal = ({ isOpen, onClose, onSave, initial }) => {
+function normalizeFullName(s) {
+  return String(s || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+/** Same key as POS: street|barangay|city normalized for comparison. */
+function normalizeAddressKey(street, barangay, city) {
+  return [street, barangay, city]
+    .map((x) => String(x || "").trim().toLowerCase().replace(/\s+/g, " "))
+    .join("|");
+}
+
+function splitAddressLine(address) {
+  const raw = String(address || "").trim();
+  if (!raw) return { street: "", barangay: "", city: "" };
+  const parts = raw.split(",").map((p) => p.trim());
+  return {
+    street: parts[0] || "",
+    barangay: parts[1] || "",
+    city: parts[2] || "",
+  };
+}
+
+function addressKeyFromTransaction(t) {
+  const p = splitAddressLine(t.customer_address);
+  return normalizeAddressKey(p.street, p.barangay, p.city);
+}
+
+function addressKeyFromApiCustomer(c) {
+  if (c.street || c.barangay || c.city) {
+    return normalizeAddressKey(c.street, c.barangay, c.city);
+  }
+  if (c.address) {
+    const p = splitAddressLine(c.address);
+    return normalizeAddressKey(p.street, p.barangay, p.city);
+  }
+  return "";
+}
+
+function customerNameMatchesRecord(c, targetNameNorm) {
+  const byName = normalizeFullName(c.name);
+  const byParts = normalizeFullName(`${c.first_name || ""} ${c.last_name || ""}`);
+  return byName === targetNameNorm || (byParts === targetNameNorm && byParts.length > 0);
+}
+
+async function fetchCustomerNameMatches(query) {
+  const token = localStorage.getItem("token");
+  if (!token || query.trim().length < 2) return [];
+  const res = await fetch(`${API_URL}/customers/search/${encodeURIComponent(query.trim())}`, {
+    headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+/** Same person = same normalized name AND same normalized address (not name alone). */
+function hasDuplicateNameAndAddress(fullName, street, barangay, city, transactions) {
+  const targetName = normalizeFullName(fullName);
+  const targetAddr = normalizeAddressKey(street, barangay, city);
+  if (!targetName || !targetAddr) return false;
+
+  return (transactions || []).some(
+    (t) =>
+      !t.archived &&
+      normalizeFullName(t.customer_name) === targetName &&
+      addressKeyFromTransaction(t) === targetAddr
+  );
+}
+
+const CustomerModal = ({ isOpen, onClose, onSave, initial, transactions = [] }) => {
   // Chopped States
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -24,7 +97,7 @@ const CustomerModal = ({ isOpen, onClose, onSave, initial }) => {
 
   if (!isOpen) return null;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     // Validation: Check if required fields are filled
     if (!firstName || !lastName || !street || !barangay || !city) {
       Swal.fire({
@@ -36,15 +109,52 @@ const CustomerModal = ({ isOpen, onClose, onSave, initial }) => {
       return;
     }
 
-    // Send the chopped data back to POs.jsx
-    onSave({ 
-      firstName, 
-      lastName, 
-      street, 
-      barangay, 
-      city 
+    const fullName = `${firstName.trim()} ${lastName.trim()}`;
+    const targetName = normalizeFullName(fullName);
+    const targetAddr = normalizeAddressKey(street, barangay, city);
+
+    let duplicateInApi = false;
+    try {
+      const rows = await fetchCustomerNameMatches(fullName);
+      duplicateInApi = rows.some(
+        (c) =>
+          customerNameMatchesRecord(c, targetName) && addressKeyFromApiCustomer(c) === targetAddr
+      );
+    } catch {
+      /* ignore network errors; still allow save */
+    }
+
+    const duplicateInTx = hasDuplicateNameAndAddress(
+      fullName,
+      street,
+      barangay,
+      city,
+      transactions
+    );
+
+    if (duplicateInApi || duplicateInTx) {
+      const result = await Swal.fire({
+        title: "Customer may already exist",
+        text:
+          `The same name and address "${fullName}" / "${[street, barangay, city].filter(Boolean).join(", ")}" ` +
+          `matches someone already on file. Use Search Names on the POS to load them, or continue only if you are sure this is not a duplicate entry.`,
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Continue anyway",
+        cancelButtonText: "Go back",
+        width: 460,
+      });
+      if (!result.isConfirmed) return;
+    }
+
+    onSave({
+      firstName,
+      lastName,
+      street,
+      barangay,
+      city,
     });
-    
+
     onClose();
   };
 

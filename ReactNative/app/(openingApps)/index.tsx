@@ -1,11 +1,30 @@
-import { router } from 'expo-router';
-import React from 'react';
-import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { router } from "expo-router";
+import React, { useEffect } from "react";
+import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View, Image } from "react-native";
 
 export default function LaundryWelcomeScreen() {
-const handleGetStarted = () => {
-  router.push('/(openingApps)/login');
-};
+  /** After reload, skip welcome if already logged in (token persisted). */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await AsyncStorage.getItem("token");
+        if (!cancelled && token) {
+          router.replace("/(tabs)/dashboard");
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleGetStarted = () => {
+    router.push("/(openingApps)/login");
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>

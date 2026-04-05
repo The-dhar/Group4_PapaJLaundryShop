@@ -2,8 +2,12 @@ import React, { useMemo, useState } from 'react';
 import DataTable from 'react-data-table-component';
 import DashboardLayout from '../components/dashboardlayout';
 import TransactionExtrasSummary from '../components/TransactionExtrasSummary';
-import { BsEye,BsCashStack} from 'react-icons/bs';
+import { BsEye, BsCashStack } from 'react-icons/bs';
 import { useTransactions } from '../context/transactionsContext';
+import {
+  isThreeOrMoreDaysPastDueDate,
+  isThirtyOrMoreDaysPastDueDate,
+} from '../utils/unclaimedDue';
 import '../styles/inventorystyle.css';
 
 function formatInventoryStatus(status) {
@@ -33,19 +37,19 @@ const Inventorymanagement = () => {
   const [paidAmountInput, setPaidAmountInput] = useState('');
   const [penaltyInput, setPenaltyInput] = useState('');
 
-  // Check if past due (penalty rule)
-  const isPastDue = (dueDate) => {
-    if (!dueDate) return false;
-    const today = new Date();
-    const due = new Date(dueDate);
-    const diffTime = today - due;
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays >= 7 && diffDays <= 30;
+  /** Penalty 5% applies only for urgent tier: still In Shop and 30+ calendar days past due (same as red Unclaimed). */
+  const calculatePenalty = (amount, dueDate, inventoryStatus) => {
+    if (String(inventoryStatus || '').toLowerCase() !== 'in_shop') return 0;
+    return isThirtyOrMoreDaysPastDueDate(dueDate) ? amount * 0.05 : 0;
   };
 
-  const calculatePenalty = (amount, dueDate) => {
-    return isPastDue(dueDate) ? amount * 0.05 : 0;
-  };
+  /** Transaction Log: none | warning (3–29d) | urgent (30+d) — only when still In Shop. */
+  function unclaimedTier(row) {
+    if (String(row.inventory_status || '').toLowerCase() !== 'in_shop') return 'none';
+    if (isThirtyOrMoreDaysPastDueDate(row.due_date)) return 'urgent';
+    if (isThreeOrMoreDaysPastDueDate(row.due_date)) return 'warning';
+    return 'none';
+  }
 
   /** Parses amount field; null = walang valid number na na-enter pa */
   const parseAmountInput = (str) => {
@@ -133,6 +137,43 @@ const Inventorymanagement = () => {
     },
     { name: 'Amount', selector: (row) => `₱${row.amount.toFixed(2)}` },
     {
+      name: 'Due Date',
+      sortable: true,
+      selector: (row) => row.due_date || '—',
+    },
+    {
+      name: 'Unclaimed',
+      sortable: true,
+      sortFunction: (a, b) => {
+        const order = { none: 0, warning: 1, urgent: 2 };
+        return order[unclaimedTier(a)] - order[unclaimedTier(b)];
+      },
+      selector: (row) => {
+        const t = unclaimedTier(row);
+        if (t === 'urgent') return 'Urgent';
+        if (t === 'warning') return 'Warning';
+        return '';
+      },
+      cell: (row) => {
+        const t = unclaimedTier(row);
+        if (t === 'urgent') {
+          return (
+            <span className="unclaimed-pill unclaimed-pill--urgent" title="30+ days past due — penalty may apply">
+              Urgent
+            </span>
+          );
+        }
+        if (t === 'warning') {
+          return (
+            <span className="unclaimed-pill unclaimed-pill--warning" title="3–29 days past due — no penalty yet">
+              Warning
+            </span>
+          );
+        }
+        return <span className="unclaimed-pill unclaimed-pill--none">—</span>;
+      },
+    },
+    {
       name: 'Action',
       cell: (row) => (
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -162,7 +203,7 @@ const Inventorymanagement = () => {
                 payment_method: "Cash" // force cash on edit
               });
               setPaidAmountInput(row.paid_amount && row.paid_amount !== 0 ? String(row.paid_amount) : '');
-              const pen = calculatePenalty(row.amount, row.due_date);
+              const pen = calculatePenalty(row.amount, row.due_date, row.inventory_status);
               setPenaltyInput(pen > 0 ? String(pen) : '');
             }}
           >
@@ -224,15 +265,16 @@ const Inventorymanagement = () => {
             <p><strong>Customer:</strong> {selectedTxn.customer_name}</p>
             <p><strong>Address:</strong> {selectedTxn.customer_address}</p>
 
-            <p><strong>Services:</strong>
-             <ul>
-              {selectedTxn.services.map((svc) => (
-                <li key={svc.id}>
-                  ({svc.serviceName}) {svc.kilos} kg @ ₱{svc.rate.toFixed(2)} = ₱{svc.total.toFixed(2)}
-                </li>
-              ))}
-            </ul>
-            </p>
+            <div className="modal-services-block">
+              <strong>Services:</strong>
+              <ul>
+                {selectedTxn.services.map((svc) => (
+                  <li key={svc.id}>
+                    ({svc.serviceName}) {svc.kilos} kg @ ₱{svc.rate.toFixed(2)} = ₱{svc.total.toFixed(2)}
+                  </li>
+                ))}
+              </ul>
+            </div>
 
             <TransactionExtrasSummary txn={selectedTxn} />
 
