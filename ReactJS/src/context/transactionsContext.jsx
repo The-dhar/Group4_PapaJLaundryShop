@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { API_URL } from "../config/api";
 
 const TransactionsContext = createContext(null);
@@ -34,7 +34,7 @@ export const TransactionsProvider = ({ children }) => {
     [transactions]
   );
 
-  const fetchTransactions = async () => {
+  const fetchTransactions = useCallback(async () => {
     try {
       const token = localStorage.getItem("token");
       if (!token) return;
@@ -53,11 +53,11 @@ export const TransactionsProvider = ({ children }) => {
     } catch (error) {
       console.error("Error fetching transactions:", error);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchTransactions();
-  }, []);
+  }, [fetchTransactions]);
 
   const createTransaction = async ({
     customer_name,
@@ -295,7 +295,7 @@ export const TransactionsProvider = ({ children }) => {
       updateTransactionPaidAmount,
       updateTransaction,
     }),
-    [transactions, archivedTransactions]
+    [transactions, archivedTransactions, fetchTransactions]
   );
 
   return (

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { BsBoxSeam, BsExclamationTriangle, BsCreditCard } from 'react-icons/bs';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Card from '../components/card';
@@ -6,9 +6,24 @@ import DashboardLayout from '../components/dashboardlayout';
 import { useTransactions } from '../context/transactionsContext';
 import '../styles/dashboardstyle.css';
 
+const POLL_MS = 45_000;
+
 const Dashboard = () => {
-  const { transactions } = useTransactions();
+  const { transactions, fetchTransactions } = useTransactions();
   const [viewType, setViewType] = useState('week');
+
+  useEffect(() => {
+    fetchTransactions();
+    const intervalId = setInterval(() => fetchTransactions(), POLL_MS);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchTransactions();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [fetchTransactions]);
 
   // Helper to format amount with peso sign
   const formatPeso = (value) => `₱${value.toLocaleString()}`;
@@ -48,17 +63,23 @@ const Dashboard = () => {
   }, [activeTransactions]);
 
   const weekData = useMemo(() => {
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const now = new Date();
-    const start = new Date(now);
-    start.setDate(now.getDate() - 6);
-    start.setHours(0, 0, 0, 0);
+    const dow = now.getDay();
+    const mondayOffset = dow === 0 ? -6 : 1 - dow;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + mondayOffset);
+    monday.setHours(0, 0, 0, 0);
+
+    const weekEnd = new Date(monday);
+    weekEnd.setDate(monday.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
 
     const rows = Array.from({ length: 7 }).map((_, idx) => {
-      const d = new Date(start);
-      d.setDate(start.getDate() + idx);
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + idx);
       return {
-        name: dayNames[d.getDay()],
+        name: dayLabels[idx],
         key: d.toDateString(),
         revenue: 0,
         unpaid: 0,
@@ -67,6 +88,7 @@ const Dashboard = () => {
 
     activeTransactions.forEach((t) => {
       const dt = new Date(t.created_at || t.updated_at || Date.now());
+      if (dt < monday || dt > weekEnd) return;
       const key = dt.toDateString();
       const row = rows.find((r) => r.key === key);
       if (!row) return;
