@@ -25,6 +25,9 @@ Route::middleware('auth:sanctum')->group(function () {
         return $request->user();
     });
 
+    Route::put('/user/profile', [AuthController::class, 'updateProfile']);
+    Route::put('/user/password', [AuthController::class, 'updatePassword']);
+
     Route::get('/branches', [BranchController::class, 'index']);
     Route::post('/branches', [BranchController::class, 'store']);
     Route::put('/branches/{id}/deactivate', [BranchController::class, 'deactivate']);

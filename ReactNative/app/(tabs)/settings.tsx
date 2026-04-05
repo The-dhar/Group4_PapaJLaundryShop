@@ -3,6 +3,8 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Platform,
+  Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -30,6 +32,51 @@ type Branch = {
 type AuthUser = {
   role?: string;
 };
+
+/** Laravel validation `errors` map + `message`; surfaces field messages instead of a generic line. */
+function formatApiErrorMessage(payload: unknown): string {
+  if (!payload || typeof payload !== "object") return "Request failed.";
+  const e = payload as Record<string, unknown>;
+  if (e.errors && typeof e.errors === "object") {
+    const msgs: string[] = [];
+    for (const v of Object.values(e.errors as Record<string, unknown>)) {
+      if (Array.isArray(v)) {
+        for (const item of v) {
+          if (typeof item === "string") msgs.push(item);
+        }
+      } else if (typeof v === "string") {
+        msgs.push(v);
+      }
+    }
+    if (msgs.length) return msgs.join(" ");
+  }
+  if (typeof e.message === "string") return e.message;
+  return "Request failed.";
+}
+
+/**
+ * react-native-web often does not run Alert.alert() button onPress callbacks reliably.
+ * Use window.confirm on web; native keeps the two-button Alert.
+ */
+async function confirmAsync(
+  title: string,
+  message: string,
+  confirmLabel: string
+): Promise<boolean> {
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    return window.confirm(`${title}\n\n${message}`);
+  }
+  return new Promise((resolve) => {
+    Alert.alert(title, message, [
+      { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+      {
+        text: confirmLabel,
+        style: confirmLabel === "Deactivate" ? "destructive" : "default",
+        onPress: () => resolve(true),
+      },
+    ]);
+  });
+}
 
 const BranchList = () => {
 
@@ -168,13 +215,11 @@ const BranchList = () => {
         body: JSON.stringify(body),
       });
 
-      if (response.status !== 200) {
+      if (!response.ok) {
         let message = `Update failed (${response.status}).`;
         try {
           const err = await response.json();
-          if (err?.message) {
-            message = typeof err.message === "string" ? err.message : message;
-          }
+          message = formatApiErrorMessage(err);
         } catch {
           /* ignore */
         }
@@ -197,144 +242,128 @@ const BranchList = () => {
     }
   };
 
-  const handleDeactivateAccount = () => {
+  const handleDeactivateAccount = async () => {
     if (!selectedBranch?.id) return;
 
-    Alert.alert(
+    const ok = await confirmAsync(
       "Deactivate account",
       "This branch will no longer be able to log in. Continue?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Deactivate",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const token = await AsyncStorage.getItem("token");
-              if (!token) {
-                Alert.alert("Error", "Missing session.");
-                return;
-              }
-
-              setIsSubmitting(true);
-
-              const response = await fetch(
-                `${API_URL}/branches/${selectedBranch.id}/deactivate`,
-                {
-                  method: "PUT",
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    Accept: "application/json",
-                  },
-                }
-              );
-
-              if (response.status !== 200) {
-                let message = `Deactivate failed (${response.status}).`;
-                try {
-                  const err = await response.json();
-                  if (err?.message) {
-                    message = typeof err.message === "string" ? err.message : message;
-                  }
-                } catch {
-                  /* ignore */
-                }
-                Alert.alert("Could not deactivate", message);
-                return;
-              }
-
-              const payload = await response.json();
-              const updated: Branch | undefined = payload?.user;
-
-              if (updated?.id != null) {
-                setBranches((prev) =>
-                  prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b))
-                );
-              } else {
-                await loadBranches();
-              }
-
-              closeModal();
-            } catch (error) {
-              console.log(error);
-              Alert.alert("Error", "Something went wrong. Please try again.");
-            } finally {
-              setIsSubmitting(false);
-            }
-          },
-        },
-      ]
+      "Deactivate"
     );
+    if (!ok) return;
+
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        Alert.alert("Error", "Missing session.");
+        return;
+      }
+
+      setIsSubmitting(true);
+
+      const response = await fetch(
+        `${API_URL}/branches/${selectedBranch.id}/deactivate`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        let message = `Deactivate failed (${response.status}).`;
+        try {
+          const err = await response.json();
+          message = formatApiErrorMessage(err);
+        } catch {
+          /* ignore */
+        }
+        Alert.alert("Could not deactivate", message);
+        return;
+      }
+
+      const payload = await response.json();
+      const updated: Branch | undefined = payload?.user;
+
+      if (updated?.id != null) {
+        setBranches((prev) =>
+          prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b))
+        );
+      } else {
+        await loadBranches();
+      }
+
+      closeModal();
+    } catch (error) {
+      console.log(error);
+      Alert.alert("Error", "Something went wrong. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleActivateAccount = () => {
+  const handleActivateAccount = async () => {
     if (!selectedBranch?.id || !isOwner) return;
 
-    Alert.alert(
+    const ok = await confirmAsync(
       "Activate account",
       "This branch will be allowed to log in again. Continue?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Activate",
-          style: "default",
-          onPress: async () => {
-            try {
-              const token = await AsyncStorage.getItem("token");
-              if (!token) {
-                Alert.alert("Error", "Missing session.");
-                return;
-              }
-
-              setIsSubmitting(true);
-
-              const response = await fetch(
-                `${API_URL}/branches/${selectedBranch.id}/activate`,
-                {
-                  method: "PUT",
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    Accept: "application/json",
-                  },
-                }
-              );
-
-              if (response.status !== 200) {
-                let message = `Activate failed (${response.status}).`;
-                try {
-                  const err = await response.json();
-                  if (err?.message) {
-                    message = typeof err.message === "string" ? err.message : message;
-                  }
-                } catch {
-                  /* ignore */
-                }
-                Alert.alert("Could not activate", message);
-                return;
-              }
-
-              const payload = await response.json();
-              const updated: Branch | undefined = payload?.user;
-
-              if (updated?.id != null) {
-                setBranches((prev) =>
-                  prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b))
-                );
-              } else {
-                await loadBranches();
-              }
-
-              closeModal();
-            } catch (error) {
-              console.log(error);
-              Alert.alert("Error", "Something went wrong. Please try again.");
-            } finally {
-              setIsSubmitting(false);
-            }
-          },
-        },
-      ]
+      "Activate"
     );
+    if (!ok) return;
+
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        Alert.alert("Error", "Missing session.");
+        return;
+      }
+
+      setIsSubmitting(true);
+
+      const response = await fetch(
+        `${API_URL}/branches/${selectedBranch.id}/activate`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        let message = `Activate failed (${response.status}).`;
+        try {
+          const err = await response.json();
+          message = formatApiErrorMessage(err);
+        } catch {
+          /* ignore */
+        }
+        Alert.alert("Could not activate", message);
+        return;
+      }
+
+      const payload = await response.json();
+      const updated: Branch | undefined = payload?.user;
+
+      if (updated?.id != null) {
+        setBranches((prev) =>
+          prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b))
+        );
+      } else {
+        await loadBranches();
+      }
+
+      closeModal();
+    } catch (error) {
+      console.log(error);
+      Alert.alert("Error", "Something went wrong. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleProfile = () => {
@@ -489,21 +518,23 @@ const BranchList = () => {
 
       <Modal visible={modalVisible} transparent animationType="fade">
 
-        <View style={styles.modalOverlay}>
+        <View style={styles.modalOverlay} pointerEvents="box-none">
 
-          <View style={styles.modalBox}>
+          <View style={styles.modalBox} pointerEvents="auto">
 
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
                 {selectedIsInactive ? "Branch account (inactive)" : "Update account"}
               </Text>
 
-              <TouchableOpacity
+              <Pressable
                 style={styles.modalCloseBtn}
                 onPress={closeModal}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
               >
                 <Text style={styles.modalCloseText}>✕</Text>
-              </TouchableOpacity>
+              </Pressable>
 
             </View>
 
@@ -552,46 +583,50 @@ const BranchList = () => {
 
               <View style={styles.modalButtons}>
 
-                <TouchableOpacity
+                <Pressable
                   style={[styles.cancelButton, isSubmitting && styles.buttonDisabled]}
                   onPress={closeModal}
                   disabled={isSubmitting}
+                  accessibilityRole="button"
                 >
                   <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
+                </Pressable>
 
-                <TouchableOpacity
+                <Pressable
                   style={[styles.confirmButton, isSubmitting && styles.buttonDisabled]}
                   onPress={handleUpdateAccount}
                   disabled={isSubmitting}
+                  accessibilityRole="button"
                 >
                   {isSubmitting ? (
                     <ActivityIndicator color="#ffffff" />
                   ) : (
                     <Text style={styles.confirmButtonText}>Update account</Text>
                   )}
-                </TouchableOpacity>
+                </Pressable>
 
               </View>
 
               {isOwner && selectedIsInactive ? (
-                <TouchableOpacity
+                <Pressable
                   style={[styles.activateAccountBtn, isSubmitting && styles.buttonDisabled]}
                   onPress={handleActivateAccount}
                   disabled={isSubmitting}
+                  accessibilityRole="button"
                 >
                   <Text style={styles.activateAccountText}>Activate account</Text>
-                </TouchableOpacity>
+                </Pressable>
               ) : null}
 
               {isOwner && !selectedIsInactive ? (
-                <TouchableOpacity
+                <Pressable
                   style={[styles.deactivateAccountBtn, isSubmitting && styles.buttonDisabled]}
                   onPress={handleDeactivateAccount}
                   disabled={isSubmitting}
+                  accessibilityRole="button"
                 >
                   <Text style={styles.deactivateAccountText}>Deactivate account</Text>
-                </TouchableOpacity>
+                </Pressable>
               ) : null}
 
             </View>
