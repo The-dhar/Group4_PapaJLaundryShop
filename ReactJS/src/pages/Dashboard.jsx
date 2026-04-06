@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BsBoxSeam, BsExclamationTriangle, BsCreditCard } from 'react-icons/bs';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import Card from '../components/card';
 import DashboardLayout from '../components/dashboardlayout';
 import { useTransactions } from '../context/transactionsContext';
@@ -176,7 +176,7 @@ const Dashboard = () => {
         </div>
 
         {/* REVENUE LINE CHART */}
-        <Card title="Revenue">
+        <Card title="Revenue and Debit sales">
           <div className="chart-controls">
             <button 
               className={`chart-toggle-btn ${viewType === 'week' ? 'active' : ''}`}
@@ -192,15 +192,21 @@ const Dashboard = () => {
             </button>
           </div>
 
-          <ResponsiveContainer width="100%" height={200}>
-  <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={220}>
+  <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
     <CartesianGrid strokeDasharray="3 3" />
+    <Legend
+      verticalAlign="top"
+      align="center"
+      iconType="circle"
+      iconSize={10}
+      wrapperStyle={{ paddingBottom: 8 }}
+      formatter={(value) => <span style={{ color: '#334155', fontSize: 13 }}>{value}</span>}
+    />
     <XAxis dataKey="name" />
     <YAxis tickFormatter={(value) => `₱${value}`} />
     <Tooltip formatter={(value) => formatPeso(value)} />
-    
-    {/* Revenue Line (Blue) */}
-    <Line 
+    <Line
       type="monotone"
       dataKey="revenue"
       name="Revenue"
@@ -208,13 +214,11 @@ const Dashboard = () => {
       strokeWidth={3}
       dot={{ r: 4 }}
     />
-
-    {/* Unpaid/Debit Line (Red) */}
-    <Line 
+    <Line
       type="monotone"
       dataKey="unpaid"
-      name="Debit Sales"
-      stroke="#E63946" 
+      name="Debit sales"
+      stroke="#E63946"
       strokeWidth={3}
       dot={{ r: 4 }}
     />
