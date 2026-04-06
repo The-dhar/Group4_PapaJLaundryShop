@@ -1,5 +1,6 @@
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "expo-router";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -15,7 +16,6 @@ import {
   Alert
 } from 'react-native';
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from "../../config/api";
 
 export default function LoginScreen() {
@@ -23,6 +23,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const router = useRouter();
+  const { setSession } = useAuth();
 
   const handleLogin = async () => {
     if (isLoggingIn) return;
@@ -45,11 +46,11 @@ export default function LoginScreen() {
 
       if (response.ok) {
 
-        // Save Sanctum token
-        await AsyncStorage.setItem('token', data.token);
-
-        // Optional: save user info
-        await AsyncStorage.setItem('user', JSON.stringify(data.user));
+        const u = data.user;
+        setSession(
+          data.token,
+          u && typeof u === "object" ? (u as Record<string, unknown>) : {}
+        );
 
         router.replace('/(tabs)/dashboard');
 

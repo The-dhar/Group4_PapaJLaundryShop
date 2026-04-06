@@ -4,6 +4,7 @@ import DashboardLayout from '../components/dashboardlayout';
 import TransactionExtrasSummary from '../components/TransactionExtrasSummary';
 import { BsEye,BsCashStack } from 'react-icons/bs';
 import { useTransactions } from '../context/transactionsContext';
+import { isThirtyOrMoreDaysPastDueDate } from '../utils/unclaimedDue';
 import '../styles/expressstyle.css';
 import '../styles/inventorystyle.css';
 
@@ -43,18 +44,10 @@ const Express = () => {
   const [paidAmountInput, setPaidAmountInput] = useState('');
   const [penaltyInput, setPenaltyInput] = useState('');
 
-  // Check if past due (penalty rule)
-  const isPastDue = (dueDate) => {
-    if (!dueDate) return false;
-    const today = new Date();
-    const due = new Date(dueDate);
-    const diffTime = today - due;
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays >= 7 && diffDays <= 30;
-  };
-
-  const calculatePenalty = (amount, dueDate) => {
-    return isPastDue(dueDate) ? amount * 0.05 : 0;
+  /** Same as Transaction Log: 5% penalty when still In Shop and 30+ calendar days past due. */
+  const calculatePenalty = (amount, dueDate, inventoryStatus) => {
+    if (String(inventoryStatus || '').toLowerCase() !== 'in_shop') return 0;
+    return isThirtyOrMoreDaysPastDueDate(dueDate) ? amount * 0.05 : 0;
   };
 
   const parseAmountInput = (str) => {
@@ -168,7 +161,7 @@ const Express = () => {
                 payment_method: "Cash" // force cash on edit
               });
               setPaidAmountInput(row.paid_amount && row.paid_amount !== 0 ? String(row.paid_amount) : '');
-              const pen = calculatePenalty(row.amount, row.due_date);
+              const pen = calculatePenalty(row.amount, row.due_date, row.inventory_status);
               setPenaltyInput(pen > 0 ? String(pen) : '');
             }}
           >

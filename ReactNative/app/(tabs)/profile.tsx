@@ -1,8 +1,10 @@
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   Modal,
+  Pressable,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -13,13 +15,12 @@ import {
   View,
   Image,
 } from 'react-native';
+import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_URL } from "../../config/api";
 
 const WINDOW_HEIGHT = Dimensions.get("window").height;
-/** Max height keeps the sheet on-screen; content is compact so inner scroll is not needed. */
 const PASSWORD_MODAL_MAX_HEIGHT = Math.min(Math.round(WINDOW_HEIGHT * 0.88), 520);
 
 type UserProfile = {
@@ -29,22 +30,50 @@ type UserProfile = {
   clerk_username?: string | null;
 };
 
+function formatApiErrorMessage(payload: unknown): string {
+  if (!payload || typeof payload !== "object") return "Request failed.";
+  const e = payload as Record<string, unknown>;
+  if (e.errors && typeof e.errors === "object") {
+    const msgs: string[] = [];
+    for (const v of Object.values(e.errors as Record<string, unknown>)) {
+      if (Array.isArray(v)) {
+        for (const item of v) {
+          if (typeof item === "string") msgs.push(item);
+        }
+      } else if (typeof v === "string") {
+        msgs.push(v);
+      }
+    }
+    if (msgs.length) return msgs.join(" ");
+  }
+  if (typeof e.message === "string") return e.message;
+  return "Request failed.";
+}
+
 export default function ProfileScreen() {
-  const [modalVisible, setModalVisible] = useState(false);
-  const [oldPassword, setOldPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [personalModalVisible, setPersonalModalVisible] = useState(false);
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
 
   const router = useRouter();
+  const { token } = useAuth();
 
   const loadProfile = useCallback(async () => {
     setProfileError(null);
     setIsLoadingProfile(true);
     try {
-      const token = await AsyncStorage.getItem("token");
       if (!token) {
         setProfile(null);
         setProfileError("You are not signed in.");
@@ -96,159 +125,379 @@ export default function ProfileScreen() {
     } finally {
       setIsLoadingProfile(false);
     }
-  }, []);
+  }, [token]);
 
   useFocusEffect(
     useCallback(() => {
       loadProfile();
     }, [loadProfile])
   );
-  const handleConfirm = () => {
-    // Add your password change logic here
-    console.log('Password change confirmed');
-    setModalVisible(false);
-    setOldPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
+
+  const openPersonalModal = () => {
+    if (!profile) return;
+    setEditName(profile.name);
+    setEditEmail(profile.email);
+    setPersonalModalVisible(true);
   };
 
-  const handleDelete = () => {
-    // Add your delete logic here
-    console.log('Delete clicked');
-    setModalVisible(false);
-    setOldPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
+  const closePersonalModal = () => {
+    setPersonalModalVisible(false);
+    setEditName("");
+    setEditEmail("");
+  };
+
+  const openPasswordModal = () => {
+    setOldPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordModalVisible(true);
+  };
+
+  const closePasswordModal = () => {
+    setPasswordModalVisible(false);
+    setOldPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+  };
+
+  const handleSaveProfile = async () => {
+    const name = editName.trim();
+    const email = editEmail.trim();
+    if (!name) {
+      Alert.alert("Error", "Name is required.");
+      return;
+    }
+    if (!email) {
+      Alert.alert("Error", "Email is required.");
+      return;
+    }
+
+    try {
+      if (!token) {
+        Alert.alert("Error", "You are not signed in.");
+        return;
+      }
+
+      setIsSavingProfile(true);
+      const response = await fetch(`${API_URL}/user/profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ name, email }),
+      });
+
+      if (!response.ok) {
+        let message = `Could not save (${response.status}).`;
+        try {
+          const err = await response.json();
+          message = formatApiErrorMessage(err);
+        } catch {
+          /* ignore */
+        }
+        Alert.alert("Could not update profile", message);
+        return;
+      }
+
+      const data = await response.json();
+      if (data && typeof data === "object") {
+        const u = data as Record<string, unknown>;
+        setProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                name: typeof u.name === "string" ? u.name : prev.name,
+                email: typeof u.email === "string" ? u.email : prev.email,
+              }
+            : prev
+        );
+      }
+      closePersonalModal();
+    } catch (e) {
+      console.log(e);
+      Alert.alert("Error", "Something went wrong. Please try again.");
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleSavePassword = async () => {
+    if (!oldPassword) {
+      Alert.alert("Error", "Enter your current password.");
+      return;
+    }
+    if (!newPassword || newPassword.length < 6) {
+      Alert.alert("Error", "New password must be at least 6 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      Alert.alert("Error", "New passwords do not match.");
+      return;
+    }
+
+    try {
+      if (!token) {
+        Alert.alert("Error", "You are not signed in.");
+        return;
+      }
+
+      setIsSavingPassword(true);
+      const response = await fetch(`${API_URL}/user/password`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          current_password: oldPassword,
+          password: newPassword,
+          password_confirmation: confirmPassword,
+        }),
+      });
+
+      if (!response.ok) {
+        let message = `Could not update password (${response.status}).`;
+        try {
+          const err = await response.json();
+          message = formatApiErrorMessage(err);
+        } catch {
+          /* ignore */
+        }
+        Alert.alert("Could not change password", message);
+        return;
+      }
+
+      closePasswordModal();
+      Alert.alert("Success", "Your password was updated.");
+    } catch (e) {
+      console.log(e);
+      Alert.alert("Error", "Something went wrong. Please try again.");
+    } finally {
+      setIsSavingPassword(false);
+    }
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" />
 
-    <View style={styles.container}>
-      <View style={styles.header}>
-  <TouchableOpacity onPress={() => router.back()} style={styles.backButton} activeOpacity={0.8}>
-    <Text style={styles.backIcon}>←</Text>
-  </TouchableOpacity>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton} activeOpacity={0.8}>
+            <Text style={styles.backIcon}>←</Text>
+          </TouchableOpacity>
 
-  {/* Title + Accent */}
-  <View style={styles.headerContent}>
-    <Text style={styles.headerTitle}>Profile</Text>
-    <View style={styles.headerAccent} />
-  </View>
-</View>
-
-      <ScrollView
-        style={styles.mainScroll}
-        contentContainerStyle={styles.mainScrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator
-        bounces
-        nestedScrollEnabled
-        scrollEventThrottle={16}
-      >
-      {/* Profile Card */}
-      <View style={styles.profileCard}>
-  {/* Logo */}
-  <View style={styles.logoContainer}>
-    <View style={styles.logoCircle}>
-      <Image 
-        source={require("../../assets/images/papaj logo.png")}
-        style={styles.logoImage}
-        resizeMode="contain"
-      />
-    </View>
-  </View>
-
-        {profileError ? (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorBannerText}>{profileError}</Text>
-            <TouchableOpacity style={styles.retryBtn} onPress={loadProfile} activeOpacity={0.85}>
-              <Text style={styles.retryBtnText}>Retry</Text>
-            </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle}>Profile</Text>
+            <View style={styles.headerAccent} />
           </View>
-        ) : null}
+        </View>
 
-        {isLoadingProfile && !profileError ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator size="small" color="#3b82f6" />
-            <Text style={styles.loadingText}>Loading profile…</Text>
-          </View>
-        ) : null}
-
-        {!isLoadingProfile && !profileError && profile ? (
-          <>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Name</Text>
-              <View style={styles.inputReadonly}>
-                <Text style={styles.inputReadonlyText}>{profile.name || "—"}</Text>
+        <ScrollView
+          style={styles.mainScroll}
+          contentContainerStyle={styles.mainScrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator
+          bounces
+          nestedScrollEnabled
+          scrollEventThrottle={16}
+        >
+          {profileError ? (
+            <View style={[styles.profileCard, styles.firstCard]}>
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorBannerText}>{profileError}</Text>
+                <TouchableOpacity style={styles.retryBtn} onPress={loadProfile} activeOpacity={0.85}>
+                  <Text style={styles.retryBtnText}>Retry</Text>
+                </TouchableOpacity>
               </View>
             </View>
+          ) : null}
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email</Text>
-              <View style={styles.inputReadonly}>
-                <Text style={styles.inputReadonlyText}>{profile.email || "—"}</Text>
+          {isLoadingProfile && !profileError ? (
+            <View style={[styles.profileCard, styles.firstCard]}>
+              <View style={styles.loadingRow}>
+                <ActivityIndicator size="small" color="#3b82f6" />
+                <Text style={styles.loadingText}>Loading profile…</Text>
               </View>
             </View>
+          ) : null}
 
-            {profile.role ? (
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Role</Text>
-                <View style={styles.inputReadonly}>
-                  <Text style={styles.inputReadonlyText}>{profile.role}</Text>
+          {!isLoadingProfile && !profileError && profile ? (
+            <>
+              {/* Personal Info */}
+              <View style={[styles.profileCard, styles.firstCard]}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Personal Info</Text>
+                  <TouchableOpacity onPress={openPersonalModal} activeOpacity={0.85} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={styles.sectionEditText}>Edit</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.logoContainer}>
+                  <View style={styles.logoCircle}>
+                    <Image
+                      source={require("../../assets/images/papaj logo.png")}
+                      style={styles.logoImage}
+                      resizeMode="contain"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Name</Text>
+                  <View style={styles.inputReadonly}>
+                    <Text style={styles.inputReadonlyText}>{profile.name || "—"}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Email</Text>
+                  <View style={styles.inputReadonly}>
+                    <Text style={styles.inputReadonlyText}>{profile.email || "—"}</Text>
+                  </View>
+                </View>
+
+                {profile.role ? (
+                  <View
+                    style={[
+                      styles.inputGroup,
+                      !profile.clerk_username && styles.inputGroupLast,
+                    ]}
+                  >
+                    <Text style={styles.label}>Role</Text>
+                    <View style={styles.inputReadonly}>
+                      <Text style={styles.inputReadonlyText}>{profile.role}</Text>
+                    </View>
+                  </View>
+                ) : null}
+
+                {profile.clerk_username ? (
+                  <View style={[styles.inputGroup, styles.inputGroupLast]}>
+                    <Text style={styles.label}>Clerk username</Text>
+                    <View style={styles.inputReadonly}>
+                      <Text style={styles.inputReadonlyText}>{profile.clerk_username}</Text>
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Security */}
+              <View style={[styles.profileCard, styles.sectionCardFollow]}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Security</Text>
+                  <TouchableOpacity onPress={openPasswordModal} activeOpacity={0.85} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={styles.sectionEditText}>Edit password</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={[styles.inputGroup, styles.inputGroupLast]}>
+                  <Text style={styles.label}>Password</Text>
+                  <View style={styles.inputReadonly}>
+                    <Text style={styles.inputReadonlyText}>••••••••••••</Text>
+                  </View>
                 </View>
               </View>
-            ) : null}
-
-            {profile.clerk_username ? (
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Clerk username</Text>
-                <View style={styles.inputReadonly}>
-                  <Text style={styles.inputReadonlyText}>{profile.clerk_username}</Text>
-                </View>
-              </View>
-            ) : null}
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.inputReadonly}>
-                <Text style={styles.inputReadonlyText}>••••••••••••</Text>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={() => setModalVisible(true)}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.editButtonText}>Edit Password</Text>
-            </TouchableOpacity>
-          </>
-        ) : null}
+            </>
+          ) : null}
+        </ScrollView>
       </View>
-      </ScrollView>
 
-</View>
-
-        
-
-      {/* Password Edit Modal */}
+      {/* Personal info modal */}
       <Modal
         animationType="fade"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
+        transparent
+        visible={personalModalVisible}
+        onRequestClose={closePersonalModal}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <View style={styles.modalOverlay} pointerEvents="box-none">
+          <View style={styles.modalContent} pointerEvents="auto">
             <View style={styles.modalHeader}>
-              <TouchableOpacity
+              <Pressable
                 style={styles.modalBackButton}
-                onPress={() => setModalVisible(false)}
+                onPress={closePersonalModal}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
               >
                 <Text style={styles.modalBackButtonText}>←</Text>
-              </TouchableOpacity>
+              </Pressable>
+              <Text style={styles.modalTitle}>Edit personal info</Text>
+            </View>
+
+            <View style={styles.modalFormBody}>
+              <View style={styles.modalInputGroup}>
+                <Text style={styles.modalLabel}>Name</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={editName}
+                  onChangeText={setEditName}
+                  placeholder="Your name"
+                  placeholderTextColor="#94a3b8"
+                />
+              </View>
+              <View style={styles.modalInputGroup}>
+                <Text style={styles.modalLabel}>Email</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={editEmail}
+                  onChangeText={setEditEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  placeholder="you@example.com"
+                  placeholderTextColor="#94a3b8"
+                />
+              </View>
+              <Text style={styles.modalHint}>Role cannot be changed here.</Text>
+            </View>
+
+            <View style={styles.modalButtonBar}>
+              <View style={styles.buttonRow}>
+                <Pressable
+                  style={[styles.modalSecondaryBtn, isSavingProfile && styles.buttonDisabled]}
+                  onPress={closePersonalModal}
+                  disabled={isSavingProfile}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.modalSecondaryBtnText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.confirmButton, isSavingProfile && styles.buttonDisabled]}
+                  onPress={handleSaveProfile}
+                  disabled={isSavingProfile}
+                  accessibilityRole="button"
+                >
+                  {isSavingProfile ? (
+                    <ActivityIndicator color="#ffffff" />
+                  ) : (
+                    <Text style={styles.confirmButtonText}>Save</Text>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Password modal */}
+      <Modal
+        animationType="fade"
+        transparent
+        visible={passwordModalVisible}
+        onRequestClose={closePasswordModal}
+      >
+        <View style={styles.modalOverlay} pointerEvents="box-none">
+          <View style={[styles.modalContent, { maxHeight: PASSWORD_MODAL_MAX_HEIGHT }]} pointerEvents="auto">
+            <View style={styles.modalHeader}>
+              <Pressable
+                style={styles.modalBackButton}
+                onPress={closePasswordModal}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+              >
+                <Text style={styles.modalBackButtonText}>←</Text>
+              </Pressable>
               <Text style={styles.modalTitle}>Change password</Text>
             </View>
 
@@ -264,7 +513,7 @@ export default function ProfileScreen() {
               </View>
 
               <View style={styles.modalInputGroup}>
-                <Text style={styles.modalLabel}>Old Password:</Text>
+                <Text style={styles.modalLabel}>Current password</Text>
                 <TextInput
                   style={styles.modalInput}
                   value={oldPassword}
@@ -275,18 +524,19 @@ export default function ProfileScreen() {
               </View>
 
               <View style={styles.modalInputGroup}>
-                <Text style={styles.modalLabel}>New Password:</Text>
+                <Text style={styles.modalLabel}>New password</Text>
                 <TextInput
                   style={styles.modalInput}
                   value={newPassword}
                   onChangeText={setNewPassword}
                   secureTextEntry
-                  placeholder=""
+                  placeholder="At least 6 characters"
+                  placeholderTextColor="#94a3b8"
                 />
               </View>
 
               <View style={styles.modalInputGroup}>
-                <Text style={styles.modalLabel}>Re-enter New Password:</Text>
+                <Text style={styles.modalLabel}>Confirm new password</Text>
                 <TextInput
                   style={styles.modalInput}
                   value={confirmPassword}
@@ -299,19 +549,26 @@ export default function ProfileScreen() {
 
             <View style={styles.modalButtonBar}>
               <View style={styles.buttonRow}>
-                <TouchableOpacity
-                  style={styles.deleteButton}
-                  onPress={handleDelete}
+                <Pressable
+                  style={[styles.modalSecondaryBtn, isSavingPassword && styles.buttonDisabled]}
+                  onPress={closePasswordModal}
+                  disabled={isSavingPassword}
+                  accessibilityRole="button"
                 >
-                  <Text style={styles.deleteButtonText}>Delete</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.confirmButton}
-                  onPress={handleConfirm}
+                  <Text style={styles.modalSecondaryBtnText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.confirmButton, isSavingPassword && styles.buttonDisabled]}
+                  onPress={handleSavePassword}
+                  disabled={isSavingPassword}
+                  accessibilityRole="button"
                 >
-                  <Text style={styles.confirmButtonText}>Confirm</Text>
-                </TouchableOpacity>
+                  {isSavingPassword ? (
+                    <ActivityIndicator color="#ffffff" />
+                  ) : (
+                    <Text style={styles.confirmButtonText}>Update password</Text>
+                  )}
+                </Pressable>
               </View>
             </View>
           </View>
@@ -390,7 +647,6 @@ const styles = StyleSheet.create({
   profileCard: {
     backgroundColor: '#ffffff',
     marginHorizontal: 20,
-    marginTop: 20,
     borderRadius: 24,
     padding: 28,
     shadowColor: '#000',
@@ -399,9 +655,32 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 12,
   },
+  firstCard: {
+    marginTop: 20,
+  },
+  sectionCardFollow: {
+    marginTop: 16,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#1e293b",
+    letterSpacing: -0.3,
+  },
+  sectionEditText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#3b82f6",
+  },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 28,
   },
   logoCircle: {
     width: 120,
@@ -418,31 +697,11 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
   },
-  logoInner: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    borderWidth: 3,
-    borderColor: '#60a5fa',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#eff6ff',
-    shadowColor: '#60a5fa',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  logoText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#3b82f6',
-    textAlign: 'center',
-    lineHeight: 14,
-    letterSpacing: 0.5,
-  },
   inputGroup: {
-    marginBottom: 24,
+    marginBottom: 20,
+  },
+  inputGroupLast: {
+    marginBottom: 0,
   },
   label: {
     fontSize: 14,
@@ -451,22 +710,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     letterSpacing: 0.2,
   },
-  input: {
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    color: '#1e293b',
-    backgroundColor: '#f8fafc',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  /** Use Text instead of disabled TextInput so ScrollView can scroll on Android (TextInput steals pans). */
   inputReadonly: {
     borderWidth: 2,
     borderColor: '#e2e8f0',
@@ -486,27 +729,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1e293b',
   },
-  editButton: {
-    backgroundColor: '#3b82f6',
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 12,
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-    paddingHorizontal: 16,
-  },
-  editButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
   errorBanner: {
-    marginBottom: 20,
     padding: 14,
     borderRadius: 12,
     backgroundColor: "#fef2f2",
@@ -533,7 +756,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    marginBottom: 16,
   },
   loadingText: {
     color: "#64748b",
@@ -553,7 +775,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     width: "100%",
     maxWidth: 380,
-    maxHeight: PASSWORD_MODAL_MAX_HEIGHT,
     overflow: "hidden",
     flexDirection: "column",
     shadowColor: "#000",
@@ -566,6 +787,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 10,
+  },
+  modalHint: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 4,
+    fontWeight: "500",
   },
   modalLogoRow: {
     alignItems: "center",
@@ -631,7 +858,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   modalInputGroup: {
-    marginBottom: 8,
+    marginBottom: 12,
   },
   modalLabel: {
     fontSize: 12,
@@ -654,20 +881,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
   },
-  deleteButton: {
+  modalSecondaryBtn: {
     flex: 1,
-    backgroundColor: "#ef4444",
+    backgroundColor: "#f1f5f9",
     borderRadius: 11,
     paddingVertical: 12,
     alignItems: "center",
-    shadowColor: "#ef4444",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 4,
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
   },
-  deleteButtonText: {
-    color: "#ffffff",
+  modalSecondaryBtnText: {
+    color: "#475569",
     fontSize: 15,
     fontWeight: "700",
     letterSpacing: 0.2,
@@ -683,6 +907,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 6,
     elevation: 4,
+    minHeight: 46,
+    justifyContent: "center",
   },
   confirmButtonText: {
     color: "#ffffff",
@@ -690,10 +916,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.2,
   },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
   logoImage: {
-  width: 80,
-  height: 80,
-  borderRadius: 40,   // para bilog
-},
-
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
 });

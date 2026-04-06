@@ -1,16 +1,110 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { BsSearch } from 'react-icons/bs';
 import DashboardLayout from '../components/dashboardlayout';
 import SmallCard from '../components/smallCard';
 import SmallcardModal from '../components/smallcardModal';
 import CustomerModal from '../components/customerModal';
 import { useTransactions } from '../context/transactionsContext';
+import { API_URL } from '../config/api';
 import '../styles/posstyle.css';
 import Swal from 'sweetalert2';
 import { jsPDF } from 'jspdf';
-import { BsPencilSquare, BsTrash } from 'react-icons/bs'; 
+import { BsPencilSquare, BsTrash } from 'react-icons/bs';
+
+/** Split "Juan Dela Cruz" → first / rest for form fields */
+function splitFullName(fullName) {
+  const t = String(fullName || '').trim();
+  if (!t) return { first: '', last: '' };
+  const parts = t.split(/\s+/);
+  if (parts.length === 1) return { first: parts[0], last: '' };
+  return { first: parts[0], last: parts.slice(1).join(' ') };
+}
+
+/** Split POS address string "street, barangay, city" */
+function splitAddressLine(address) {
+  const raw = String(address || '').trim();
+  if (!raw) return { street: '', barangay: '', city: '' };
+  const parts = raw.split(',').map((p) => p.trim());
+  return {
+    street: parts[0] || '',
+    barangay: parts[1] || '',
+    city: parts[2] || '',
+  };
+}
+
+function normalizeAddressKey(street, barangay, city) {
+  return [street, barangay, city]
+    .map((x) => String(x || '').trim().toLowerCase().replace(/\s+/g, ' '))
+    .join('|');
+}
+
+function addressKeyFromTransaction(t) {
+  const p = splitAddressLine(t.customer_address);
+  return normalizeAddressKey(p.street, p.barangay, p.city);
+}
+
+function addressKeyFromApiCustomer(c) {
+  if (c.street || c.barangay || c.city) {
+    return normalizeAddressKey(c.street, c.barangay, c.city);
+  }
+  if (c.address) {
+    const p = splitAddressLine(c.address);
+    return normalizeAddressKey(p.street, p.barangay, p.city);
+  }
+  return '';
+}
+
+function addressDisplayFromApiCustomer(c) {
+  if (c.street || c.barangay || c.city) {
+    return [c.street, c.barangay, c.city].filter(Boolean).join(', ');
+  }
+  return String(c.address || '').trim();
+}
+
+function transactionCustomerMatches(query, transactions) {
+  const q = query.trim().toLowerCase();
+  if (q.length < 2) return [];
+  const list = (transactions || []).filter(
+    (t) => !t.archived && String(t.customer_name || '').toLowerCase().includes(q)
+  );
+  list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  const seen = new Set();
+  const out = [];
+  for (const t of list) {
+    const name = String(t.customer_name || '').trim();
+    if (!name) continue;
+    const addrKey = addressKeyFromTransaction(t);
+    const dedupeKey = `${name.toLowerCase()}::${addrKey}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    const addressLine = String(t.customer_address || '').trim();
+    out.push({
+      displayName: name,
+      addressLine,
+      customer_name: t.customer_name,
+      customer_address: t.customer_address,
+    });
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
+async function fetchCustomersFromApi(query) {
+  const token = localStorage.getItem('token');
+  if (!token) return [];
+  const res = await fetch(`${API_URL}/customers/search/${encodeURIComponent(query)}`, {
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
 const POs = () => {
-  const { createTransaction } = useTransactions();
+  const { createTransaction, transactions } = useTransactions();
 
   // --- States ---
   const [selectedItem, setSelectedItem] = useState(null);
@@ -43,8 +137,129 @@ const POs = () => {
   });
   const [pastSearches, setPastSearches] = useState([]);
 
+  const [customerSearchInput, setCustomerSearchInput] = useState('');
+  const [customerSuggestions, setCustomerSuggestions] = useState([]);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [suggestionOpen, setSuggestionOpen] = useState(false);
+  const searchWrapRef = useRef(null);
+
   useEffect(() => {
     setPastSearches(JSON.parse(localStorage.getItem('pastSearches') || '[]'));
+  }, []);
+
+  const mergeCustomerSources = useCallback((apiRows, txRows) => {
+    const map = new Map();
+    for (const c of apiRows) {
+      const name = String(c.name || '').trim();
+      if (!name) continue;
+      const addrKey = addressKeyFromApiCustomer(c);
+      const k = `${name.toLowerCase()}::${addrKey}`;
+      const addressLine = addressDisplayFromApiCustomer(c);
+      map.set(k, {
+        kind: 'api',
+        displayName: name,
+        addressLine,
+        suggestionKey: k,
+        record: c,
+      });
+    }
+    for (const t of txRows) {
+      const name = String(t.displayName || '').trim();
+      if (!name) continue;
+      const addrKey = addressKeyFromTransaction(t);
+      const k = `${name.toLowerCase()}::${addrKey}`;
+      if (map.has(k)) continue;
+      map.set(k, {
+        kind: 'tx',
+        displayName: name,
+        addressLine: t.addressLine || '',
+        suggestionKey: k,
+        record: t,
+      });
+    }
+    return Array.from(map.values());
+  }, []);
+
+  const applyCustomerSuggestion = useCallback((item) => {
+    if (item.kind === 'api') {
+      const c = item.record;
+      const fromName = splitFullName(c.name);
+      setFirstName(String(c.first_name || fromName.first || '').trim());
+      setLastName(String(c.last_name || fromName.last || '').trim());
+      const hasParts = c.street || c.barangay || c.city;
+      if (hasParts) {
+        setStreet(c.street || '');
+        setBarangay(c.barangay || '');
+        setCity(c.city || '');
+      } else if (c.address) {
+        const p = splitAddressLine(c.address);
+        setStreet(p.street);
+        setBarangay(p.barangay);
+        setCity(p.city);
+      } else {
+        setStreet('');
+        setBarangay('');
+        setCity('');
+      }
+    } else {
+      const t = item.record;
+      const nm = splitFullName(t.customer_name);
+      setFirstName(nm.first);
+      setLastName(nm.last);
+      const p = splitAddressLine(t.customer_address);
+      setStreet(p.street);
+      setBarangay(p.barangay);
+      setCity(p.city);
+    }
+    setCustomerSearchInput(item.displayName);
+    setCustomerSuggestions([]);
+    setSuggestionOpen(false);
+    const val = item.displayName.trim();
+    if (val) {
+      setPastSearches((prev) => {
+        if (prev.includes(val)) return prev;
+        const next = [val, ...prev].slice(0, 10);
+        localStorage.setItem('pastSearches', JSON.stringify(next));
+        return next;
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    const q = customerSearchInput.trim();
+    if (q.length < 2) {
+      setCustomerSuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setSuggestionLoading(true);
+      setCustomerSuggestions([]);
+      try {
+        const [apiRows, txRows] = await Promise.all([
+          fetchCustomersFromApi(q),
+          Promise.resolve(transactionCustomerMatches(q, transactions)),
+        ]);
+        if (cancelled) return;
+        setCustomerSuggestions(mergeCustomerSources(apiRows, txRows));
+      } finally {
+        if (!cancelled) setSuggestionLoading(false);
+      }
+    }, 280);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [customerSearchInput, transactions, mergeCustomerSources]);
+
+  useEffect(() => {
+    const onDoc = (e) => {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target)) {
+        setSuggestionOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
   }, []);
 
   const laundryItems = [
@@ -63,14 +278,10 @@ const POs = () => {
 
   // --- Handlers ---
 
-  const handleSearchKeyDown = (e) => {
-    if (e.key === 'Enter' && e.target.value.trim()) {
-      const val = e.target.value.trim();
-      if (!pastSearches.includes(val)) {
-        const newSearches = [val, ...pastSearches].slice(0, 10);
-        setPastSearches(newSearches);
-        localStorage.setItem('pastSearches', JSON.stringify(newSearches));
-      }
+  const handleCustomerSearchKeyDown = (e) => {
+    if (e.key === 'Enter' && customerSuggestions.length > 0) {
+      e.preventDefault();
+      applyCustomerSuggestion(customerSuggestions[0]);
     }
   };
 
@@ -150,6 +361,9 @@ const POs = () => {
   const resetForm = () => {
     setSelectedServices([]);
     setFirstName(''); setLastName(''); setStreet(''); setBarangay(''); setCity('');
+    setCustomerSearchInput('');
+    setCustomerSuggestions([]);
+    setSuggestionOpen(false);
     setDueDate('');
     setActiveExtras({ discount: false, express: false });
     setDiscountAmount(0);
@@ -479,20 +693,56 @@ const POs = () => {
             <div className="for-receipt-information">
               <div className="for-receipt">
                 <div className="for-receipt-top">
-                  <div className="for-receipt-searchbar">
-                    <BsSearch className="for-receipt-searchicon" />
-                    <input 
-                      type="text" 
-                      placeholder="Search Names..." 
-                      className="for-receipt-searchinput" 
-                      list="past-searches"
-                      onKeyDown={handleSearchKeyDown}
-                    />
-                    <datalist id="past-searches">
-                      {pastSearches.map((search, i) => (
-                        <option key={i} value={search} />
-                      ))}
-                    </datalist>
+                  <div className="for-receipt-search-wrap" ref={searchWrapRef}>
+                    <div className="for-receipt-searchbar">
+                      <BsSearch className="for-receipt-searchicon" />
+                      <input
+                        type="text"
+                        placeholder="Search Names..."
+                        className="for-receipt-searchinput"
+                        value={customerSearchInput}
+                        onChange={(e) => {
+                          setCustomerSearchInput(e.target.value);
+                          setSuggestionOpen(true);
+                        }}
+                        onFocus={() => setSuggestionOpen(true)}
+                        onKeyDown={handleCustomerSearchKeyDown}
+                        autoComplete="off"
+                        aria-autocomplete="list"
+                        aria-expanded={suggestionOpen && customerSuggestions.length > 0}
+                      />
+                    </div>
+                    {suggestionOpen && customerSearchInput.trim().length >= 2 && (
+                      <ul className="pos-customer-suggestions" role="listbox">
+                        {suggestionLoading && (
+                          <li style={{ padding: '10px 14px', fontSize: 13, color: '#666' }}>Searching…</li>
+                        )}
+                        {!suggestionLoading &&
+                          customerSuggestions.map((item, idx) => (
+                            <li key={item.suggestionKey || `${item.kind}-${item.displayName}-${idx}`} role="option">
+                              <button
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => applyCustomerSuggestion(item)}
+                              >
+                                <span>{item.displayName}</span>
+                                <span className="pos-suggestion-meta">
+                                  {item.addressLine
+                                    ? `${item.addressLine} · ${item.kind === 'api' ? 'Saved' : 'Past order'}`
+                                    : item.kind === 'api'
+                                      ? 'Saved customer'
+                                      : 'Past transaction'}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        {!suggestionLoading && customerSuggestions.length === 0 && (
+                          <li style={{ padding: '10px 14px', fontSize: 13, color: '#666' }}>
+                            No matches. Try another name or use Add Customer.
+                          </li>
+                        )}
+                      </ul>
+                    )}
                   </div>
                   <button className="for-receipt-add-customer" onClick={() => setIsCustomerModalOpen(true)}>Add Customer</button>
                 </div>
@@ -501,6 +751,7 @@ const POs = () => {
                   isOpen={isCustomerModalOpen}
                   onClose={() => setIsCustomerModalOpen(false)}
                   initial={{ firstName, lastName, street, barangay, city }}
+                  transactions={transactions}
                   onSave={(data) => {
                     setFirstName(data.firstName); setLastName(data.lastName);
                     setStreet(data.street); setBarangay(data.barangay); setCity(data.city);
@@ -508,7 +759,6 @@ const POs = () => {
                 />
 
                 <div className="for-receipt-bottom">
-                  <div className="for-receipt-generator">RCPT-100001</div>
                   <div className="for-receipt-calendar">
                     <input type="date" className="for-receipt-date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
                   </div>

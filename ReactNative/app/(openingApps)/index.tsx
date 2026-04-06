@@ -1,11 +1,11 @@
-import { router } from 'expo-router';
-import React from 'react';
-import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
+import { router } from "expo-router";
+import React from "react";
+import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View, Image } from "react-native";
 
 export default function LaundryWelcomeScreen() {
-const handleGetStarted = () => {
-  router.push('/(openingApps)/login');
-};
+  const handleGetStarted = () => {
+    router.push("/(openingApps)/login");
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>

@@ -4,6 +4,10 @@ import DashboardLayout from '../components/dashboardlayout';
 import TransactionExtrasSummary from '../components/TransactionExtrasSummary';
 import { BsEye, BsExclamationTriangle } from 'react-icons/bs';
 import { useTransactions } from '../context/transactionsContext';
+import {
+  isThreeOrMoreDaysPastDueDate,
+  isThirtyOrMoreDaysPastDueDate,
+} from '../utils/unclaimedDue';
 import Swal from 'sweetalert2';
 import '../styles/unclaimedstyle.css';
 import '../styles/inventorystyle.css';
@@ -28,30 +32,7 @@ const UnclaimLaundry = () => {
   const [sortOrder, setSortOrder] = useState('none');
   const [selectedTxn, setSelectedTxn] = useState(null);
 
-  /**
-   * Full calendar days after the due date (0 = due today, 1 = 1 day past due, …).
-   * Uses local date parsing so YYYY-MM-DD stays aligned with the calendar.
-   */
-  const getDaysPastDue = (dueDate) => {
-    if (!dueDate) return -Infinity;
-    const s = String(dueDate).trim();
-    const parts = s.split('-').map(Number);
-    let due;
-    if (parts.length === 3 && parts[0] > 1000) {
-      due = new Date(parts[0], parts[1] - 1, parts[2]);
-    } else {
-      due = new Date(s);
-    }
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    due.setHours(0, 0, 0, 0);
-    return Math.floor((today - due) / (86400000));
-  };
-
-  /** Unclaimed page: only if due date is 3+ days in the past (3+ days past due date). */
-  const isThreeOrMoreDaysPastDueDate = (dueDate) => getDaysPastDue(dueDate) >= 3;
-
-  /** Due column icon / row highlight — same “3 days past due date” rule */
+  /** Due column icon — any row on this page is already 3+ days past due */
   const showUnclaimedWarning = (dueDate) => isThreeOrMoreDaysPastDueDate(dueDate);
 
   const overdueAlertKeyRef = useRef('');
@@ -100,17 +81,12 @@ const UnclaimLaundry = () => {
     if (overdueAlertKeyRef.current === key) return;
     overdueAlertKeyRef.current = key;
 
-    const receiptList = overdueItems.map((item) => item.receipt).join(', ');
     Swal.fire({
       title: 'Overdue Laundry Alert',
       html: `
             <div style="text-align:left; font-size:15px; line-height:1.6;">
               <b>${overdueItems.length}</b> item${overdueItems.length !== 1 ? 's are' : ' is'} <b>3 or more days past the due date</b> and still <b>In Shop</b>.<br><br>
-
-              <b>Receipt ID(s):</b><br>
-              ${receiptList}<br><br>
-
-              Please check these items in the <b>Unclaimed</b> table.
+              Please review them in the <b>Unclaimed</b> table below (yellow: 3–29 days past due; red: 30+ days past due).
             </div>
           `,
       icon: 'warning',
@@ -150,8 +126,16 @@ const UnclaimLaundry = () => {
           <span>{row.due_date}</span>
           {showUnclaimedWarning(row.due_date) && (
             <BsExclamationTriangle
-              className="overdue-alert-icon"
-              title="3+ days past due date — still unclaimed"
+              className={
+                isThirtyOrMoreDaysPastDueDate(row.due_date)
+                  ? 'overdue-alert-icon overdue-alert-icon--critical'
+                  : 'overdue-alert-icon overdue-alert-icon--warning'
+              }
+              title={
+                isThirtyOrMoreDaysPastDueDate(row.due_date)
+                  ? '30+ days past due — urgent (red row)'
+                  : '3–29 days past due — warning (yellow row)'
+              }
             />
           )}
         </div>
@@ -159,7 +143,6 @@ const UnclaimLaundry = () => {
     },
     {
       name: 'Action',
-      center: true,
       cell: (row) => (
         <div className="unclaimed-action-cell">
           <button
@@ -215,12 +198,23 @@ const UnclaimLaundry = () => {
                   {
                     when: (row) =>
                       row.inventory_status === 'in_shop' &&
-                      isThreeOrMoreDaysPastDueDate(row.due_date),
+                      isThirtyOrMoreDaysPastDueDate(row.due_date),
                     style: {
-                      backgroundColor: '#fecaca',
+                      backgroundColor: 'rgba(254, 202, 202, 0.92)',
                       borderLeft: '4px solid #dc2626',
                     },
-                    classNames: ['overdue-row'],
+                    classNames: ['overdue-row--critical'],
+                  },
+                  {
+                    when: (row) =>
+                      row.inventory_status === 'in_shop' &&
+                      isThreeOrMoreDaysPastDueDate(row.due_date) &&
+                      !isThirtyOrMoreDaysPastDueDate(row.due_date),
+                    style: {
+                      backgroundColor: 'rgba(254, 249, 195, 0.75)',
+                      borderLeft: '4px solid #ca8a04',
+                    },
+                    classNames: ['overdue-row--warning'],
                   },
                 ]}
                 noDataComponent={
@@ -243,7 +237,7 @@ const UnclaimLaundry = () => {
               <p><strong>Customer:</strong> {selectedTxn.customer_name}</p>
               <p><strong>Address:</strong> {selectedTxn.customer_address}</p>
 
-              <p>
+              <div className="modal-services-block">
                 <strong>Services:</strong>
                 <ul>
                   {selectedTxn.services.map((svc) => (
@@ -252,7 +246,7 @@ const UnclaimLaundry = () => {
                     </li>
                   ))}
                 </ul>
-              </p>
+              </div>
 
               <TransactionExtrasSummary txn={selectedTxn} />
 

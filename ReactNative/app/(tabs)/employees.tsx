@@ -13,9 +13,9 @@ import {
 } from "react-native";
 import { BarChart } from "react-native-chart-kit";
 import Ionicons from "react-native-vector-icons/Ionicons";
+import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_URL } from "../../config/api";
 
 type Branch = {
@@ -60,6 +60,7 @@ const getOutcomeColor = (outcome: string | null) => {
 
 export default function EmployeesScreen() {
   const router = useRouter();
+  const { token, logout } = useAuth();
 
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -83,7 +84,6 @@ export default function EmployeesScreen() {
   const loadData = useCallback(async () => {
     try {
       setIsLoading(true);
-      const token = await AsyncStorage.getItem("token");
       if (!token) throw new Error("Not authenticated");
       const headers = {
         Authorization: `Bearer ${token}`,
@@ -109,7 +109,7 @@ export default function EmployeesScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [token]);
 
   useFocusEffect(
     useCallback(() => {
@@ -166,7 +166,6 @@ export default function EmployeesScreen() {
 
     try {
       setIsSaving(true);
-      const token = await AsyncStorage.getItem("token");
       if (!token) throw new Error("Not authenticated");
       const headers = {
         "Content-Type": "application/json",
@@ -218,7 +217,6 @@ export default function EmployeesScreen() {
 
     try {
       setIsSaving(true);
-      const token = await AsyncStorage.getItem("token");
       if (!token) throw new Error("Not authenticated");
       const headers = {
         "Content-Type": "application/json",
@@ -263,8 +261,8 @@ export default function EmployeesScreen() {
 
   const handleLogout = async () => {
     setOpen(false);
-    await AsyncStorage.removeItem("token");
-    router.replace("/login");
+    await logout();
+    router.replace("/(openingApps)/login");
   };
 
   return (
@@ -349,6 +347,8 @@ export default function EmployeesScreen() {
                 }}
                 width={clerkChartWidth}
                 height={220}
+                yAxisLabel=""
+                yAxisSuffix="%"
                 chartConfig={{
                   backgroundColor: "#ffffff",
                   backgroundGradientFrom: "#ffffff",

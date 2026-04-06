@@ -1,6 +1,6 @@
+import { useAuth } from "@/contexts/AuthContext";
 import React, { useCallback, useMemo, useState } from "react";
 import {
-  Alert,
   Dimensions,
   Modal,
   Platform,
@@ -17,7 +17,6 @@ import { BarChart, LineChart } from "react-native-chart-kit";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from "../../config/api";
 
 /** Backend expects `Y-m-d` for `date_from` / `date_to` on GET /transactions */
@@ -62,6 +61,35 @@ function formatRangeSummary(startYmd: string, endYmd: string): string {
   return `${a.toLocaleDateString("en-US", o)} – ${b.toLocaleDateString("en-US", o)}, ${b.getFullYear()}`;
 }
 
+/** Monday–Sunday week containing `d` (matches common business-week charts). */
+function mondayOfCalendarWeek(d: Date): Date {
+  const copy = new Date(d);
+  const day = copy.getDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  copy.setDate(copy.getDate() + offset);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+type PeriodPreset = "weekly" | "monthly" | "yearly" | "range";
+
+function rangeForPreset(preset: Exclude<PeriodPreset, "range">): [string, string] {
+  const now = new Date();
+  if (preset === "weekly") {
+    const mon = mondayOfCalendarWeek(now);
+    const sun = new Date(mon);
+    sun.setDate(sun.getDate() + 6);
+    return [toYmd(mon), toYmd(sun)];
+  }
+  if (preset === "monthly") {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return [toYmd(start), toYmd(end)];
+  }
+  const y = now.getFullYear();
+  return [`${y}-01-01`, `${y}-12-31`];
+}
+
 // BarChart typing workaround to allow runtime onDataPointClick
 const AnyBarChart: any = BarChart;
 
@@ -78,6 +106,7 @@ const getResponsiveChartWidth = (labels: string[]) => {
 };
 
 export default function DashboardAnalytics() {
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("range");
   const [rangeFrom, setRangeFrom] = useState<string>(defaultRangeStartYmd);
   const [rangeTo, setRangeTo] = useState<string>(() => toYmd(new Date()));
   const [pickerTarget, setPickerTarget] = useState<null | "from" | "to">(null);
@@ -101,13 +130,13 @@ export default function DashboardAnalytics() {
 
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const { token, logout } = useAuth();
 
   const [transactions, setTransactions] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
 
   const loadDashboard = useCallback(async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
       if (!token) return;
 
       let from = rangeFrom;
@@ -141,7 +170,7 @@ export default function DashboardAnalytics() {
     } catch (error) {
       console.log(error);
     }
-  }, [rangeFrom, rangeTo]);
+  }, [rangeFrom, rangeTo, token]);
 
   useFocusEffect(
     useCallback(() => {
@@ -198,12 +227,22 @@ export default function DashboardAnalytics() {
     router.push("/profile");
   };
   
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setOpen(false);
-    router.push("/login");
+    await logout();
+    router.replace("/(openingApps)/login");
+  };
+
+  const applyPeriodPreset = (p: PeriodPreset) => {
+    setPeriodPreset(p);
+    if (p === "range") return;
+    const [from, to] = rangeForPreset(p);
+    setRangeFrom(from);
+    setRangeTo(to);
   };
 
   const applyPickedDate = (d: Date, target: "from" | "to") => {
+    setPeriodPreset("range");
     const y = toYmd(d);
     let nf = target === "from" ? y : rangeFrom;
     let nt = target === "to" ? y : rangeTo;
@@ -226,15 +265,6 @@ export default function DashboardAnalytics() {
     setPickerTarget(null);
     if (!target || event?.type === "dismissed" || !date) return;
     applyPickedDate(date, target);
-  };
-
-  const handlePrint = (section: string) => {
-    // Simple, cross-platform fallback: use window.print on web, otherwise inform the user
-    if (typeof window !== 'undefined' && (window as any).print) {
-      (window as any).print();
-      return;
-    }
-    Alert.alert('Print', 'Printing is available on web. For mobile, please take a screenshot or use export feature.');
   };
 
   return (
@@ -305,6 +335,29 @@ export default function DashboardAnalytics() {
 
         <View style={styles.dateRangeCard}>
           <Text style={styles.dateRangeTitle}>Date range</Text>
+          <View style={styles.presetRow}>
+            {(
+              [
+                ["weekly", "Weekly"],
+                ["monthly", "Monthly"],
+                ["yearly", "Yearly"],
+                ["range", "Range"],
+              ] as const
+            ).map(([key, label]) => (
+              <TouchableOpacity
+                key={key}
+                style={[styles.presetChip, periodPreset === key && styles.presetChipActive]}
+                onPress={() => applyPeriodPreset(key)}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[styles.presetChipText, periodPreset === key && styles.presetChipTextActive]}
+                >
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
           <Text style={styles.dateRangeSummary}>{formatRangeSummary(rangeFrom, rangeTo)}</Text>
           <View style={styles.dateRangeRow}>
             <TouchableOpacity style={styles.dateChip} onPress={() => openDatePicker("from")} activeOpacity={0.85}>
@@ -364,14 +417,6 @@ export default function DashboardAnalytics() {
         <View style={styles.chartBox}>
           <View style={styles.chartHeader}>
             <Text style={styles.chartTitle}>Revenue</Text>
-            {!isSmallScreen ? (
-              <View style={styles.headerRight}>
-                <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint("Revenue")}>
-                  <Ionicons name="print-outline" size={14} color="#1e293b" />
-                  <Text style={styles.printText}>Print</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
           </View>
           <View style={{ alignItems: "center" }}>
 
@@ -445,14 +490,6 @@ export default function DashboardAnalytics() {
           <View style={styles.chartBox}>
             <View style={styles.chartHeader}>
               <Text style={styles.chartTitle}>Branch Revenue Comparison</Text>
-              {!isSmallScreen ? (
-                <View style={styles.headerRight}>
-                  <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint("Branch Revenue Comparison")}>
-                    <Ionicons name="print-outline" size={14} color="#1e293b" />
-                    <Text style={styles.printText}>Print</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : null}
             </View>
             <View style={{ alignItems: "center" }}>
 
@@ -529,14 +566,6 @@ export default function DashboardAnalytics() {
         <View style={styles.branchPerformanceBox}>
           <View style={styles.branchPerformanceHeader}>
             <Text style={styles.branchPerformanceTitle}>Branch Performance</Text>
-            {!isSmallScreen ? (
-              <View style={styles.headerRight}>
-                <TouchableOpacity style={styles.printBtn} onPress={() => handlePrint("Branch Performance")}>
-                  <Ionicons name="print-outline" size={14} color="#1e293b" />
-                  <Text style={styles.printText}>Print</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
           </View>
           <View style={styles.barChartWrapper}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center', marginLeft: 0 }}>
@@ -693,6 +722,30 @@ const styles = StyleSheet.create({
     color: "#1e293b",
     marginBottom: 6,
   },
+  presetRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+  presetChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: "#f1f5f9",
+  },
+  presetChipActive: {
+    backgroundColor: "#3b82f6",
+  },
+  presetChipText: {
+    fontSize: 13,
+    color: "#64748b",
+    fontWeight: "600",
+  },
+  presetChipTextActive: {
+    color: "#ffffff",
+    fontWeight: "700",
+  },
   dateRangeSummary: {
     fontSize: 14,
     fontWeight: "600",
@@ -778,28 +831,6 @@ const styles = StyleSheet.create({
     color: "#1e293b",
     letterSpacing: -0.5,
     marginBottom: 12,
-  },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    justifyContent: "flex-start",
-  },
-  printBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    marginLeft: 8,
-    borderRadius: 6,
-    backgroundColor: "#f1f5f9",
-    maxWidth: 70,
-  },
-  printText: {
-    marginLeft: 4,
-    fontSize: 11,
-    color: "#1e293b",
-    fontWeight: "600",
   },
   branchPerformanceBox: {
     backgroundColor: "#ffffff",

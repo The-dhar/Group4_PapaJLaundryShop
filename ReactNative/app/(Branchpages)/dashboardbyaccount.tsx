@@ -1,16 +1,17 @@
+import { useAuth } from "@/contexts/AuthContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useState } from 'react';
 import { Dimensions, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Pressable } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { useFocusEffect } from "@react-navigation/native";
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from "../../config/api";
 
 const { width } = Dimensions.get('window');
 
 export default function RevenueDashboard() {
   const [revenueView, setRevenueView] = useState("weekly");
-  const router = useRouter(); 
+  const router = useRouter();
+  const { token } = useAuth();
   const { branchId, branchName } = useLocalSearchParams<{ branchId?: string; branchName?: string }>();
   const [receipts, setReceipts] = useState<any[]>([]);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -25,7 +26,6 @@ export default function RevenueDashboard() {
   const loadBranchTransactions = useCallback(async () => {
     setFetchError(null);
     try {
-      const token = await AsyncStorage.getItem("token");
       if (!token) {
         setReceipts([]);
         setFetchError("You are not signed in. Please log in again.");
@@ -64,7 +64,7 @@ export default function RevenueDashboard() {
       setReceipts([]);
       setFetchError("Something went wrong. Check your connection and try again.");
     }
-  }, [branchId]);
+  }, [branchId, token]);
 
   useFocusEffect(
     useCallback(() => {

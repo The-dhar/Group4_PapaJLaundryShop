@@ -3,6 +3,8 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Platform,
+  Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -11,9 +13,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import Ionicons from '@expo/vector-icons/Ionicons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from "../../config/api";
 
 const ROWS_PER_PAGE = 5;
@@ -31,9 +33,55 @@ type AuthUser = {
   role?: string;
 };
 
+/** Laravel validation `errors` map + `message`; surfaces field messages instead of a generic line. */
+function formatApiErrorMessage(payload: unknown): string {
+  if (!payload || typeof payload !== "object") return "Request failed.";
+  const e = payload as Record<string, unknown>;
+  if (e.errors && typeof e.errors === "object") {
+    const msgs: string[] = [];
+    for (const v of Object.values(e.errors as Record<string, unknown>)) {
+      if (Array.isArray(v)) {
+        for (const item of v) {
+          if (typeof item === "string") msgs.push(item);
+        }
+      } else if (typeof v === "string") {
+        msgs.push(v);
+      }
+    }
+    if (msgs.length) return msgs.join(" ");
+  }
+  if (typeof e.message === "string") return e.message;
+  return "Request failed.";
+}
+
+/**
+ * react-native-web often does not run Alert.alert() button onPress callbacks reliably.
+ * Use window.confirm on web; native keeps the two-button Alert.
+ */
+async function confirmAsync(
+  title: string,
+  message: string,
+  confirmLabel: string
+): Promise<boolean> {
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    return window.confirm(`${title}\n\n${message}`);
+  }
+  return new Promise((resolve) => {
+    Alert.alert(title, message, [
+      { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+      {
+        text: confirmLabel,
+        style: confirmLabel === "Deactivate" ? "destructive" : "default",
+        onPress: () => resolve(true),
+      },
+    ]);
+  });
+}
+
 const BranchList = () => {
 
   const router = useRouter();
+  const { token, logout } = useAuth();
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [page, setPage] = useState(1);
@@ -41,8 +89,8 @@ const BranchList = () => {
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
 
+  const [branchName, setBranchName] = useState('');
   const [username, setUsername] = useState('');
-  const [clerkUsername, setClerkUsername] = useState('');
   const [password, setPassword] = useState('');
 
   const [open, setOpen] = useState(false);
@@ -53,7 +101,6 @@ const BranchList = () => {
   // LOAD BRANCHES FROM BACKEND
   const loadBranches = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
       if (!token) return;
 
       const response = await fetch(`${API_URL}/branches`, {
@@ -76,7 +123,6 @@ const BranchList = () => {
 
   const loadCurrentUser = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
       if (!token) return;
 
       const response = await fetch(`${API_URL}/user`, {
@@ -98,7 +144,7 @@ const BranchList = () => {
   useEffect(() => {
     loadBranches();
     loadCurrentUser();
-  }, []);
+  }, [token]);
 
   const totalPages = Math.max(1, Math.ceil(branches.length / ROWS_PER_PAGE));
 
@@ -109,45 +155,47 @@ const BranchList = () => {
   const startIndex = (page - 1) * ROWS_PER_PAGE;
   const pageData = branches.slice(startIndex, startIndex + ROWS_PER_PAGE);
 
-  const handleEdit = (branch: Branch) => {
-    if (branch.is_active === false) {
-      Alert.alert("Inactive branch", "This account is deactivated and cannot be edited.");
-      return;
-    }
-
+  const openEditModal = (branch: Branch) => {
     setSelectedBranch(branch);
-    setUsername(branch.email);
-    setClerkUsername(branch.clerk_username ?? "");
+    setBranchName(branch.name ?? '');
+    setUsername(branch.email ?? '');
+    setPassword('');
     setModalVisible(true);
   };
 
-  const handleDelete = () => {
+  const closeModal = () => {
     setModalVisible(false);
+    setSelectedBranch(null);
+    setBranchName('');
     setUsername('');
     setPassword('');
-    setSelectedBranch(null);
   };
 
   const isOwner = currentUser?.role === "owner";
+  const selectedIsInactive = selectedBranch?.is_active === false;
 
-  // UPDATE ACCOUNT (branch login + clerk)
+  // UPDATE ACCOUNT (branch display name, login email, optional password)
   const handleUpdateAccount = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
       if (!selectedBranch?.id || !token) {
         Alert.alert("Error", "Missing session or branch.");
         return;
       }
 
+      const name = branchName.trim();
       const email = username.trim();
+      if (!name) {
+        Alert.alert("Error", "Branch name is required.");
+        return;
+      }
       if (!email) {
         Alert.alert("Error", "Username (email) is required.");
         return;
       }
 
-      const body: { email: string; password?: string; clerk_username: string } = {
+      const body: { name: string; email: string; password?: string } = {
+        name,
         email,
-        clerk_username: clerkUsername.trim(),
       };
       if (password.trim().length > 0) {
         body.password = password.trim();
@@ -165,13 +213,11 @@ const BranchList = () => {
         body: JSON.stringify(body),
       });
 
-      if (response.status !== 200) {
+      if (!response.ok) {
         let message = `Update failed (${response.status}).`;
         try {
           const err = await response.json();
-          if (err?.message) {
-            message = typeof err.message === "string" ? err.message : message;
-          }
+          message = formatApiErrorMessage(err);
         } catch {
           /* ignore */
         }
@@ -185,11 +231,7 @@ const BranchList = () => {
         prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b))
       );
 
-      setModalVisible(false);
-      setSelectedBranch(null);
-      setUsername("");
-      setClerkUsername("");
-      setPassword("");
+      closeModal();
     } catch (error) {
       console.log(error);
       Alert.alert("Error", "Something went wrong. Please try again.");
@@ -198,78 +240,126 @@ const BranchList = () => {
     }
   };
 
-  const handleDeactivateAccount = () => {
+  const handleDeactivateAccount = async () => {
     if (!selectedBranch?.id) return;
 
-    Alert.alert(
+    const ok = await confirmAsync(
       "Deactivate account",
       "This branch will no longer be able to log in. Continue?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Deactivate",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const token = await AsyncStorage.getItem("token");
-              if (!token) {
-                Alert.alert("Error", "Missing session.");
-                return;
-              }
-
-              setIsSubmitting(true);
-
-              const response = await fetch(
-                `${API_URL}/branches/${selectedBranch.id}/deactivate`,
-                {
-                  method: "PUT",
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    Accept: "application/json",
-                  },
-                }
-              );
-
-              if (response.status !== 200) {
-                let message = `Deactivate failed (${response.status}).`;
-                try {
-                  const err = await response.json();
-                  if (err?.message) {
-                    message = typeof err.message === "string" ? err.message : message;
-                  }
-                } catch {
-                  /* ignore */
-                }
-                Alert.alert("Could not deactivate", message);
-                return;
-              }
-
-              const payload = await response.json();
-              const updated: Branch | undefined = payload?.user;
-
-              if (updated?.id != null) {
-                setBranches((prev) =>
-                  prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b))
-                );
-              } else {
-                await loadBranches();
-              }
-
-              setModalVisible(false);
-              setSelectedBranch(null);
-              setUsername("");
-              setClerkUsername("");
-              setPassword("");
-            } catch (error) {
-              console.log(error);
-              Alert.alert("Error", "Something went wrong. Please try again.");
-            } finally {
-              setIsSubmitting(false);
-            }
-          },
-        },
-      ]
+      "Deactivate"
     );
+    if (!ok) return;
+
+    try {
+      if (!token) {
+        Alert.alert("Error", "Missing session.");
+        return;
+      }
+
+      setIsSubmitting(true);
+
+      const response = await fetch(
+        `${API_URL}/branches/${selectedBranch.id}/deactivate`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        let message = `Deactivate failed (${response.status}).`;
+        try {
+          const err = await response.json();
+          message = formatApiErrorMessage(err);
+        } catch {
+          /* ignore */
+        }
+        Alert.alert("Could not deactivate", message);
+        return;
+      }
+
+      const payload = await response.json();
+      const updated: Branch | undefined = payload?.user;
+
+      if (updated?.id != null) {
+        setBranches((prev) =>
+          prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b))
+        );
+      } else {
+        await loadBranches();
+      }
+
+      closeModal();
+    } catch (error) {
+      console.log(error);
+      Alert.alert("Error", "Something went wrong. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleActivateAccount = async () => {
+    if (!selectedBranch?.id || !isOwner) return;
+
+    const ok = await confirmAsync(
+      "Activate account",
+      "This branch will be allowed to log in again. Continue?",
+      "Activate"
+    );
+    if (!ok) return;
+
+    try {
+      if (!token) {
+        Alert.alert("Error", "Missing session.");
+        return;
+      }
+
+      setIsSubmitting(true);
+
+      const response = await fetch(
+        `${API_URL}/branches/${selectedBranch.id}/activate`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        let message = `Activate failed (${response.status}).`;
+        try {
+          const err = await response.json();
+          message = formatApiErrorMessage(err);
+        } catch {
+          /* ignore */
+        }
+        Alert.alert("Could not activate", message);
+        return;
+      }
+
+      const payload = await response.json();
+      const updated: Branch | undefined = payload?.user;
+
+      if (updated?.id != null) {
+        setBranches((prev) =>
+          prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b))
+        );
+      } else {
+        await loadBranches();
+      }
+
+      closeModal();
+    } catch (error) {
+      console.log(error);
+      Alert.alert("Error", "Something went wrong. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleProfile = () => {
@@ -279,8 +369,8 @@ const BranchList = () => {
 
   const handleLogout = async () => {
     setOpen(false);
-    await AsyncStorage.removeItem("token");
-    router.push("/login");
+    await logout();
+    router.replace("/(openingApps)/login");
   };
 
   return (
@@ -337,7 +427,7 @@ const BranchList = () => {
         <View style={styles.card}>
 
           <View style={styles.cardHeader}>
-            <Text style={styles.cardHeaderTitle}>Branch Name</Text>
+            <Text style={styles.cardHeaderTitle}>Branches</Text>
             <Text style={styles.headerEdit}>Edit</Text>
           </View>
 
@@ -359,7 +449,7 @@ const BranchList = () => {
                     <Ionicons name="location" size={20} color="#3b82f6" />
                   </View>
 
-                  <View>
+                  <View style={styles.branchTextBlock}>
                     <Text style={styles.branchName}>
                       {branch.name}
                       {branch.is_active === false ? (
@@ -367,8 +457,8 @@ const BranchList = () => {
                       ) : null}
                     </Text>
 
-                    <Text style={{ color: "#64748b" }}>
-                      Clerk: {branch.clerk_username ?? "Not assigned"}
+                    <Text style={styles.branchSubtext} numberOfLines={1}>
+                      {branch.email}
                     </Text>
 
                   </View>
@@ -376,17 +466,13 @@ const BranchList = () => {
                 </View>
 
                 <TouchableOpacity
-                  style={[
-                    styles.editButton,
-                    branch.is_active === false && styles.editButtonDisabled,
-                  ]}
-                  onPress={() => handleEdit(branch)}
-                  disabled={branch.is_active === false}
+                  style={styles.editButton}
+                  onPress={() => openEditModal(branch)}
                 >
                   <Ionicons
                     name="create-outline"
                     size={22}
-                    color={branch.is_active === false ? "#94a3b8" : "#3b82f6"}
+                    color="#3b82f6"
                   />
                 </TouchableOpacity>
 
@@ -428,23 +514,40 @@ const BranchList = () => {
 
       <Modal visible={modalVisible} transparent animationType="fade">
 
-        <View style={styles.modalOverlay}>
+        <View style={styles.modalOverlay} pointerEvents="box-none">
 
-          <View style={styles.modalBox}>
+          <View style={styles.modalBox} pointerEvents="auto">
 
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Update account</Text>
+              <Text style={styles.modalTitle}>
+                {selectedIsInactive ? "Branch account (inactive)" : "Update account"}
+              </Text>
 
-              <TouchableOpacity
+              <Pressable
                 style={styles.modalCloseBtn}
-                onPress={() => setModalVisible(false)}
+                onPress={closeModal}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
               >
                 <Text style={styles.modalCloseText}>✕</Text>
-              </TouchableOpacity>
+              </Pressable>
 
             </View>
 
             <View style={styles.modalContent}>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Branch name</Text>
+
+                <TextInput
+                  style={styles.input}
+                  value={branchName}
+                  onChangeText={setBranchName}
+                  placeholder={selectedBranch?.name || "Branch display name"}
+                  placeholderTextColor="#94a3b8"
+                />
+
+              </View>
 
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Username</Text>
@@ -453,19 +556,8 @@ const BranchList = () => {
                   style={styles.input}
                   value={username}
                   onChangeText={setUsername}
-                />
-
-              </View>
-
-              <View style={styles.inputContainer}>
-
-                <Text style={styles.inputLabel}>Clerk Username</Text>
-
-                <TextInput
-                  style={styles.input}
-                  value={clerkUsername}
-                  onChangeText={setClerkUsername}
-                  placeholder="Assign clerk username"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
                 />
 
               </View>
@@ -478,6 +570,8 @@ const BranchList = () => {
                   style={styles.input}
                   value={password}
                   onChangeText={setPassword}
+                  placeholder="Leave blank to keep current"
+                  placeholderTextColor="#94a3b8"
                   secureTextEntry
                 />
 
@@ -485,36 +579,50 @@ const BranchList = () => {
 
               <View style={styles.modalButtons}>
 
-                <TouchableOpacity
-                  style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
-                  onPress={handleDelete}
+                <Pressable
+                  style={[styles.cancelButton, isSubmitting && styles.buttonDisabled]}
+                  onPress={closeModal}
                   disabled={isSubmitting}
+                  accessibilityRole="button"
                 >
-                  <Text style={styles.deleteButtonText}>Cancel</Text>
-                </TouchableOpacity>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </Pressable>
 
-                <TouchableOpacity
+                <Pressable
                   style={[styles.confirmButton, isSubmitting && styles.buttonDisabled]}
                   onPress={handleUpdateAccount}
                   disabled={isSubmitting}
+                  accessibilityRole="button"
                 >
                   {isSubmitting ? (
                     <ActivityIndicator color="#ffffff" />
                   ) : (
                     <Text style={styles.confirmButtonText}>Update account</Text>
                   )}
-                </TouchableOpacity>
+                </Pressable>
 
               </View>
 
-              {isOwner ? (
-                <TouchableOpacity
+              {isOwner && selectedIsInactive ? (
+                <Pressable
+                  style={[styles.activateAccountBtn, isSubmitting && styles.buttonDisabled]}
+                  onPress={handleActivateAccount}
+                  disabled={isSubmitting}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.activateAccountText}>Activate account</Text>
+                </Pressable>
+              ) : null}
+
+              {isOwner && !selectedIsInactive ? (
+                <Pressable
                   style={[styles.deactivateAccountBtn, isSubmitting && styles.buttonDisabled]}
                   onPress={handleDeactivateAccount}
                   disabled={isSubmitting}
+                  accessibilityRole="button"
                 >
                   <Text style={styles.deactivateAccountText}>Deactivate account</Text>
-                </TouchableOpacity>
+                </Pressable>
               ) : null}
 
             </View>
@@ -623,6 +731,10 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 16,
   },
+  branchTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
   branchIconContainer: {
     width: 40,
     height: 40,
@@ -642,6 +754,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.2,
   },
+  branchSubtext: {
+    marginTop: 4,
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '500',
+  },
   inactiveLabel: {
     fontSize: 15,
     color: '#94a3b8',
@@ -656,9 +774,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-  },
-  editButtonDisabled: {
-    opacity: 0.55,
   },
   pagination: {
     flexDirection: 'row',
@@ -738,10 +853,12 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e2e8f0',
   },
   modalTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
     color: '#1e293b',
     letterSpacing: -0.5,
+    flex: 1,
+    paddingRight: 8,
   },
   modalCloseBtn: {
     width: 36,
@@ -788,20 +905,17 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 8,
   },
-  deleteButton: {
+  cancelButton: {
     flex: 1,
     paddingVertical: 16,
     borderRadius: 12,
-    backgroundColor: '#ef4444',
+    backgroundColor: '#f1f5f9',
     alignItems: 'center',
-    shadowColor: '#ef4444',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
   },
-  deleteButtonText: {
-    color: '#ffffff',
+  cancelButtonText: {
+    color: '#475569',
     fontWeight: '700',
     fontSize: 16,
     letterSpacing: 0.3,
@@ -838,6 +952,20 @@ const styles = StyleSheet.create({
   },
   deactivateAccountText: {
     color: '#dc2626',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  activateAccountBtn: {
+    marginTop: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#16a34a',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  activateAccountText: {
+    color: '#16a34a',
     fontWeight: '700',
     fontSize: 15,
   },

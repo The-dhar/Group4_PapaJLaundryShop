@@ -12,8 +12,8 @@ import {
   View,
   Alert
 } from 'react-native';
+import { useAuth } from "@/contexts/AuthContext";
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { API_URL } from "../../config/api";
 
@@ -31,6 +31,7 @@ type Branch = {
 const BranchAccountManager = () => {
 
   const router = useRouter();
+  const { token, logout } = useAuth();
   const [open, setOpen] = useState(false);
 
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -50,8 +51,8 @@ const BranchAccountManager = () => {
 
   const handleLogout = async () => {
     setOpen(false);
-    await AsyncStorage.removeItem("token");
-    router.replace("/login");
+    await logout();
+    router.replace("/(openingApps)/login");
   };
 
   /* -----------------------------
@@ -62,7 +63,7 @@ const BranchAccountManager = () => {
 
     try {
 
-      const token = await AsyncStorage.getItem("token");
+      if (!token) return;
 
       const response = await fetch(`${API_URL}/branches`, {
         headers: {
@@ -78,7 +79,7 @@ const BranchAccountManager = () => {
     } catch (error) {
       console.log(error);
     }
-  }, []);
+  }, [token]);
 
   useFocusEffect(
     useCallback(() => {
@@ -99,7 +100,10 @@ const BranchAccountManager = () => {
 
     try {
 
-      const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        Alert.alert("Error", "Not signed in.");
+        return;
+      }
 
       const response = await fetch(`${API_URL}/branches`, {
 
