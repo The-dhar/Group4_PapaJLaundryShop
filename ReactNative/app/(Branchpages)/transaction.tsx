@@ -8,9 +8,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useAuth } from "@/contexts/AuthContext";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useFocusEffect } from "@react-navigation/native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_URL } from "../../config/api";
 
 const ROWS_PER_PAGE = 8;
@@ -34,6 +34,7 @@ const getInventoryColor = (status: string) =>
   String(status).toLowerCase() === "picked_up" ? "#2563EB" : "#F59E0B";
 
 export default function TransactionDeviceList() {
+  const { token } = useAuth();
   const [selected, setSelected] = useState<TransactionRow | null>(null);
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
@@ -49,7 +50,6 @@ export default function TransactionDeviceList() {
   const loadTransactions = useCallback(async () => {
     try {
       setIsLoading(true);
-      const token = await AsyncStorage.getItem("token");
       if (!token) return;
 
       const response = await fetch(`${API_URL}/transactions?include_archived=1`, {
@@ -83,7 +83,7 @@ export default function TransactionDeviceList() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [token]);
 
   useFocusEffect(
     useCallback(() => {

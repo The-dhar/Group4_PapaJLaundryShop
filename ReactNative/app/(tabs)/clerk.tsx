@@ -16,9 +16,9 @@ import {
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import Ionicons from "react-native-vector-icons/Ionicons";
+import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Sharing from "expo-sharing";
 import { cacheDirectory, writeAsStringAsync } from "expo-file-system/legacy";
 import * as XLSX from "xlsx";
@@ -363,6 +363,7 @@ export default function ClerkLogsList() {
   const pageData = filteredLogs.slice(startIndex, startIndex + rowsPerPage);
 
   const router = useRouter();
+  const { token, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
@@ -389,7 +390,6 @@ export default function ClerkLogsList() {
 
   const loadClerkLogs = useCallback(async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
       if (!token) return;
 
       const qs = new URLSearchParams();
@@ -430,7 +430,7 @@ export default function ClerkLogsList() {
     } catch (error) {
       console.log(error);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.includeArchived]);
+  }, [filters.dateFrom, filters.dateTo, filters.includeArchived, token]);
 
   useFocusEffect(
     useCallback(() => {
@@ -477,9 +477,10 @@ export default function ClerkLogsList() {
     router.push("/profile");
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setOpen(false);
-    router.push("/login");
+    await logout();
+    router.replace("/(openingApps)/login");
   };
 
   const Chip = ({

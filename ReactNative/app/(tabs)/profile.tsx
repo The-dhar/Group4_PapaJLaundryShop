@@ -15,9 +15,9 @@ import {
   View,
   Image,
 } from 'react-native';
+import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_URL } from "../../config/api";
 
 const WINDOW_HEIGHT = Dimensions.get("window").height;
@@ -68,12 +68,12 @@ export default function ProfileScreen() {
   const [isSavingPassword, setIsSavingPassword] = useState(false);
 
   const router = useRouter();
+  const { token } = useAuth();
 
   const loadProfile = useCallback(async () => {
     setProfileError(null);
     setIsLoadingProfile(true);
     try {
-      const token = await AsyncStorage.getItem("token");
       if (!token) {
         setProfile(null);
         setProfileError("You are not signed in.");
@@ -125,7 +125,7 @@ export default function ProfileScreen() {
     } finally {
       setIsLoadingProfile(false);
     }
-  }, []);
+  }, [token]);
 
   useFocusEffect(
     useCallback(() => {
@@ -173,7 +173,6 @@ export default function ProfileScreen() {
     }
 
     try {
-      const token = await AsyncStorage.getItem("token");
       if (!token) {
         Alert.alert("Error", "You are not signed in.");
         return;
@@ -239,7 +238,6 @@ export default function ProfileScreen() {
     }
 
     try {
-      const token = await AsyncStorage.getItem("token");
       if (!token) {
         Alert.alert("Error", "You are not signed in.");
         return;

@@ -13,9 +13,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import Ionicons from '@expo/vector-icons/Ionicons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from "../../config/api";
 
 const ROWS_PER_PAGE = 5;
@@ -81,6 +81,7 @@ async function confirmAsync(
 const BranchList = () => {
 
   const router = useRouter();
+  const { token, logout } = useAuth();
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [page, setPage] = useState(1);
@@ -100,7 +101,6 @@ const BranchList = () => {
   // LOAD BRANCHES FROM BACKEND
   const loadBranches = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
       if (!token) return;
 
       const response = await fetch(`${API_URL}/branches`, {
@@ -123,7 +123,6 @@ const BranchList = () => {
 
   const loadCurrentUser = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
       if (!token) return;
 
       const response = await fetch(`${API_URL}/user`, {
@@ -145,7 +144,7 @@ const BranchList = () => {
   useEffect(() => {
     loadBranches();
     loadCurrentUser();
-  }, []);
+  }, [token]);
 
   const totalPages = Math.max(1, Math.ceil(branches.length / ROWS_PER_PAGE));
 
@@ -178,7 +177,6 @@ const BranchList = () => {
   // UPDATE ACCOUNT (branch display name, login email, optional password)
   const handleUpdateAccount = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
       if (!selectedBranch?.id || !token) {
         Alert.alert("Error", "Missing session or branch.");
         return;
@@ -253,7 +251,6 @@ const BranchList = () => {
     if (!ok) return;
 
     try {
-      const token = await AsyncStorage.getItem("token");
       if (!token) {
         Alert.alert("Error", "Missing session.");
         return;
@@ -315,7 +312,6 @@ const BranchList = () => {
     if (!ok) return;
 
     try {
-      const token = await AsyncStorage.getItem("token");
       if (!token) {
         Alert.alert("Error", "Missing session.");
         return;
@@ -373,8 +369,8 @@ const BranchList = () => {
 
   const handleLogout = async () => {
     setOpen(false);
-    await AsyncStorage.removeItem("token");
-    router.push("/login");
+    await logout();
+    router.replace("/(openingApps)/login");
   };
 
   return (

@@ -13,10 +13,10 @@ import {
   SafeAreaView,
   StatusBar,
 } from 'react-native';
+import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from "../../config/api";
 
 /** Scroll area max height so the sheet scrolls internally; avoids the footer clipping the last controls. */
@@ -71,11 +71,12 @@ const LaundryPriceManager = () => {
     tiers: [{ range: '', price: '', description: '' }],
   });
 
+  const { token, logout } = useAuth();
+
   const loadServices = useCallback(async () => {
     setLoadError(null);
     setIsLoadingPrices(true);
     try {
-      const token = await AsyncStorage.getItem("token");
       if (!token) {
         setServices([]);
         setLoadError('You are not signed in.');
@@ -112,7 +113,7 @@ const LaundryPriceManager = () => {
     } finally {
       setIsLoadingPrices(false);
     }
-  }, []);
+  }, [token]);
 
   useFocusEffect(
     useCallback(() => {
@@ -159,7 +160,6 @@ const LaundryPriceManager = () => {
 
     setIsMutating(true);
     try {
-      const token = await AsyncStorage.getItem("token");
       if (!token) {
         Alert.alert("Error", "Not signed in.");
         return;
@@ -237,7 +237,6 @@ const LaundryPriceManager = () => {
   const submitCreateAfterConfirm = async () => {
     setIsMutating(true);
     try {
-      const token = await AsyncStorage.getItem("token");
       if (!token) {
         Alert.alert("Error", "Not signed in.");
         return;
@@ -333,9 +332,10 @@ const LaundryPriceManager = () => {
     router.push("/profile");
   };
   
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setOpen(false);
-    router.push("/login");
+    await logout();
+    router.replace("/(openingApps)/login");
   };
   return (
     <SafeAreaView style={styles.container}>
