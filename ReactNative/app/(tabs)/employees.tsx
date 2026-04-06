@@ -60,6 +60,36 @@ type HrEmployee = {
 
 type RoleFilter = "all" | "clerk" | "staff";
 
+/** Laravel JSON: { message, errors?: { field: string[] } } */
+function formatLaravelApiError(data: unknown, httpStatus?: number): string {
+  if (!data || typeof data !== "object") {
+    return "Unable to create staff account.";
+  }
+  const d = data as Record<string, unknown>;
+  const rawErrors = d.errors;
+  if (rawErrors && typeof rawErrors === "object" && rawErrors !== null) {
+    const lines: string[] = [];
+    for (const [, msgs] of Object.entries(rawErrors)) {
+      if (Array.isArray(msgs)) {
+        for (const m of msgs) {
+          if (typeof m === "string") lines.push(m);
+        }
+      } else if (typeof msgs === "string") {
+        lines.push(msgs);
+      }
+    }
+    if (lines.length) return lines.join("\n");
+  }
+  if (typeof d.message === "string" && d.message.trim()) {
+    const msg = d.message.trim();
+    if (httpStatus === 500 || msg === "Server Error") {
+      return `${msg}\n\nIf this continues, deploy the latest API and run php artisan migrate on Render (or check server logs).`;
+    }
+    return msg;
+  }
+  return "Unable to create staff account.";
+}
+
 const getOutcomeColor = (outcome: string | null) => {
   const normalized = String(outcome || "").toLowerCase();
   if (normalized === "gain") return "#16a34a";
@@ -92,6 +122,7 @@ export default function EmployeesScreen() {
   const [cPassword2, setCPassword2] = useState("");
   const [cRole, setCRole] = useState<"clerk" | "staff">("clerk");
   const [cBranchId, setCBranchId] = useState<number | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignEmployee, setAssignEmployee] = useState<HrEmployee | null>(null);
@@ -179,11 +210,13 @@ export default function EmployeesScreen() {
     setCPassword2("");
     setCRole("clerk");
     setCBranchId(null);
+    setCreateError(null);
   };
 
   const createStaffAccount = async () => {
     try {
       setIsSaving(true);
+      setCreateError(null);
       if (!token) throw new Error("Not authenticated");
       const headers = {
         "Content-Type": "application/json",
@@ -205,14 +238,10 @@ export default function EmployeesScreen() {
         }),
       });
 
+      const data = await response.json().catch(() => ({}));
+
       if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        const msg =
-          err?.message ||
-          (typeof err === "object" && err !== null && "errors" in err
-            ? JSON.stringify(err.errors)
-            : "Unable to create staff account.");
-        Alert.alert("Create failed", typeof msg === "string" ? msg : "Unable to create.");
+        setCreateError(formatLaravelApiError(data, response.status));
         return;
       }
 
@@ -222,7 +251,9 @@ export default function EmployeesScreen() {
       Alert.alert("Created", "Staff login account saved.");
     } catch (error) {
       console.log(error);
-      Alert.alert("Create failed", "Unable to create staff account.");
+      setCreateError(
+        error instanceof Error ? error.message : "Unable to create staff account. Check your connection."
+      );
     } finally {
       setIsSaving(false);
     }
@@ -306,12 +337,16 @@ export default function EmployeesScreen() {
       return;
     }
     if (createStep === 3) {
+      setCreateError(null);
       setCreateStep(4);
     }
   };
 
   const goPrevStep = () => {
-    if (createStep > 1) setCreateStep((s) => s - 1);
+    if (createStep > 1) {
+      if (createStep === 4) setCreateError(null);
+      setCreateStep((s) => s - 1);
+    }
   };
 
   return (
@@ -517,6 +552,13 @@ export default function EmployeesScreen() {
                 <Text style={styles.modalCloseText}>X</Text>
               </TouchableOpacity>
             </View>
+
+            {createError ? (
+              <View style={styles.createErrorBanner}>
+                <Text style={styles.createErrorTitle}>Could not save</Text>
+                <Text style={styles.createErrorBody}>{createError}</Text>
+              </View>
+            ) : null}
 
             {createStep === 1 && (
               <>
@@ -863,6 +905,16 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   modalTitle: { fontSize: 16, fontWeight: "800", color: "#0f172a" },
   modalCloseText: { fontSize: 16, color: "#64748b", fontWeight: "700" },
+  createErrorBanner: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: "#fef2f2",
+    borderWidth: 1,
+    borderColor: "#fecaca",
+  },
+  createErrorTitle: { fontSize: 13, fontWeight: "800", color: "#b91c1c", marginBottom: 6 },
+  createErrorBody: { fontSize: 13, color: "#7f1d1d", lineHeight: 20 },
   stepHint: { fontSize: 13, color: "#0f172a", fontWeight: "700", marginBottom: 8 },
   input: {
     marginTop: 10,

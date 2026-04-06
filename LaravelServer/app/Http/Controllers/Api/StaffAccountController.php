@@ -4,8 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -56,17 +57,32 @@ class StaffAccountController extends Controller
 
         $displayName = trim($validated['first_name'].' '.$validated['last_name']);
 
-        $user = User::create([
-            'name' => $displayName,
-            'first_name' => $validated['first_name'],
-            'middle_initial' => $validated['middle_initial'] ?? null,
-            'last_name' => $validated['last_name'],
-            'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
-            'role' => $validated['role'],
-            'branch_id' => $validated['branch_id'] ?? null,
-            'is_active' => true,
-        ]);
+        try {
+            $user = User::create([
+                'name' => $displayName,
+                'first_name' => $validated['first_name'],
+                'middle_initial' => $validated['middle_initial'] ?? null,
+                'last_name' => $validated['last_name'],
+                'email' => $validated['email'],
+                'password' => $validated['password'],
+                'role' => $validated['role'],
+                'branch_id' => $validated['branch_id'] ?? null,
+                'is_active' => true,
+            ]);
+        } catch (QueryException $e) {
+            Log::warning('staff_accounts.store.query', ['message' => $e->getMessage()]);
+            $msg = $e->getMessage();
+            if (stripos($msg, 'Duplicate') !== false || stripos($msg, 'UNIQUE constraint') !== false) {
+                return response()->json([
+                    'message' => 'The given data was invalid.',
+                    'errors' => ['email' => ['This email is already registered.']],
+                ], 422);
+            }
+
+            return response()->json([
+                'message' => config('app.debug') ? $msg : 'Database error while saving. Run migrations on the server and try again.',
+            ], 500);
+        }
 
         return response()->json($user, 201);
     }
@@ -119,7 +135,7 @@ class StaffAccountController extends Controller
         }
 
         if (! empty($validated['password'])) {
-            $user->password = Hash::make($validated['password']);
+            $user->password = $validated['password'];
         }
 
         $user->save();
