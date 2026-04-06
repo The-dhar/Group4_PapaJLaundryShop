@@ -61,10 +61,16 @@ export default function LoginPage() {
         return;
       }
 
-      if (data.user.role !== "manager") {
+      const webAllowedRoles = ['owner', 'clerk', 'staff'];
+      const role = data.user?.role;
+      if (!webAllowedRoles.includes(role)) {
+        const text =
+          role === 'manager'
+            ? 'Branch manager logins are no longer used. Sign in with a clerk/staff account or the shop owner account.'
+            : 'This account cannot use the web app.';
         await Swal.fire({
           title: 'Access denied',
-          text: 'Only branch accounts can login here.',
+          text,
           icon: 'warning',
           width: 400
         });

@@ -12,11 +12,20 @@ class BranchController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->isOwner()) {
-            abort(403);
+        if ($user->isOwner()) {
+            return Branch::query()->orderBy('name')->get();
         }
 
-        return Branch::query()->orderBy('name')->get();
+        if ($user->isBranchEmployee()) {
+            if (! $user->branch_id) {
+                return response()->json([]);
+            }
+            $branch = Branch::query()->where('id', $user->branch_id)->first();
+
+            return response()->json($branch ? [$branch] : []);
+        }
+
+        abort(403);
     }
 
     /**

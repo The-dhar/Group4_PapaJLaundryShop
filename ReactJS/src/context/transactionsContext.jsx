@@ -78,12 +78,28 @@ export const TransactionsProvider = ({ children }) => {
     payment_method = "",
     paid_amount = 0,
     subtotal = 0,
-    /** Required when the logged-in API user is `owner` (manager accounts omit this). */
+    /** Required for owner (branches.id); clerk/staff omit — API uses their assigned branch. */
     branch_id,
   }) => {
     try {
       const token = localStorage.getItem("token");
       if (!token) throw new Error("Not authenticated");
+
+      let effectiveBranchId = branch_id;
+      if (effectiveBranchId == null || effectiveBranchId === "") {
+        try {
+          const raw = localStorage.getItem("user");
+          const u = raw ? JSON.parse(raw) : null;
+          if (u?.role === "owner") {
+            const stored = localStorage.getItem("ownerSelectedBranchId");
+            if (stored != null && stored !== "") {
+              effectiveBranchId = Number(stored);
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
 
       const isRush = active_extras?.express || false;
       const extras =
@@ -123,8 +139,8 @@ export const TransactionsProvider = ({ children }) => {
         is_rush: isRush,
       };
 
-      if (branch_id != null && branch_id !== "") {
-        payload.branch_id = Number(branch_id);
+      if (effectiveBranchId != null && effectiveBranchId !== "") {
+        payload.branch_id = Number(effectiveBranchId);
       }
 
       const res = await fetch(`${API_URL}/transactions`, {

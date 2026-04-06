@@ -17,7 +17,10 @@ const Sidebar = ({ sidebarOpen, toggleSidebar }) => {
     const navigate = useNavigate();
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
     const user = getUserFromStorage();
-    const branchDisplayName = user?.name?.trim() || 'Branch';
+    const branchDisplayName =
+        user?.branch?.name?.trim() ||
+        user?.name?.trim() ||
+        'Branch';
     const accountUsername =
         user?.email?.trim() ||
         user?.clerk_username?.trim() ||

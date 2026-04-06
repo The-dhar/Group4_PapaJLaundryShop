@@ -55,6 +55,8 @@ class StaffAccountController extends Controller
             );
         }
 
+        $validated['email'] = strtolower(trim($validated['email']));
+
         $displayName = trim($validated['first_name'].' '.$validated['last_name']);
 
         try {

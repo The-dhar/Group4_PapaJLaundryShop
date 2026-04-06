@@ -101,10 +101,14 @@ function transactionCustomerMatches(query, transactions) {
   return out;
 }
 
-async function fetchCustomersFromApi(query) {
+async function fetchCustomersFromApi(query, branchIdForOwner) {
   const token = localStorage.getItem('token');
   if (!token) return [];
-  const res = await fetch(`${API_URL}/customers/search/${encodeURIComponent(query)}`, {
+  let url = `${API_URL}/customers/search/${encodeURIComponent(query)}`;
+  if (branchIdForOwner != null && branchIdForOwner !== '') {
+    url += `?branch_id=${encodeURIComponent(branchIdForOwner)}`;
+  }
+  const res = await fetch(url, {
     headers: {
       Accept: 'application/json',
       Authorization: `Bearer ${token}`,
@@ -115,8 +119,22 @@ async function fetchCustomersFromApi(query) {
   return Array.isArray(data) ? data : [];
 }
 
+function getUserFromStorage() {
+  try {
+    const raw = localStorage.getItem('user');
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 const POs = () => {
   const { createTransaction, transactions } = useTransactions();
+
+  const [sessionUser, setSessionUser] = useState(() => getUserFromStorage());
+  const [branches, setBranches] = useState([]);
+  const [ownerBranchId, setOwnerBranchId] = useState(null);
 
   // --- States ---
   const [selectedItem, setSelectedItem] = useState(null);
@@ -159,6 +177,52 @@ const POs = () => {
   useEffect(() => {
     setPastSearches(JSON.parse(localStorage.getItem('pastSearches') || '[]'));
   }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token || !sessionUser) return;
+
+    if (sessionUser.role === 'owner') {
+      (async () => {
+        const res = await fetch(`${API_URL}/branches`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) return;
+        setBranches(data);
+        const stored = localStorage.getItem('ownerSelectedBranchId');
+        const pick =
+          stored && data.some((b) => String(b.id) === String(stored))
+            ? Number(stored)
+            : data[0].id;
+        setOwnerBranchId(pick);
+        localStorage.setItem('ownerSelectedBranchId', String(pick));
+      })();
+      return;
+    }
+
+    if (sessionUser.branch?.id) return;
+
+    (async () => {
+      const res = await fetch(`${API_URL}/branches`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const first = Array.isArray(data) ? data[0] : null;
+      if (!first) return;
+      const merged = { ...sessionUser, branch: first };
+      setSessionUser(merged);
+      localStorage.setItem('user', JSON.stringify(merged));
+    })();
+  }, [sessionUser]);
+
+  const onOwnerBranchChange = (e) => {
+    const id = Number(e.target.value);
+    setOwnerBranchId(id);
+    localStorage.setItem('ownerSelectedBranchId', String(id));
+  };
 
   const mergeCustomerSources = useCallback((apiRows, txRows) => {
     const map = new Map();
@@ -251,8 +315,10 @@ const POs = () => {
       setSuggestionLoading(true);
       setCustomerSuggestions([]);
       try {
+        const branchForSearch =
+          sessionUser?.role === 'owner' ? ownerBranchId : undefined;
         const [apiRows, txRows] = await Promise.all([
-          fetchCustomersFromApi(q),
+          fetchCustomersFromApi(q, branchForSearch),
           Promise.resolve(transactionCustomerMatches(q, transactions)),
         ]);
         if (cancelled) return;
@@ -265,7 +331,7 @@ const POs = () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [customerSearchInput, transactions, mergeCustomerSources]);
+  }, [customerSearchInput, transactions, mergeCustomerSources, sessionUser, ownerBranchId]);
 
   useEffect(() => {
     const onDoc = (e) => {
@@ -649,6 +715,16 @@ const POs = () => {
 
     try {
       setIsSaving(true);
+      if (sessionUser?.role === 'owner' && (ownerBranchId == null || Number.isNaN(ownerBranchId))) {
+        Swal.fire({
+          title: 'Select branch',
+          text: 'Choose which branch this sale belongs to.',
+          icon: 'warning',
+          width: 350,
+        });
+        setIsSaving(false);
+        return;
+      }
       const newTransaction = await createTransaction({
         customer_name: fullName,
         customer_first_name: firstName.trim(),
@@ -667,6 +743,7 @@ const POs = () => {
         payment_status: paymentStatus === 'full' ? 'paid' : 'unpaid',
         payment_method: paymentMethod,
         paid_amount: Number(amountPaid) || 0,
+        branch_id: sessionUser?.role === 'owner' ? ownerBranchId : undefined,
       });
 
       printThermalReceipt(newTransaction);
@@ -687,6 +764,51 @@ const POs = () => {
   return (
     <DashboardLayout>
       <div className="pos-wrapper">
+        {sessionUser?.role === 'owner' && branches.length > 0 ? (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: '10px 12px',
+              background: '#f1f5f9',
+              borderRadius: 8,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              flexWrap: 'wrap',
+            }}
+          >
+            <span style={{ fontWeight: 700, color: '#0f172a' }}>Branch for this sale</span>
+            <select
+              value={ownerBranchId ?? ''}
+              onChange={onOwnerBranchChange}
+              style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #cbd5e1', minWidth: 200 }}
+            >
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+        {sessionUser && sessionUser.role !== 'owner' ? (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: '10px 12px',
+              background: '#eff6ff',
+              borderRadius: 8,
+              color: '#1e40af',
+              fontWeight: 600,
+            }}
+          >
+            {sessionUser.branch?.name
+              ? `Branch: ${sessionUser.branch.name}`
+              : sessionUser.branch_id
+                ? 'Loading branch…'
+                : 'No branch assigned. Ask the owner to assign this employee to a branch.'}
+          </div>
+        ) : null}
         <div className="pos-grid">
           {/* Service Items Section */}
           <section className="Service-item">

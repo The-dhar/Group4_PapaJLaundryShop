@@ -14,33 +14,41 @@ use Illuminate\Validation\ValidationException;
 class TransactionController extends Controller
 {
     /**
-     * Managers may only act on transactions for their branch (branch_id = user id).
-     * Owners may access all branches.
+     * branch_id references branches.id (not user ids).
+     * Owner must send branch_id; clerk/staff use their assigned users.branch_id.
      */
     protected function resolveBranchIdForStore(Request $request, User $user): int
     {
         if ($user->isOwner()) {
             $validated = $request->validate([
-                'branch_id' => 'required|integer|exists:users,id',
+                'branch_id' => 'required|integer|exists:branches,id',
             ]);
-            $branch = User::findOrFail($validated['branch_id']);
-            if (! $branch->isManager()) {
+
+            return (int) $validated['branch_id'];
+        }
+
+        if ($user->isBranchEmployee()) {
+            if (! $user->branch_id) {
                 throw ValidationException::withMessages([
-                    'branch_id' => ['The selected account must be a branch (manager) user.'],
+                    'branch_id' => ['Your account is not assigned to a branch. Ask the owner to assign one.'],
                 ]);
             }
 
-            return (int) $branch->id;
+            return (int) $user->branch_id;
         }
 
-        return (int) $user->id;
+        abort(403, 'This account cannot create transactions.');
     }
 
     protected function transactionForUser(User $user, int $id): Transaction
     {
         $query = Transaction::where('id', $id);
-        if ($user->isManager()) {
-            $query->where('branch_id', $user->id);
+
+        if ($user->isBranchEmployee()) {
+            if (! $user->branch_id) {
+                abort(404);
+            }
+            $query->where('branch_id', $user->branch_id);
         }
 
         return $query->firstOrFail();

@@ -16,7 +16,9 @@ class AuthController extends Controller
             'password' => 'required|string|max:255',
         ]);
 
-        $user = User::where('email', $validated['email'])->first();
+        $email = strtolower(trim($validated['email']));
+
+        $user = User::whereRaw('LOWER(email) = ?', [$email])->first();
 
         if (! $user || ! Hash::check($validated['password'], $user->password)) {
             return response()->json([
@@ -35,6 +37,8 @@ class AuthController extends Controller
                 'message' => 'Branch manager logins are no longer used. Sign in with an employee (clerk/staff) account.',
             ], 403);
         }
+
+        $user->load(['branch:id,name,clerk_username']);
 
         $token = $user->createToken('api-token')->plainTextToken;
 
