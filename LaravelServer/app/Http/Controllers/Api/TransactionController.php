@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
+use App\Models\Customer;
 use App\Models\Transaction;
 use App\Models\TransactionItem;
-use App\Models\Customer;
 use App\Models\User;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -92,7 +92,7 @@ class TransactionController extends Controller
             }
 
             // Generate receipt number
-            $receipt = 'RCPT-' . (10000 + Transaction::count() + 1);
+            $receipt = 'RCPT-'.(10000 + Transaction::count() + 1);
 
             // Create transaction
             $transaction = Transaction::create([
@@ -132,7 +132,7 @@ class TransactionController extends Controller
                     'laundry_type' => $service['laundryType'],
                     'rate' => $service['rate'],
                     'kilos' => $service['kilos'],
-                    'total' => $service['total']
+                    'total' => $service['total'],
 
                 ]);
 
@@ -150,7 +150,7 @@ class TransactionController extends Controller
                 'paid_amount' => $transaction->paid_amount,
                 'payment_method' => $transaction->payment_method,
                 'inventory_status' => $transaction->inventory_status,
-                'due_date' => $transaction->due_date
+                'due_date' => $transaction->due_date,
             ]);
 
         } catch (\Exception $e) {
@@ -159,7 +159,7 @@ class TransactionController extends Controller
 
             return response()->json([
                 'error' => 'Transaction failed',
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ], 500);
 
         }
@@ -181,8 +181,11 @@ class TransactionController extends Controller
             'branch:id,name,clerk_username',
         ]);
 
-        if ($user->isManager()) {
-            $query->where('branch_id', $user->id);
+        if ($user->isBranchEmployee()) {
+            if (! $user->branch_id) {
+                return response()->json([]);
+            }
+            $query->where('branch_id', $user->branch_id);
         }
 
         if (! $includeArchived) {
@@ -227,9 +230,9 @@ class TransactionController extends Controller
                         'laundryType' => $item->laundry_type,
                         'rate' => $item->rate,
                         'kilos' => $item->kilos,
-                        'total' => $item->total
+                        'total' => $item->total,
                     ];
-                })
+                }),
             ];
         }));
     }
@@ -243,7 +246,7 @@ class TransactionController extends Controller
         $transaction->save();
 
         return response()->json([
-            'message' => 'Transaction marked as paid'
+            'message' => 'Transaction marked as paid',
         ]);
     }
 
@@ -257,7 +260,7 @@ class TransactionController extends Controller
         $transaction->save();
 
         return response()->json([
-            'message' => 'Payment updated'
+            'message' => 'Payment updated',
         ]);
     }
 
@@ -270,7 +273,7 @@ class TransactionController extends Controller
         $transaction->save();
 
         return response()->json([
-            'message' => 'Transaction archived successfully'
+            'message' => 'Transaction archived successfully',
         ]);
     }
 
@@ -282,7 +285,7 @@ class TransactionController extends Controller
         $transaction->save();
 
         return response()->json([
-            'message' => 'Transaction restored successfully'
+            'message' => 'Transaction restored successfully',
         ]);
     }
 
@@ -301,8 +304,7 @@ class TransactionController extends Controller
         $transaction->save();
 
         return response()->json([
-            'message' => 'Transaction updated successfully'
+            'message' => 'Transaction updated successfully',
         ]);
     }
-
 }

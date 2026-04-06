@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
-use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
@@ -14,7 +13,7 @@ class CustomerController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->isOwner() && ! $user->isManager()) {
+        if (! $user->isOwner() && ! $user->isBranchEmployee()) {
             abort(403);
         }
 
@@ -30,22 +29,21 @@ class CustomerController extends Controller
         ];
 
         if ($user->isOwner()) {
-            $rules['branch_id'] = 'required|integer|exists:users,id';
+            $rules['branch_id'] = 'required|integer|exists:branches,id';
         }
 
         $validated = $request->validate($rules);
 
         $branchId = null;
-        if ($user->isManager()) {
-            $branchId = (int) $user->id;
+        if ($user->isOwner()) {
+            $branchId = (int) $validated['branch_id'];
         } else {
-            $branch = User::findOrFail($validated['branch_id']);
-            if (! $branch->isManager()) {
+            if (! $user->branch_id) {
                 throw ValidationException::withMessages([
-                    'branch_id' => ['The selected account must be a branch (manager) user.'],
+                    'branch_id' => ['No branch is assigned to your account.'],
                 ]);
             }
-            $branchId = (int) $branch->id;
+            $branchId = (int) $user->branch_id;
         }
 
         $firstName = trim((string) ($validated['first_name'] ?? ''));
@@ -77,17 +75,20 @@ class CustomerController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->isOwner() && ! $user->isManager()) {
+        if (! $user->isOwner() && ! $user->isBranchEmployee()) {
             abort(403);
         }
 
-        $query = Customer::query()->where('name', 'LIKE', '%' . $name . '%');
+        $query = Customer::query()->where('name', 'LIKE', '%'.$name.'%');
 
-        if ($user->isManager()) {
-            $query->where('branch_id', $user->id);
+        if ($user->isBranchEmployee()) {
+            if (! $user->branch_id) {
+                return response()->json([]);
+            }
+            $query->where('branch_id', $user->branch_id);
         } elseif ($request->filled('branch_id')) {
             $request->validate([
-                'branch_id' => 'integer|exists:users,id',
+                'branch_id' => 'integer|exists:branches,id',
             ]);
             $query->where('branch_id', (int) $request->query('branch_id'));
         }

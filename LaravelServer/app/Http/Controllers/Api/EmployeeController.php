@@ -3,11 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Branch;
 use App\Models\Employee;
 use App\Models\EmployeeBranchHistory;
-use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
 
 class EmployeeController extends Controller
 {
@@ -15,21 +14,18 @@ class EmployeeController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->isOwner() && ! $user->isManager()) {
+        if (! $user->isOwner()) {
             abort(403);
         }
 
         $query = Employee::with([
-            'branch:id,name,email,clerk_username',
+            'branch:id,name,clerk_username,legacy_manager_user_id',
+            'branch.legacyManager:id,email',
             'histories' => function ($query) {
-                $query->with('branch:id,name,email')
+                $query->with('branch:id,name,clerk_username')
                     ->orderByDesc('id');
             },
         ])->orderByDesc('id');
-
-        if ($user->isManager()) {
-            $query->where('branch_id', $user->id);
-        }
 
         $employees = $query->get();
 
@@ -47,7 +43,7 @@ class EmployeeController extends Controller
                 'clerk_since' => optional($employee->clerk_since)?->toDateString(),
                 'branch_id' => $employee->branch_id,
                 'branch_name' => optional($employee->branch)->name,
-                'branch_email' => optional($employee->branch)->email,
+                'branch_email' => optional(optional($employee->branch)->legacyManager)->email,
                 'created_at' => $employee->created_at,
                 'updated_at' => $employee->updated_at,
                 'history' => $employee->histories->map(function (EmployeeBranchHistory $history) {
@@ -68,9 +64,7 @@ class EmployeeController extends Controller
 
     public function store(Request $request)
     {
-        $user = $request->user();
-
-        if (! $user->isOwner() && ! $user->isManager()) {
+        if (! $request->user()->isOwner()) {
             abort(403);
         }
 
@@ -84,18 +78,11 @@ class EmployeeController extends Controller
             'loss_percent' => 'nullable|integer|min:0|max:100',
             'net_revenue_php' => 'nullable|numeric',
             'clerk_since' => 'nullable|date',
-            'branch_id' => 'nullable|exists:users,id',
+            'branch_id' => 'nullable|exists:branches,id',
         ]);
 
-        if ($user->isManager()) {
-            $validated['branch_id'] = $user->id;
-        } elseif ($user->isOwner() && ! empty($validated['branch_id'])) {
-            $branch = User::findOrFail($validated['branch_id']);
-            if (! $branch->isManager()) {
-                throw ValidationException::withMessages([
-                    'branch_id' => ['The selected account must be a branch (manager) user.'],
-                ]);
-            }
+        if (! empty($validated['branch_id'])) {
+            Branch::findOrFail($validated['branch_id']);
         }
 
         $employee = Employee::create([
@@ -129,21 +116,15 @@ class EmployeeController extends Controller
 
     public function update(Request $request, $id)
     {
-        $user = $request->user();
-
-        if (! $user->isOwner() && ! $user->isManager()) {
+        if (! $request->user()->isOwner()) {
             abort(403);
         }
 
         $employee = Employee::findOrFail($id);
 
-        if ($user->isManager() && (int) $employee->branch_id !== (int) $user->id) {
-            return response()->json(['message' => 'You can only update employees assigned to your branch.'], 403);
-        }
-
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
-            'username' => 'sometimes|required|string|max:255|unique:employees,username,' . $employee->id,
+            'username' => 'sometimes|required|string|max:255|unique:employees,username,'.$employee->id,
             'role' => 'sometimes|nullable|string|max:255',
             'status' => 'sometimes|nullable|string|max:255',
             'revenue_outcome' => 'sometimes|nullable|string|max:255',
@@ -164,39 +145,22 @@ class EmployeeController extends Controller
 
     public function assignBranch(Request $request, $id)
     {
-        $user = $request->user();
-
-        if (! $user->isOwner() && ! $user->isManager()) {
+        if (! $request->user()->isOwner()) {
             abort(403);
         }
 
         $employee = Employee::findOrFail($id);
 
-        if ($user->isManager()) {
-            if ((int) $employee->branch_id !== (int) $user->id) {
-                return response()->json(['message' => 'You can only reassign employees from your branch.'], 403);
-            }
-        }
-
         $validated = $request->validate([
-            'branch_id' => 'nullable|exists:users,id',
+            'branch_id' => 'nullable|exists:branches,id',
             'revenue_outcome' => 'nullable|string|max:255',
             'period_label' => 'nullable|string|max:255',
         ]);
 
         $newBranchId = $validated['branch_id'] ?? null;
 
-        if ($user->isManager() && $newBranchId !== null && (int) $newBranchId !== (int) $user->id) {
-            return response()->json(['message' => 'Managers can only assign employees to their own branch.'], 403);
-        }
-
-        if ($user->isOwner() && $newBranchId !== null) {
-            $branch = User::findOrFail($newBranchId);
-            if (! $branch->isManager()) {
-                throw ValidationException::withMessages([
-                    'branch_id' => ['The selected account must be a branch (manager) user.'],
-                ]);
-            }
+        if ($newBranchId !== null) {
+            Branch::findOrFail($newBranchId);
         }
 
         $oldBranchId = $employee->branch_id;
@@ -224,7 +188,7 @@ class EmployeeController extends Controller
         }
 
         if ($oldBranchId && $oldBranchId !== $newBranchId) {
-            $oldBranch = User::find($oldBranchId);
+            $oldBranch = Branch::find($oldBranchId);
             if ($oldBranch && $oldBranch->clerk_username === $employee->username) {
                 $oldBranch->clerk_username = null;
                 $oldBranch->save();
@@ -236,7 +200,7 @@ class EmployeeController extends Controller
 
     private function syncBranchClerkUsername(int $branchId, string $clerkUsername): void
     {
-        $branch = User::find($branchId);
+        $branch = Branch::find($branchId);
 
         if (! $branch) {
             return;
@@ -246,4 +210,3 @@ class EmployeeController extends Controller
         $branch->save();
     }
 }
-

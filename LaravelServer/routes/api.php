@@ -1,13 +1,14 @@
 <?php
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BranchController;
-use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\CustomerController;
-use App\Http\Controllers\Api\ServicePriceController;
 use App\Http\Controllers\Api\EmployeeController;
+use App\Http\Controllers\Api\ServicePriceController;
+use App\Http\Controllers\Api\StaffAccountController;
+use App\Http\Controllers\Api\TransactionController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
@@ -55,5 +56,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/employees', [EmployeeController::class, 'store']);
     Route::put('/employees/{id}', [EmployeeController::class, 'update']);
     Route::put('/employees/{id}/assign-branch', [EmployeeController::class, 'assignBranch']);
+
+    Route::get('/staff-accounts', [StaffAccountController::class, 'index']);
+    Route::post('/staff-accounts', [StaffAccountController::class, 'store']);
+    Route::put('/staff-accounts/{id}', [StaffAccountController::class, 'update']);
 
 });

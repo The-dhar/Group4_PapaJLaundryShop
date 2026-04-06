@@ -2,6 +2,8 @@ import { useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
+  ActivityIndicator,
+  Alert,
   Modal,
   SafeAreaView,
   ScrollView,
@@ -10,26 +12,21 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Alert
 } from 'react-native';
 import { useAuth } from "@/contexts/AuthContext";
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
 import { API_URL } from "../../config/api";
 
-/* -----------------------------
-   Branch Type
-------------------------------*/
-
 type Branch = {
   id: number;
   name: string;
-  email: string;
+  clerk_username?: string | null;
+  is_active?: boolean;
   created_at?: string;
 };
 
 const BranchAccountManager = () => {
-
   const router = useRouter();
   const { token, logout } = useAuth();
   const [open, setOpen] = useState(false);
@@ -37,12 +34,8 @@ const BranchAccountManager = () => {
   const [branches, setBranches] = useState<Branch[]>([]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  const [formData, setFormData] = useState({
-    branchName: '',
-    email: '',
-    password: '',
-  });
+  const [branchName, setBranchName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleProfile = () => {
     setOpen(false);
@@ -55,14 +48,8 @@ const BranchAccountManager = () => {
     router.replace("/(openingApps)/login");
   };
 
-  /* -----------------------------
-     Load Branches
-  ------------------------------*/
-
   const loadBranches = useCallback(async () => {
-
     try {
-
       if (!token) return;
 
       const response = await fetch(`${API_URL}/branches`, {
@@ -72,10 +59,10 @@ const BranchAccountManager = () => {
         }
       });
 
-      const data: Branch[] = await response.json();
+      if (!response.ok) return;
 
-      setBranches(data);
-
+      const data = await response.json();
+      setBranches(Array.isArray(data) ? data : []);
     } catch (error) {
       console.log(error);
     }
@@ -87,74 +74,64 @@ const BranchAccountManager = () => {
     }, [loadBranches])
   );
 
-  /* -----------------------------
-     Create Branch
-  ------------------------------*/
-
   const handleConfirm = async () => {
-
-    if (!formData.branchName || !formData.email || !formData.password) {
-      Alert.alert("Error", "All fields are required");
+    const name = branchName.trim();
+    if (!name) {
+      Alert.alert("Error", "Branch name is required.");
       return;
     }
 
     try {
-
+      setIsSaving(true);
       if (!token) {
         Alert.alert("Error", "Not signed in.");
         return;
       }
 
       const response = await fetch(`${API_URL}/branches`, {
-
         method: "POST",
-
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
           Accept: "application/json"
         },
-
-        body: JSON.stringify({
-          branchName: formData.branchName,
-          username: formData.email,
-          password: formData.password
-        })
-
+        body: JSON.stringify({ name })
       });
+
+      if (!response.ok) {
+        let msg = `Could not create branch (${response.status}).`;
+        try {
+          const err = await response.json();
+          if (err?.message) msg = typeof err.message === "string" ? err.message : msg;
+        } catch { /* ignore */ }
+        Alert.alert("Error", msg);
+        return;
+      }
 
       const newBranch: Branch = await response.json();
-
-      setBranches([...branches, newBranch]);
-
+      setBranches((prev) => [...prev, newBranch]);
       setIsModalOpen(false);
-
-      setFormData({
-        branchName: '',
-        email: '',
-        password: ''
-      });
-
+      setBranchName('');
     } catch (error) {
       console.log(error);
-      Alert.alert("Error", "Failed to create branch");
+      Alert.alert("Error", "Failed to create branch.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleDelete = () => {
+  const handleClear = () => {
     setIsModalOpen(false);
-    setFormData({ branchName: '', email: '', password: '' });
+    setBranchName('');
   };
 
   const handleViewBranch = (branch: Branch) => {
-
     router.push({
       pathname: '/dashboardbyaccount',
       params: {
         branchId: branch.id.toString(),
         branchName: branch.name,
-        username: branch.email,
-        createdAt: branch.created_at,
+        createdAt: branch.created_at ?? '',
       },
     });
   };
@@ -165,7 +142,7 @@ const BranchAccountManager = () => {
       <View style={styles.header}>
 
         <View style={styles.headerLeft}>
-          <Text style={styles.headerText}>Branch Accounts</Text>
+          <Text style={styles.headerText}>Branches</Text>
           <View style={styles.headerAccent} />
         </View>
 
@@ -214,7 +191,7 @@ const BranchAccountManager = () => {
               <View style={styles.iconWrapper}>
                 <Ionicons name="location" size={22} color="#3b82f6" />
               </View>
-              <Text style={styles.listHeaderText}>Branch Name</Text>
+              <Text style={styles.listHeaderText}>Branch name</Text>
             </View>
 
             <TouchableOpacity
@@ -243,7 +220,10 @@ const BranchAccountManager = () => {
 
                     <View style={styles.branchInfo}>
                       <Text style={styles.branchName}>{branch.name}</Text>
-                      <Text style={styles.branchUsername}>@{branch.email}</Text>
+                      <Text style={styles.branchUsername} numberOfLines={1}>
+                        {branch.is_active === false ? 'Inactive · ' : ''}
+                        Clerk label: {branch.clerk_username?.trim() ? `@${branch.clerk_username}` : '—'}
+                      </Text>
                     </View>
 
                   </View>
@@ -272,8 +252,6 @@ const BranchAccountManager = () => {
 
       </ScrollView>
 
-      {/* CREATE BRANCH MODAL */}
-
       <Modal visible={isModalOpen} transparent animationType="fade">
 
         <View style={styles.modalOverlay}>
@@ -282,7 +260,7 @@ const BranchAccountManager = () => {
 
             <View style={styles.modalHeader}>
 
-              <Text style={styles.modalTitle}>Create Account</Text>
+              <Text style={styles.modalTitle}>Create branch</Text>
 
               <TouchableOpacity
                 onPress={() => setIsModalOpen(false)}
@@ -293,50 +271,19 @@ const BranchAccountManager = () => {
 
             </View>
 
-            <View style={styles.inputContainer}>
-
-              <Text style={styles.inputLabel}>Branch Name</Text>
-
-              <TextInput
-                placeholder="Enter branch name"
-                placeholderTextColor="#9ca3af"
-                value={formData.branchName}
-                onChangeText={(t) =>
-                  setFormData({ ...formData, branchName: t })
-                }
-                style={styles.input}
-              />
-
-            </View>
+            <Text style={styles.modalHint}>
+              Branches are locations only. Employee logins are created under the Employees tab.
+            </Text>
 
             <View style={styles.inputContainer}>
 
-              <Text style={styles.inputLabel}>Username</Text>
+              <Text style={styles.inputLabel}>Branch name</Text>
 
               <TextInput
-                placeholder="Enter username (branch@gmail.com)"
+                placeholder="e.g. Santa Catalina"
                 placeholderTextColor="#9ca3af"
-                value={formData.email}
-                onChangeText={(t) =>
-                  setFormData({ ...formData, email: t })
-                }
-                style={styles.input}
-              />
-
-            </View>
-
-            <View style={styles.inputContainer}>
-
-              <Text style={styles.inputLabel}>Password</Text>
-
-              <TextInput
-                placeholder="Enter password"
-                placeholderTextColor="#9ca3af"
-                secureTextEntry
-                value={formData.password}
-                onChangeText={(t) =>
-                  setFormData({ ...formData, password: t })
-                }
+                value={branchName}
+                onChangeText={setBranchName}
                 style={styles.input}
               />
 
@@ -345,17 +292,22 @@ const BranchAccountManager = () => {
             <View style={styles.modalButtons}>
 
               <TouchableOpacity
-                onPress={handleDelete}
+                onPress={handleClear}
                 style={styles.clearButton}
               >
-                <Text style={styles.clearButtonText}>Clear</Text>
+                <Text style={styles.clearButtonText}>Cancel</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={handleConfirm}
                 style={styles.confirmButton}
+                disabled={isSaving}
               >
-                <Text style={styles.confirmButtonText}>Confirm</Text>
+                {isSaving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.confirmButtonText}>Confirm</Text>
+                )}
               </TouchableOpacity>
 
             </View>
@@ -372,14 +324,11 @@ const BranchAccountManager = () => {
 
 export default BranchAccountManager;
 
-/* YOUR STYLES REMAIN EXACTLY THE SAME BELOW */
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
   },
-
   headerContent: {
     position: 'relative',
   },
@@ -578,6 +527,13 @@ const styles = StyleSheet.create({
     color: '#1e293b',
     letterSpacing: -0.5,
   },
+  modalHint: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    fontSize: 13,
+    color: '#64748b',
+    lineHeight: 18,
+  },
   closeButton: {
     width: 36,
     height: 36,
@@ -589,6 +545,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     marginBottom: 20,
     paddingHorizontal: 24,
+    marginTop: 8,
   },
   inputLabel: {
     fontSize: 14,
@@ -668,7 +625,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 8,
-    zIndex: 1000, // Added high z-index to header
+    zIndex: 1000,
   },
   headerText: {
     fontSize: 24,
@@ -676,7 +633,6 @@ const styles = StyleSheet.create({
     color: "#1e293b",
     letterSpacing: -0.5,
   },
-  
   headerLeft: {
     flexDirection: "column",
     position: "relative",
@@ -691,9 +647,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
-    elevation: 999, // Very high elevation for dropdown
+    elevation: 999,
     minWidth: 120,
-    zIndex: 9999, // Extremely high z-index
+    zIndex: 9999,
   },
   dropdownItem: {
     paddingVertical: 12,
@@ -702,16 +658,16 @@ const styles = StyleSheet.create({
     borderBottomColor: "#e2e8f0",
   },
   dropdownItemLast: {
-    borderBottomWidth: 0, // Remove border from last item
+    borderBottomWidth: 0,
   },
   dropdownText: {
     fontSize: 14,
     color: "#1e293b",
     fontWeight: "600",
   },
-profileContainer: {
+  profileContainer: {
     position: "relative",
-    zIndex: 2000, // Higher z-index for profile container
+    zIndex: 2000,
   },
   profileBtn: {
     padding: 6,

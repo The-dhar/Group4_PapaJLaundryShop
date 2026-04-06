@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,22 +18,24 @@ import { useRouter } from "expo-router";
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { API_URL } from "../../config/api";
 
-const ROWS_PER_PAGE = 5;
-
-
 type Branch = {
   id: number;
   name: string;
+};
+
+type StaffUser = {
+  id: number;
+  name: string;
+  first_name?: string | null;
+  middle_initial?: string | null;
+  last_name?: string | null;
   email: string;
-  clerk_username?: string | null;
+  role: string;
+  branch_id?: number | null;
   is_active?: boolean;
+  branch?: { id: number; name: string; clerk_username?: string | null; is_active?: boolean } | null;
 };
 
-type AuthUser = {
-  role?: string;
-};
-
-/** Laravel validation `errors` map + `message`; surfaces field messages instead of a generic line. */
 function formatApiErrorMessage(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "Request failed.";
   const e = payload as Record<string, unknown>;
@@ -54,10 +56,6 @@ function formatApiErrorMessage(payload: unknown): string {
   return "Request failed.";
 }
 
-/**
- * react-native-web often does not run Alert.alert() button onPress callbacks reliably.
- * Use window.confirm on web; native keeps the two-button Alert.
- */
 async function confirmAsync(
   title: string,
   message: string,
@@ -78,132 +76,122 @@ async function confirmAsync(
   });
 }
 
-const BranchList = () => {
-
+const EmployeeSettingsScreen = () => {
   const router = useRouter();
   const { token, logout } = useAuth();
 
+  const [staffList, setStaffList] = useState<StaffUser[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [page, setPage] = useState(1);
-
-  const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ role?: string } | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [selectedStaff, setSelectedStaff] = useState<StaffUser | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [branchName, setBranchName] = useState('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [editFirst, setEditFirst] = useState("");
+  const [editMiddle, setEditMiddle] = useState("");
+  const [editLast, setEditLast] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [editRole, setEditRole] = useState<"clerk" | "staff">("clerk");
+  const [editBranchId, setEditBranchId] = useState<number | null>(null);
 
   const [open, setOpen] = useState(false);
 
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const loadStaff = async () => {
+    try {
+      if (!token) return;
+      const res = await fetch(`${API_URL}/staff-accounts`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setStaffList(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.log(e);
+    }
+  };
 
-  // LOAD BRANCHES FROM BACKEND
   const loadBranches = async () => {
     try {
       if (!token) return;
-
-      const response = await fetch(`${API_URL}/branches`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
+      const res = await fetch(`${API_URL}/branches`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       });
-
-      if (!response.ok) {
-        return;
-      }
-
-      const data = await response.json();
+      if (!res.ok) return;
+      const data = await res.json();
       setBranches(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.log(error);
+    } catch (e) {
+      console.log(e);
     }
   };
 
   const loadCurrentUser = async () => {
     try {
       if (!token) return;
-
-      const response = await fetch(`${API_URL}/user`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
+      const res = await fetch(`${API_URL}/user`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       });
-
-      if (response.status !== 200) return;
-
-      const data = await response.json();
+      if (!res.ok) return;
+      const data = await res.json();
       setCurrentUser({ role: data?.role });
-    } catch (error) {
-      console.log(error);
+    } catch (e) {
+      console.log(e);
     }
   };
 
   useEffect(() => {
+    loadStaff();
     loadBranches();
     loadCurrentUser();
   }, [token]);
 
-  const totalPages = Math.max(1, Math.ceil(branches.length / ROWS_PER_PAGE));
+  const isOwner = currentUser?.role === "owner";
 
-  useEffect(() => {
-    setPage((p) => (p > totalPages ? totalPages : p < 1 ? 1 : p));
-  }, [totalPages]);
-
-  const startIndex = (page - 1) * ROWS_PER_PAGE;
-  const pageData = branches.slice(startIndex, startIndex + ROWS_PER_PAGE);
-
-  const openEditModal = (branch: Branch) => {
-    setSelectedBranch(branch);
-    setBranchName(branch.name ?? '');
-    setUsername(branch.email ?? '');
-    setPassword('');
+  const openEdit = (staff: StaffUser) => {
+    setSelectedStaff(staff);
+    setEditFirst(staff.first_name || staff.name?.split(/\s+/)[0] || "");
+    setEditMiddle(staff.middle_initial || "");
+    const parts = (staff.name || "").trim().split(/\s+/);
+    setEditLast(staff.last_name || (parts.length > 1 ? parts[parts.length - 1] : ""));
+    setEditEmail(staff.email);
+    setEditPassword("");
+    setEditRole(staff.role === "staff" ? "staff" : "clerk");
+    setEditBranchId(staff.branch_id ?? null);
     setModalVisible(true);
   };
 
   const closeModal = () => {
     setModalVisible(false);
-    setSelectedBranch(null);
-    setBranchName('');
-    setUsername('');
-    setPassword('');
+    setSelectedStaff(null);
+    setEditPassword("");
   };
 
-  const isOwner = currentUser?.role === "owner";
-  const selectedIsInactive = selectedBranch?.is_active === false;
+  const handleSave = async () => {
+    if (!selectedStaff || !token) return;
+    const first = editFirst.trim();
+    const last = editLast.trim();
+    const email = editEmail.trim();
+    if (!first || !last || !email) {
+      Alert.alert("Error", "First name, last name, and email are required.");
+      return;
+    }
 
-  // UPDATE ACCOUNT (branch display name, login email, optional password)
-  const handleUpdateAccount = async () => {
     try {
-      if (!selectedBranch?.id || !token) {
-        Alert.alert("Error", "Missing session or branch.");
-        return;
-      }
-
-      const name = branchName.trim();
-      const email = username.trim();
-      if (!name) {
-        Alert.alert("Error", "Branch name is required.");
-        return;
-      }
-      if (!email) {
-        Alert.alert("Error", "Username (email) is required.");
-        return;
-      }
-
-      const body: { name: string; email: string; password?: string } = {
-        name,
-        email,
-      };
-      if (password.trim().length > 0) {
-        body.password = password.trim();
-      }
-
       setIsSubmitting(true);
+      const body: Record<string, unknown> = {
+        first_name: first,
+        middle_initial: editMiddle.trim() || null,
+        last_name: last,
+        email,
+        role: editRole,
+        branch_id: editBranchId,
+      };
+      if (editPassword.trim().length > 0) {
+        body.password = editPassword.trim();
+        body.password_confirmation = editPassword.trim();
+      }
 
-      const response = await fetch(`${API_URL}/branches/${selectedBranch.id}`, {
+      const res = await fetch(`${API_URL}/staff-accounts/${selectedStaff.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -213,150 +201,53 @@ const BranchList = () => {
         body: JSON.stringify(body),
       });
 
-      if (!response.ok) {
-        let message = `Update failed (${response.status}).`;
-        try {
-          const err = await response.json();
-          message = formatApiErrorMessage(err);
-        } catch {
-          /* ignore */
-        }
-        Alert.alert("Could not update account", message);
+      if (!res.ok) {
+        let msg = formatApiErrorMessage(await res.json().catch(() => ({})));
+        Alert.alert("Could not update", msg);
         return;
       }
 
-      const updated: Branch = await response.json();
-
-      setBranches((prev) =>
-        prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b))
-      );
-
+      await loadStaff();
       closeModal();
-    } catch (error) {
-      console.log(error);
-      Alert.alert("Error", "Something went wrong. Please try again.");
+    } catch (e) {
+      console.log(e);
+      Alert.alert("Error", "Something went wrong.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDeactivateAccount = async () => {
-    if (!selectedBranch?.id) return;
-
+  const handleDeactivate = async () => {
+    if (!selectedStaff || !token) return;
     const ok = await confirmAsync(
       "Deactivate account",
-      "This branch will no longer be able to log in. Continue?",
+      "This employee will no longer be able to sign in.",
       "Deactivate"
     );
     if (!ok) return;
 
     try {
-      if (!token) {
-        Alert.alert("Error", "Missing session.");
-        return;
-      }
-
       setIsSubmitting(true);
+      const res = await fetch(`${API_URL}/staff-accounts/${selectedStaff.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ is_active: false }),
+      });
 
-      const response = await fetch(
-        `${API_URL}/branches/${selectedBranch.id}/deactivate`,
-        {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-        }
-      );
-
-      if (!response.ok) {
-        let message = `Deactivate failed (${response.status}).`;
-        try {
-          const err = await response.json();
-          message = formatApiErrorMessage(err);
-        } catch {
-          /* ignore */
-        }
-        Alert.alert("Could not deactivate", message);
+      if (!res.ok) {
+        Alert.alert("Error", formatApiErrorMessage(await res.json().catch(() => ({}))));
         return;
       }
 
-      const payload = await response.json();
-      const updated: Branch | undefined = payload?.user;
-
-      if (updated?.id != null) {
-        setBranches((prev) =>
-          prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b))
-        );
-      } else {
-        await loadBranches();
-      }
-
+      await loadStaff();
       closeModal();
-    } catch (error) {
-      console.log(error);
-      Alert.alert("Error", "Something went wrong. Please try again.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleActivateAccount = async () => {
-    if (!selectedBranch?.id || !isOwner) return;
-
-    const ok = await confirmAsync(
-      "Activate account",
-      "This branch will be allowed to log in again. Continue?",
-      "Activate"
-    );
-    if (!ok) return;
-
-    try {
-      if (!token) {
-        Alert.alert("Error", "Missing session.");
-        return;
-      }
-
-      setIsSubmitting(true);
-
-      const response = await fetch(
-        `${API_URL}/branches/${selectedBranch.id}/activate`,
-        {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-        }
-      );
-
-      if (!response.ok) {
-        let message = `Activate failed (${response.status}).`;
-        try {
-          const err = await response.json();
-          message = formatApiErrorMessage(err);
-        } catch {
-          /* ignore */
-        }
-        Alert.alert("Could not activate", message);
-        return;
-      }
-
-      const payload = await response.json();
-      const updated: Branch | undefined = payload?.user;
-
-      if (updated?.id != null) {
-        setBranches((prev) =>
-          prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b))
-        );
-      } else {
-        await loadBranches();
-      }
-
-      closeModal();
-    } catch (error) {
-      console.log(error);
-      Alert.alert("Error", "Something went wrong. Please try again.");
+    } catch (e) {
+      console.log(e);
+      Alert.alert("Error", "Something went wrong.");
     } finally {
       setIsSubmitting(false);
     }
@@ -374,634 +265,229 @@ const BranchList = () => {
   };
 
   return (
-
     <SafeAreaView style={styles.safeArea}>
-
       <View style={styles.header}>
-
         <View style={styles.headerLeft}>
-          <Text style={styles.headerText}>Account Settings</Text>
+          <Text style={styles.headerText}>Employee Settings</Text>
           <View style={styles.headerAccent} />
         </View>
 
         <View style={styles.profileContainer}>
-
-          <TouchableOpacity
-            style={styles.profileBtn}
-            onPress={() => setOpen(!open)}
-          >
+          <TouchableOpacity style={styles.profileBtn} onPress={() => setOpen(!open)}>
             <Ionicons name="person-circle-outline" size={30} color="#1e293b" />
           </TouchableOpacity>
 
           {open && (
-
             <View style={styles.dropdown}>
-
-              <TouchableOpacity
-                style={styles.dropdownItem}
-                onPress={handleProfile}
-              >
+              <TouchableOpacity style={styles.dropdownItem} onPress={handleProfile}>
                 <Text style={styles.dropdownText}>Profile</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.dropdownItem, styles.dropdownItemLast]}
-                onPress={handleLogout}
-              >
+              <TouchableOpacity style={[styles.dropdownItem, styles.dropdownItemLast]} onPress={handleLogout}>
                 <Text style={styles.dropdownText}>Logout</Text>
               </TouchableOpacity>
-
             </View>
-
           )}
-
         </View>
-
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-      >
-
-        <View style={styles.card}>
-
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardHeaderTitle}>Branches</Text>
-            <Text style={styles.headerEdit}>Edit</Text>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        {!isOwner ? (
+          <View style={styles.notice}>
+            <Text style={styles.noticeText}>
+              Only the shop owner can view and edit employee login accounts.
+            </Text>
           </View>
-
-          <View style={styles.listContainer}>
-
-            {pageData.map((branch, index) => (
-
-              <View
-                key={branch.id}
-                style={[
-                  styles.branchItem,
-                  index < pageData.length - 1 && styles.branchItemBorder,
-                ]}
-              >
-
-                <View style={styles.branchLeft}>
-
-                  <View style={styles.branchIconContainer}>
-                    <Ionicons name="location" size={20} color="#3b82f6" />
-                  </View>
-
-                  <View style={styles.branchTextBlock}>
-                    <Text style={styles.branchName}>
-                      {branch.name}
-                      {branch.is_active === false ? (
-                        <Text style={styles.inactiveLabel}> (Inactive)</Text>
-                      ) : null}
-                    </Text>
-
-                    <Text style={styles.branchSubtext} numberOfLines={1}>
-                      {branch.email}
-                    </Text>
-
-                  </View>
-
-                </View>
-
-                <TouchableOpacity
-                  style={styles.editButton}
-                  onPress={() => openEditModal(branch)}
-                >
-                  <Ionicons
-                    name="create-outline"
-                    size={22}
-                    color="#3b82f6"
-                  />
-                </TouchableOpacity>
-
-              </View>
-
-            ))}
-
-          </View>
-
-          {totalPages > 1 && (
-            <View style={styles.pagination}>
-              <TouchableOpacity
-                style={[styles.pageBtn, page <= 1 && styles.disabledBtn]}
-                onPress={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-              >
-                <Text style={[styles.pageText, page <= 1 && styles.disabledText]}>Prev</Text>
-              </TouchableOpacity>
-              <View style={styles.pageNumberContainer}>
-                <Text style={styles.pageNumber}>
-                  {page} / {totalPages}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.pageBtn, page >= totalPages && styles.disabledBtn]}
-                onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-              >
-                <Text style={[styles.pageText, page >= totalPages && styles.disabledText]}>Next</Text>
-              </TouchableOpacity>
+        ) : (
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardHeaderTitle}>Staff logins</Text>
+              <Text style={styles.headerEdit}>Edit</Text>
             </View>
-          )}
 
-        </View>
+            <View style={styles.listContainer}>
+              {staffList.map((staff, index) => (
+                <View
+                  key={staff.id}
+                  style={[styles.branchItem, index < staffList.length - 1 && styles.branchItemBorder]}
+                >
+                  <View style={styles.branchLeft}>
+                    <View style={styles.branchIconContainer}>
+                      <Ionicons name="person" size={20} color="#3b82f6" />
+                    </View>
+                    <View style={styles.branchTextBlock}>
+                      <Text style={styles.branchName}>
+                        {staff.name}
+                        {staff.is_active === false ? (
+                          <Text style={styles.inactiveLabel}> (Inactive)</Text>
+                        ) : null}
+                      </Text>
+                      <Text style={styles.roleBadge}>
+                        {(staff.role || "").toUpperCase()} · {staff.email}
+                      </Text>
+                      <Text style={styles.branchSubtext} numberOfLines={1}>
+                        Branch: {staff.branch?.name || "Unassigned"}
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity style={styles.editButton} onPress={() => openEdit(staff)}>
+                    <Ionicons name="create-outline" size={22} color="#3b82f6" />
+                  </TouchableOpacity>
+                </View>
+              ))}
 
+              {staffList.length === 0 && (
+                <Text style={styles.empty}>No staff accounts yet. Create them from the Employees tab.</Text>
+              )}
+            </View>
+          </View>
+        )}
       </ScrollView>
 
-      {/* MODAL */}
-
       <Modal visible={modalVisible} transparent animationType="fade">
-
         <View style={styles.modalOverlay} pointerEvents="box-none">
-
           <View style={styles.modalBox} pointerEvents="auto">
-
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {selectedIsInactive ? "Branch account (inactive)" : "Update account"}
-              </Text>
-
-              <Pressable
-                style={styles.modalCloseBtn}
-                onPress={closeModal}
-                accessibilityRole="button"
-                accessibilityLabel="Close"
-              >
+              <Text style={styles.modalTitle}>Edit employee</Text>
+              <Pressable style={styles.modalCloseBtn} onPress={closeModal} accessibilityRole="button">
                 <Text style={styles.modalCloseText}>✕</Text>
               </Pressable>
-
             </View>
 
-            <View style={styles.modalContent}>
+            <ScrollView style={styles.modalScroll} keyboardShouldPersistTaps="handled">
+              <View style={styles.modalContent}>
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>First name</Text>
+                  <TextInput style={styles.input} value={editFirst} onChangeText={setEditFirst} />
+                </View>
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Middle initial (optional)</Text>
+                  <TextInput style={styles.input} value={editMiddle} onChangeText={setEditMiddle} maxLength={8} />
+                </View>
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Last name</Text>
+                  <TextInput style={styles.input} value={editLast} onChangeText={setEditLast} />
+                </View>
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Email</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editEmail}
+                    onChangeText={setEditEmail}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                  />
+                </View>
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>New password (optional)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editPassword}
+                    onChangeText={setEditPassword}
+                    secureTextEntry
+                    placeholder="Leave blank to keep current"
+                    placeholderTextColor="#94a3b8"
+                  />
+                </View>
+                <Text style={styles.inputLabel}>Role</Text>
+                <View style={styles.roleRow}>
+                  {(["clerk", "staff"] as const).map((r) => (
+                    <TouchableOpacity
+                      key={r}
+                      style={[styles.roleChip, editRole === r && styles.roleChipActive]}
+                      onPress={() => setEditRole(r)}
+                    >
+                      <Text style={[styles.roleChipText, editRole === r && styles.roleChipTextActive]}>
+                        {r}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={[styles.inputLabel, { marginTop: 12 }]}>Branch</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.branchChips}>
+                  <TouchableOpacity
+                    style={[styles.chip, editBranchId === null && styles.chipActive]}
+                    onPress={() => setEditBranchId(null)}
+                  >
+                    <Text style={[styles.chipText, editBranchId === null && styles.chipTextActive]}>Unassigned</Text>
+                  </TouchableOpacity>
+                  {branches.map((b) => (
+                    <TouchableOpacity
+                      key={b.id}
+                      style={[styles.chip, editBranchId === b.id && styles.chipActive]}
+                      onPress={() => setEditBranchId(b.id)}
+                    >
+                      <Text style={[styles.chipText, editBranchId === b.id && styles.chipTextActive]}>{b.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
 
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Branch name</Text>
+                <View style={styles.modalButtons}>
+                  <Pressable
+                    style={[styles.cancelButton, isSubmitting && styles.buttonDisabled]}
+                    onPress={closeModal}
+                    disabled={isSubmitting}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.confirmButton, isSubmitting && styles.buttonDisabled]}
+                    onPress={handleSave}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmButtonText}>Save</Text>}
+                  </Pressable>
+                </View>
 
-                <TextInput
-                  style={styles.input}
-                  value={branchName}
-                  onChangeText={setBranchName}
-                  placeholder={selectedBranch?.name || "Branch display name"}
-                  placeholderTextColor="#94a3b8"
-                />
-
+                {selectedStaff?.is_active !== false ? (
+                  <Pressable
+                    style={[styles.deactivateAccountBtn, isSubmitting && styles.buttonDisabled]}
+                    onPress={handleDeactivate}
+                    disabled={isSubmitting}
+                  >
+                    <Text style={styles.deactivateAccountText}>Deactivate account</Text>
+                  </Pressable>
+                ) : null}
               </View>
-
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Username</Text>
-
-                <TextInput
-                  style={styles.input}
-                  value={username}
-                  onChangeText={setUsername}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                />
-
-              </View>
-
-              <View style={styles.inputContainer}>
-
-                <Text style={styles.inputLabel}>Password</Text>
-
-                <TextInput
-                  style={styles.input}
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="Leave blank to keep current"
-                  placeholderTextColor="#94a3b8"
-                  secureTextEntry
-                />
-
-              </View>
-
-              <View style={styles.modalButtons}>
-
-                <Pressable
-                  style={[styles.cancelButton, isSubmitting && styles.buttonDisabled]}
-                  onPress={closeModal}
-                  disabled={isSubmitting}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </Pressable>
-
-                <Pressable
-                  style={[styles.confirmButton, isSubmitting && styles.buttonDisabled]}
-                  onPress={handleUpdateAccount}
-                  disabled={isSubmitting}
-                  accessibilityRole="button"
-                >
-                  {isSubmitting ? (
-                    <ActivityIndicator color="#ffffff" />
-                  ) : (
-                    <Text style={styles.confirmButtonText}>Update account</Text>
-                  )}
-                </Pressable>
-
-              </View>
-
-              {isOwner && selectedIsInactive ? (
-                <Pressable
-                  style={[styles.activateAccountBtn, isSubmitting && styles.buttonDisabled]}
-                  onPress={handleActivateAccount}
-                  disabled={isSubmitting}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.activateAccountText}>Activate account</Text>
-                </Pressable>
-              ) : null}
-
-              {isOwner && !selectedIsInactive ? (
-                <Pressable
-                  style={[styles.deactivateAccountBtn, isSubmitting && styles.buttonDisabled]}
-                  onPress={handleDeactivateAccount}
-                  disabled={isSubmitting}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.deactivateAccountText}>Deactivate account</Text>
-                </Pressable>
-              ) : null}
-
-            </View>
-
+            </ScrollView>
           </View>
-
         </View>
-
       </Modal>
-
     </SafeAreaView>
-
   );
-
 };
 
+export default EmployeeSettingsScreen;
+
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 60,
-  },
-  headerContent: {
-    position: 'relative',
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#1e293b',
-    letterSpacing: -0.5,
-  },
-  headerAccent: {
-    position: 'absolute',
-    bottom: -8,
-    left: 0,
-    width: 60,
-    height: 4,
-    backgroundColor: '#3b82f6',
-    borderRadius: 2,
-  },
-  headerEdit: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#3b82f6',
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
-    overflow: 'hidden',
-    marginTop: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 12,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#f8fafc',
-    borderBottomWidth: 2,
-    borderBottomColor: '#e2e8f0',
-  },
-  cardHeaderTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1e293b',
-    letterSpacing: -0.3,
-  },
-  listContainer: {
-    paddingVertical: 8,
-  },
-  branchItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 18,
-    backgroundColor: '#ffffff',
-    marginVertical: 4,
-    marginHorizontal: 4,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  branchItemBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  branchLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 16,
-  },
-  branchTextBlock: {
-    flex: 1,
-    minWidth: 0,
-  },
-  branchIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#eff6ff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  branchName: {
-    fontSize: 17,
-    color: '#1e293b',
-    fontWeight: '700',
-    letterSpacing: -0.2,
-  },
-  branchSubtext: {
-    marginTop: 4,
-    fontSize: 13,
-    color: '#64748b',
-    fontWeight: '500',
-  },
-  inactiveLabel: {
-    fontSize: 15,
-    color: '#94a3b8',
-    fontWeight: '600',
-  },
-  editButton: {
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: '#f1f5f9',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  pagination: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-    gap: 16,
-    borderTopWidth: 2,
-    borderTopColor: '#e2e8f0',
-    backgroundColor: '#f8fafc',
-  },
-  pageBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 5,
-  },
-  disabledBtn: {
-    backgroundColor: '#cbd5e1',
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  pageText: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 14,
-    letterSpacing: 0.3,
-  },
-  disabledText: {
-    color: '#94a3b8',
-  },
-  pageNumberContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
-  },
-  pageNumber: {
-    fontWeight: '700',
-    fontSize: 14,
-    color: '#1e293b',
-    letterSpacing: 0.3,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalBox: {
-    width: '100%',
-    maxWidth: 400,
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 24,
-    elevation: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 24,
-    backgroundColor: '#f8fafc',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1e293b',
-    letterSpacing: -0.5,
-    flex: 1,
-    paddingRight: 8,
-  },
-  modalCloseBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#f1f5f9',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalCloseText: {
-    fontSize: 20,
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  modalContent: {
-    padding: 24,
-  },
-  inputContainer: {
-    marginBottom: 20,
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 10,
-    letterSpacing: 0.2,
-  },
-  input: {
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    backgroundColor: '#f8fafc',
-    color: '#1e293b',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: 16,
-    borderRadius: 12,
-    backgroundColor: '#f1f5f9',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
-  },
-  cancelButtonText: {
-    color: '#475569',
-    fontWeight: '700',
-    fontSize: 16,
-    letterSpacing: 0.3,
-  },
-  confirmButton: {
-    flex: 1,
-    paddingVertical: 16,
-    borderRadius: 12,
-    backgroundColor: '#22c55e',
-    alignItems: 'center',
-    shadowColor: '#22c55e',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  confirmButtonText: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 16,
-    letterSpacing: 0.3,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  deactivateAccountBtn: {
-    marginTop: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#dc2626',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  deactivateAccountText: {
-    color: '#dc2626',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  activateAccountBtn: {
-    marginTop: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#16a34a',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  activateAccountText: {
-    color: '#16a34a',
-    fontWeight: '700',
-    fontSize: 15,
-  },
+  safeArea: { flex: 1, backgroundColor: "#f8fafc" },
+  scrollView: { flex: 1 },
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 60 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     padding: 20,
-    paddingTop: 12,
-    paddingBottom: 20,
     backgroundColor: "#ffffff",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 8,
-    zIndex: 1000, // Added high z-index to header
+    zIndex: 1000,
   },
-  headerText: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#1e293b",
-    letterSpacing: -0.5,
+  headerLeft: { position: "relative" },
+  headerText: { fontSize: 24, fontWeight: "800", color: "#1e293b", letterSpacing: -0.5 },
+  headerAccent: {
+    position: "absolute",
+    bottom: -8,
+    left: 0,
+    width: 60,
+    height: 4,
+    backgroundColor: "#3b82f6",
+    borderRadius: 2,
   },
-  
-  headerLeft: {
-    flexDirection: "column",
-    position: "relative",
-  },
-  profileContainer: {
-    position: "relative",
-    zIndex: 2000, // Higher z-index for profile container
-  },
-  profileBtn: {
-    padding: 6,
-  },
+  profileContainer: { position: "relative", zIndex: 2000 },
+  profileBtn: { padding: 6 },
   dropdown: {
     position: "absolute",
     top: 40,
@@ -1012,24 +498,167 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
-    elevation: 999, // Very high elevation for dropdown
+    elevation: 999,
     minWidth: 120,
-    zIndex: 9999, // Extremely high z-index
+    zIndex: 9999,
   },
-  dropdownItem: {
+  dropdownItem: { paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: "#e2e8f0" },
+  dropdownItemLast: { borderBottomWidth: 0 },
+  dropdownText: { fontSize: 14, color: "#1e293b", fontWeight: "600" },
+  notice: {
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 8,
+  },
+  noticeText: { color: "#1e40af", fontWeight: "600", lineHeight: 20 },
+  card: {
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
+    marginTop: 20,
+    paddingHorizontal: 20,
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  cardHeaderTitle: { fontSize: 18, fontWeight: "800", color: "#1e293b" },
+  headerEdit: { fontSize: 14, fontWeight: "700", color: "#94a3b8" },
+  listContainer: { paddingBottom: 8 },
+  branchItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+  },
+  branchItemBorder: { borderBottomWidth: 1, borderBottomColor: "#e2e8f0" },
+  branchLeft: { flexDirection: "row", alignItems: "center", flex: 1, gap: 12 },
+  branchIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#eff6ff",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  branchTextBlock: { flex: 1, minWidth: 0 },
+  branchName: { fontSize: 16, fontWeight: "700", color: "#1e293b" },
+  inactiveLabel: { fontSize: 14, fontWeight: "600", color: "#94a3b8" },
+  roleBadge: { fontSize: 12, color: "#64748b", marginTop: 2, fontWeight: "600" },
+  branchSubtext: { fontSize: 13, color: "#64748b", marginTop: 2 },
+  editButton: { padding: 8 },
+  empty: { textAlign: "center", color: "#64748b", paddingVertical: 24, fontWeight: "600" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+  },
+  modalBox: {
+    backgroundColor: "#ffffff",
+    borderRadius: 20,
+    width: "100%",
+    maxWidth: 400,
+    maxHeight: "90%",
+    overflow: "hidden",
+  },
+  modalScroll: { maxHeight: 480 },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    backgroundColor: "#f8fafc",
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
   },
-  dropdownItemLast: {
-    borderBottomWidth: 0, // Remove border from last item
+  modalTitle: { fontSize: 18, fontWeight: "800", color: "#1e293b", flex: 1 },
+  modalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#f1f5f9",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  dropdownText: {
-    fontSize: 14,
+  modalCloseText: { fontSize: 18, color: "#64748b", fontWeight: "600" },
+  modalContent: { padding: 20, paddingBottom: 28 },
+  inputContainer: { marginBottom: 14 },
+  inputLabel: { fontSize: 13, fontWeight: "700", color: "#475569", marginBottom: 6 },
+  input: {
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    backgroundColor: "#f8fafc",
     color: "#1e293b",
-    fontWeight: "600",
   },
+  roleRow: { flexDirection: "row", gap: 10, marginBottom: 8 },
+  roleChip: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+  },
+  roleChipActive: { borderColor: "#3b82f6", backgroundColor: "#eff6ff" },
+  roleChipText: { fontWeight: "700", color: "#64748b", textTransform: "capitalize" },
+  roleChipTextActive: { color: "#1d4ed8" },
+  branchChips: { flexDirection: "row", marginBottom: 8 },
+  chip: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    marginRight: 8,
+  },
+  chipActive: { backgroundColor: "#1e3a8a", borderColor: "#1e3a8a" },
+  chipText: { fontSize: 12, fontWeight: "700", color: "#475569" },
+  chipTextActive: { color: "#fff" },
+  modalButtons: { flexDirection: "row", gap: 12, marginTop: 16 },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+  },
+  cancelButtonText: { color: "#475569", fontWeight: "700" },
+  confirmButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: "#22c55e",
+    alignItems: "center",
+    minHeight: 48,
+    justifyContent: "center",
+  },
+  confirmButtonText: { color: "#ffffff", fontWeight: "700" },
+  buttonDisabled: { opacity: 0.6 },
+  deactivateAccountBtn: {
+    marginTop: 20,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#ef4444",
+    alignItems: "center",
+  },
+  deactivateAccountText: { color: "#ef4444", fontWeight: "700" },
 });
-
-export default BranchList;

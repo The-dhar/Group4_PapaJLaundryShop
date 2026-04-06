@@ -3,7 +3,10 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -12,16 +15,18 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Image,
-  Alert
 } from 'react-native';
 
 import { API_URL } from "../../config/api";
+
+/** Shop owner only on mobile; clerks/staff use the web app. */
+const MOBILE_ALLOWED_ROLES = ['owner'];
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [restrictedModalVisible, setRestrictedModalVisible] = useState(false);
   const router = useRouter();
   const { setSession } = useAuth();
 
@@ -45,15 +50,20 @@ export default function LoginScreen() {
       const data = await response.json();
 
       if (response.ok) {
+        const u = data.user as Record<string, unknown> | undefined;
+        const role = String(u?.role ?? '').toLowerCase();
 
-        const u = data.user;
+        if (!MOBILE_ALLOWED_ROLES.includes(role)) {
+          setRestrictedModalVisible(true);
+          return;
+        }
+
         setSession(
           data.token,
-          u && typeof u === "object" ? (u as Record<string, unknown>) : {}
+          u && typeof u === 'object' ? u : {}
         );
 
         router.replace('/(tabs)/dashboard');
-
       } else {
         Alert.alert('Login Failed', data.message);
       }
@@ -149,6 +159,29 @@ export default function LoginScreen() {
         </ScrollView>
 
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={restrictedModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRestrictedModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Mobile app</Text>
+            <Text style={styles.modalBody}>
+              Only the shop owner can sign in here. Clerk and staff accounts should use the web application.
+            </Text>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => setRestrictedModalVisible(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -273,6 +306,55 @@ const styles = StyleSheet.create({
   loginButtonText: {
     color: '#fff',
     fontSize: 18,
+    fontWeight: '600',
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+
+  modalCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#2c3e50',
+    marginBottom: 12,
+  },
+
+  modalBody: {
+    fontSize: 16,
+    color: '#555',
+    lineHeight: 24,
+    marginBottom: 20,
+  },
+
+  modalButton: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#4169E1',
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+
+  modalButtonText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '600',
   },
 });

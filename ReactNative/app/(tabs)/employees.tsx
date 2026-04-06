@@ -21,8 +21,16 @@ import { API_URL } from "../../config/api";
 type Branch = {
   id: number;
   name: string;
+};
+
+type StaffUser = {
+  id: number;
+  name: string;
   email: string;
-  clerk_username?: string | null;
+  role: string;
+  branch_id: number | null;
+  is_active?: boolean;
+  branch?: { id: number; name: string } | null;
 };
 
 type EmployeeHistory = {
@@ -33,7 +41,7 @@ type EmployeeHistory = {
   revenue_outcome?: string | null;
 };
 
-type Employee = {
+type HrEmployee = {
   id: number;
   name: string;
   username: string;
@@ -49,6 +57,8 @@ type Employee = {
   branch_email: string | null;
   history: EmployeeHistory[];
 };
+
+type RoleFilter = "all" | "clerk" | "staff";
 
 const getOutcomeColor = (outcome: string | null) => {
   const normalized = String(outcome || "").toLowerCase();
@@ -67,18 +77,24 @@ export default function EmployeesScreen() {
   const [isSaving, setIsSaving] = useState(false);
 
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+  const [hrEmployees, setHrEmployees] = useState<HrEmployee[]>([]);
   const [selectedBranchName, setSelectedBranchName] = useState<string | null>(null);
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [createName, setCreateName] = useState("");
-  const [createUsername, setCreateUsername] = useState("");
-  const [createRole, setCreateRole] = useState("Clerk");
-  const [createStatus, setCreateStatus] = useState("Active");
-  const [createBranchId, setCreateBranchId] = useState<number | null>(null);
+  const [createStep, setCreateStep] = useState(1);
+  const [cFirst, setCFirst] = useState("");
+  const [cMiddle, setCMiddle] = useState("");
+  const [cLast, setCLast] = useState("");
+  const [cEmail, setCEmail] = useState("");
+  const [cPassword, setCPassword] = useState("");
+  const [cPassword2, setCPassword2] = useState("");
+  const [cRole, setCRole] = useState<"clerk" | "staff">("clerk");
+  const [cBranchId, setCBranchId] = useState<number | null>(null);
 
   const [assignOpen, setAssignOpen] = useState(false);
-  const [assignEmployee, setAssignEmployee] = useState<Employee | null>(null);
+  const [assignEmployee, setAssignEmployee] = useState<HrEmployee | null>(null);
   const [assignBranchId, setAssignBranchId] = useState<number | null>(null);
 
   const loadData = useCallback(async () => {
@@ -90,22 +106,22 @@ export default function EmployeesScreen() {
         Accept: "application/json",
       };
 
-      const [employeesRes, branchesRes] = await Promise.all([
+      const [staffRes, hrRes, branchesRes] = await Promise.all([
+        fetch(`${API_URL}/staff-accounts`, { headers }),
         fetch(`${API_URL}/employees`, { headers }),
         fetch(`${API_URL}/branches`, { headers }),
       ]);
 
-      const employeesData = employeesRes.ok ? await employeesRes.json() : [];
+      const staffData = staffRes.ok ? await staffRes.json() : [];
+      const hrData = hrRes.ok ? await hrRes.json() : [];
       const branchesData = branchesRes.ok ? await branchesRes.json() : [];
 
-      setEmployees(Array.isArray(employeesData) ? employeesData : []);
+      setStaffUsers(Array.isArray(staffData) ? staffData : []);
+      setHrEmployees(Array.isArray(hrData) ? hrData : []);
       setBranches(Array.isArray(branchesData) ? branchesData : []);
     } catch (error) {
       console.log(error);
-      Alert.alert(
-        "Load failed",
-        "Unable to load employees. Please ensure backend migrations are deployed."
-      );
+      Alert.alert("Load failed", "Unable to load data. Check your connection.");
     } finally {
       setIsLoading(false);
     }
@@ -117,17 +133,23 @@ export default function EmployeesScreen() {
     }, [loadData])
   );
 
-  const filteredEmployees = useMemo(() => {
-    if (!selectedBranchName) return employees;
-    return employees.filter((employee) => employee.branch_name === selectedBranchName);
-  }, [employees, selectedBranchName]);
+  const filteredStaff = useMemo(() => {
+    let list = staffUsers;
+    if (roleFilter === "clerk") list = list.filter((s) => s.role === "clerk");
+    if (roleFilter === "staff") list = list.filter((s) => s.role === "staff");
+    if (selectedBranchName) {
+      list = list.filter((s) => (s.branch?.name || "") === selectedBranchName);
+    }
+    return list;
+  }, [staffUsers, roleFilter, selectedBranchName]);
 
-  /**
-   * Previous clerks graph: convert absolute net revenue (PHP) into % of team total
-   * so bars compare relative contribution instead of raw peso scale.
-   */
+  const filteredHr = useMemo(() => {
+    if (!selectedBranchName) return hrEmployees;
+    return hrEmployees.filter((e) => e.branch_name === selectedBranchName);
+  }, [hrEmployees, selectedBranchName]);
+
   const clerkSharePercentChart = useMemo(() => {
-    const list = filteredEmployees;
+    const list = filteredHr;
     if (list.length === 0) {
       return { labels: [""], data: [0] };
     }
@@ -142,28 +164,24 @@ export default function EmployeesScreen() {
       return n.length > 9 ? `${n.slice(0, 8)}…` : n;
     });
     return { labels, data };
-  }, [filteredEmployees]);
+  }, [filteredHr]);
 
   const chartWindowW = Dimensions.get("window").width;
   const clerkChartWidth = Math.max(chartWindowW - 48, clerkSharePercentChart.labels.length * 56);
 
   const resetCreate = () => {
-    setCreateName("");
-    setCreateUsername("");
-    setCreateRole("Clerk");
-    setCreateStatus("Active");
-    setCreateBranchId(null);
+    setCreateStep(1);
+    setCFirst("");
+    setCMiddle("");
+    setCLast("");
+    setCEmail("");
+    setCPassword("");
+    setCPassword2("");
+    setCRole("clerk");
+    setCBranchId(null);
   };
 
-  const createEmployee = async () => {
-    const name = createName.trim();
-    const username = createUsername.trim().toLowerCase();
-
-    if (!name || !username) {
-      Alert.alert("Required", "Name and username are required.");
-      return;
-    }
-
+  const createStaffAccount = async () => {
     try {
       setIsSaving(true);
       if (!token) throw new Error("Not authenticated");
@@ -172,41 +190,45 @@ export default function EmployeesScreen() {
         Authorization: `Bearer ${token}`,
         Accept: "application/json",
       };
-      const response = await fetch(`${API_URL}/employees`, {
+      const response = await fetch(`${API_URL}/staff-accounts`, {
         method: "POST",
         headers,
         body: JSON.stringify({
-          name,
-          username,
-          role: createRole,
-          status: createStatus,
-          branch_id: createBranchId,
-          revenue_outcome: "gain",
-          gain_percent: 50,
-          loss_percent: 50,
-          net_revenue_php: 0,
+          first_name: cFirst.trim(),
+          middle_initial: cMiddle.trim() || null,
+          last_name: cLast.trim(),
+          email: cEmail.trim().toLowerCase(),
+          password: cPassword,
+          password_confirmation: cPassword2,
+          role: cRole,
+          branch_id: cBranchId,
         }),
       });
 
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
-        Alert.alert("Create failed", err?.message || "Unable to create employee.");
+        const msg =
+          err?.message ||
+          (typeof err === "object" && err !== null && "errors" in err
+            ? JSON.stringify(err.errors)
+            : "Unable to create staff account.");
+        Alert.alert("Create failed", typeof msg === "string" ? msg : "Unable to create.");
         return;
       }
 
       setCreateOpen(false);
       resetCreate();
       await loadData();
-      Alert.alert("Created", "Employee account saved.");
+      Alert.alert("Created", "Staff login account saved.");
     } catch (error) {
       console.log(error);
-      Alert.alert("Create failed", "Unable to create employee.");
+      Alert.alert("Create failed", "Unable to create staff account.");
     } finally {
       setIsSaving(false);
     }
   };
 
-  const openAssign = (employee: Employee) => {
+  const openAssign = (employee: HrEmployee) => {
     setAssignEmployee(employee);
     setAssignBranchId(employee.branch_id ?? null);
     setAssignOpen(true);
@@ -223,17 +245,14 @@ export default function EmployeesScreen() {
         Authorization: `Bearer ${token}`,
         Accept: "application/json",
       };
-      const response = await fetch(
-        `${API_URL}/employees/${assignEmployee.id}/assign-branch`,
-        {
-          method: "PUT",
-          headers,
-          body: JSON.stringify({
-            branch_id: assignBranchId,
-            period_label: "Reassigned from mobile",
-          }),
-        }
-      );
+      const response = await fetch(`${API_URL}/employees/${assignEmployee.id}/assign-branch`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          branch_id: assignBranchId,
+          period_label: "Reassigned from mobile",
+        }),
+      });
 
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
@@ -265,6 +284,36 @@ export default function EmployeesScreen() {
     router.replace("/(openingApps)/login");
   };
 
+  const goNextStep = () => {
+    if (createStep === 1) {
+      if (!cFirst.trim() || !cLast.trim()) {
+        Alert.alert("Required", "First and last name are required.");
+        return;
+      }
+      setCreateStep(2);
+      return;
+    }
+    if (createStep === 2) {
+      if (!cEmail.trim() || !cPassword || cPassword.length < 6) {
+        Alert.alert("Required", "Valid email and password (min 6 chars) are required.");
+        return;
+      }
+      if (cPassword !== cPassword2) {
+        Alert.alert("Mismatch", "Passwords do not match.");
+        return;
+      }
+      setCreateStep(3);
+      return;
+    }
+    if (createStep === 3) {
+      setCreateStep(4);
+    }
+  };
+
+  const goPrevStep = () => {
+    if (createStep > 1) setCreateStep((s) => s - 1);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
@@ -283,10 +332,7 @@ export default function EmployeesScreen() {
               <TouchableOpacity style={styles.dropdownItem} onPress={handleProfile}>
                 <Text style={styles.dropdownText}>Profile</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.dropdownItem, styles.dropdownItemLast]}
-                onPress={handleLogout}
-              >
+              <TouchableOpacity style={[styles.dropdownItem, styles.dropdownItemLast]} onPress={handleLogout}>
                 <Text style={styles.dropdownText}>Logout</Text>
               </TouchableOpacity>
             </View>
@@ -296,14 +342,35 @@ export default function EmployeesScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.toolbar}>
+          <Text style={styles.toolbarLabel}>Role</Text>
+          <View style={styles.segmentRow}>
+            {(
+              [
+                ["all", "All"],
+                ["clerk", "Clerk"],
+                ["staff", "Staff"],
+              ] as const
+            ).map(([key, label]) => {
+              const active = roleFilter === key;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  style={[styles.segmentChip, active && styles.segmentChipActive]}
+                  onPress={() => setRoleFilter(key)}
+                >
+                  <Text style={[styles.segmentChipText, active && styles.segmentChipTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={[styles.toolbarLabel, { marginTop: 10 }]}>Branch</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <TouchableOpacity
               style={[styles.chip, !selectedBranchName && styles.chipActive]}
               onPress={() => setSelectedBranchName(null)}
             >
-              <Text style={[styles.chipText, !selectedBranchName && styles.chipTextActive]}>
-                All
-              </Text>
+              <Text style={[styles.chipText, !selectedBranchName && styles.chipTextActive]}>All</Text>
             </TouchableOpacity>
             {branches.map((branch) => {
               const active = selectedBranchName === branch.name;
@@ -313,9 +380,7 @@ export default function EmployeesScreen() {
                   style={[styles.chip, active && styles.chipActive]}
                   onPress={() => setSelectedBranchName(active ? null : branch.name)}
                 >
-                  <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                    {branch.name}
-                  </Text>
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{branch.name}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -326,14 +391,44 @@ export default function EmployeesScreen() {
               <Ionicons name="refresh-outline" size={14} color="#1e293b" />
               <Text style={styles.secondaryBtnText}>{isLoading ? "Loading..." : "Refresh"}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.primaryBtn} onPress={() => setCreateOpen(true)}>
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={() => {
+                resetCreate();
+                setCreateOpen(true);
+              }}
+            >
               <Ionicons name="add-outline" size={14} color="#fff" />
-              <Text style={styles.primaryBtnText}>Create</Text>
+              <Text style={styles.primaryBtnText}>Create staff</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {filteredEmployees.length > 0 ? (
+        <Text style={styles.sectionHeading}>Staff logins (web)</Text>
+        {filteredStaff.length === 0 && !isLoading ? (
+          <Text style={styles.empty}>No staff accounts match this filter.</Text>
+        ) : (
+          filteredStaff.map((s) => (
+            <View key={`staff-${s.id}`} style={styles.staffCard}>
+              <View style={styles.staffCardTop}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.name}>{s.name}</Text>
+                  <Text style={styles.sub}>{s.email}</Text>
+                  <View style={styles.badgeRow}>
+                    <Text style={styles.badge}>{s.role?.toUpperCase()}</Text>
+                    <Text style={styles.sub}> · {s.branch?.name || "Unassigned"}</Text>
+                  </View>
+                  {s.is_active === false ? <Text style={styles.inactiveTag}>Inactive</Text> : null}
+                </View>
+              </View>
+            </View>
+          ))
+        )}
+
+        <Text style={[styles.sectionHeading, { marginTop: 20 }]}>HR records</Text>
+        <Text style={styles.sectionHint}>Revenue and assign for HR employee records (not web logins).</Text>
+
+        {filteredHr.length > 0 ? (
           <View style={styles.chartSection}>
             <Text style={styles.chartSectionTitle}>Previous clerks — revenue share</Text>
             <Text style={styles.chartSectionSub}>
@@ -369,7 +464,7 @@ export default function EmployeesScreen() {
           </View>
         ) : null}
 
-        {filteredEmployees.map((employee) => (
+        {filteredHr.map((employee) => (
           <View key={employee.id} style={styles.card}>
             <View style={styles.cardTop}>
               <View style={styles.cardMain}>
@@ -403,8 +498,8 @@ export default function EmployeesScreen() {
           </View>
         ))}
 
-        {!isLoading && filteredEmployees.length === 0 && (
-          <Text style={styles.empty}>No employees found.</Text>
+        {!isLoading && filteredHr.length === 0 && (
+          <Text style={styles.empty}>No HR records for this branch filter.</Text>
         )}
       </ScrollView>
 
@@ -412,71 +507,142 @@ export default function EmployeesScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Create Employee</Text>
-              <TouchableOpacity onPress={() => setCreateOpen(false)}>
+              <Text style={styles.modalTitle}>Create staff · Step {createStep} of 4</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setCreateOpen(false);
+                  resetCreate();
+                }}
+              >
                 <Text style={styles.modalCloseText}>X</Text>
               </TouchableOpacity>
             </View>
 
-            <TextInput
-              style={styles.input}
-              placeholder="Full name"
-              value={createName}
-              onChangeText={setCreateName}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Username"
-              autoCapitalize="none"
-              value={createUsername}
-              onChangeText={setCreateUsername}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Role (e.g. Clerk)"
-              value={createRole}
-              onChangeText={setCreateRole}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Status (e.g. Active)"
-              value={createStatus}
-              onChangeText={setCreateStatus}
-            />
+            {createStep === 1 && (
+              <>
+                <Text style={styles.stepHint}>Personal information</Text>
+                <TextInput style={styles.input} placeholder="First name" value={cFirst} onChangeText={setCFirst} />
+                <TextInput style={styles.input} placeholder="Middle initial (optional)" value={cMiddle} onChangeText={setCMiddle} />
+                <TextInput style={styles.input} placeholder="Last name" value={cLast} onChangeText={setCLast} />
+              </>
+            )}
 
-            <Text style={styles.sectionLabel}>Initial Branch</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <TouchableOpacity
-                style={[styles.chip, createBranchId === null && styles.chipActive]}
-                onPress={() => setCreateBranchId(null)}
-              >
-                <Text style={[styles.chipText, createBranchId === null && styles.chipTextActive]}>
-                  Unassigned
-                </Text>
-              </TouchableOpacity>
-              {branches.map((branch) => {
-                const active = createBranchId === Number(branch.id);
-                return (
+            {createStep === 2 && (
+              <>
+                <Text style={styles.stepHint}>Login credentials</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  value={cEmail}
+                  onChangeText={setCEmail}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Password (min 6)"
+                  secureTextEntry
+                  value={cPassword}
+                  onChangeText={setCPassword}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Confirm password"
+                  secureTextEntry
+                  value={cPassword2}
+                  onChangeText={setCPassword2}
+                />
+                <Text style={styles.sectionLabel}>Role</Text>
+                <View style={styles.rolePickRow}>
                   <TouchableOpacity
-                    key={branch.id}
-                    style={[styles.chip, active && styles.chipActive]}
-                    onPress={() => setCreateBranchId(Number(branch.id))}
+                    style={[styles.rolePick, cRole === "clerk" && styles.rolePickOn]}
+                    onPress={() => setCRole("clerk")}
                   >
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                      {branch.name}
-                    </Text>
+                    <Text style={[styles.rolePickText, cRole === "clerk" && styles.rolePickTextOn]}>Clerk</Text>
                   </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+                  <TouchableOpacity
+                    style={[styles.rolePick, cRole === "staff" && styles.rolePickOn]}
+                    onPress={() => setCRole("staff")}
+                  >
+                    <Text style={[styles.rolePickText, cRole === "staff" && styles.rolePickTextOn]}>Staff</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            {createStep === 3 && (
+              <>
+                <Text style={styles.stepHint}>Assign branch (optional)</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <TouchableOpacity
+                    style={[styles.chip, cBranchId === null && styles.chipActive]}
+                    onPress={() => setCBranchId(null)}
+                  >
+                    <Text style={[styles.chipText, cBranchId === null && styles.chipTextActive]}>Unassigned</Text>
+                  </TouchableOpacity>
+                  {branches.map((branch) => {
+                    const active = cBranchId === branch.id;
+                    return (
+                      <TouchableOpacity
+                        key={branch.id}
+                        style={[styles.chip, active && styles.chipActive]}
+                        onPress={() => setCBranchId(branch.id)}
+                      >
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{branch.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </>
+            )}
+
+            {createStep === 4 && (
+              <View style={styles.summaryBox}>
+                <Text style={styles.summaryLine}>
+                  <Text style={styles.summaryBold}>Name: </Text>
+                  {cFirst.trim()} {cMiddle.trim() ? `${cMiddle.trim()}. ` : ""}
+                  {cLast.trim()}
+                </Text>
+                <Text style={styles.summaryLine}>
+                  <Text style={styles.summaryBold}>Email: </Text>
+                  {cEmail.trim()}
+                </Text>
+                <Text style={styles.summaryLine}>
+                  <Text style={styles.summaryBold}>Role: </Text>
+                  {cRole}
+                </Text>
+                <Text style={styles.summaryLine}>
+                  <Text style={styles.summaryBold}>Branch: </Text>
+                  {cBranchId ? branches.find((b) => b.id === cBranchId)?.name || "—" : "Unassigned"}
+                </Text>
+              </View>
+            )}
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.secondaryBtn} onPress={() => setCreateOpen(false)}>
-                <Text style={styles.secondaryBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryBtn} onPress={createEmployee} disabled={isSaving}>
-                <Text style={styles.primaryBtnText}>{isSaving ? "Saving..." : "Save"}</Text>
-              </TouchableOpacity>
+              {createStep > 1 ? (
+                <TouchableOpacity style={styles.secondaryBtn} onPress={goPrevStep}>
+                  <Text style={styles.secondaryBtnText}>Back</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.secondaryBtn}
+                  onPress={() => {
+                    setCreateOpen(false);
+                    resetCreate();
+                  }}
+                >
+                  <Text style={styles.secondaryBtnText}>Cancel</Text>
+                </TouchableOpacity>
+              )}
+              {createStep < 4 ? (
+                <TouchableOpacity style={styles.primaryBtn} onPress={goNextStep}>
+                  <Text style={styles.primaryBtnText}>Next</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.primaryBtn} onPress={createStaffAccount} disabled={isSaving}>
+                  <Text style={styles.primaryBtnText}>{isSaving ? "Saving..." : "Confirm"}</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </View>
@@ -498,21 +664,17 @@ export default function EmployeesScreen() {
                 style={[styles.chip, assignBranchId === null && styles.chipActive]}
                 onPress={() => setAssignBranchId(null)}
               >
-                <Text style={[styles.chipText, assignBranchId === null && styles.chipTextActive]}>
-                  Unassigned
-                </Text>
+                <Text style={[styles.chipText, assignBranchId === null && styles.chipTextActive]}>Unassigned</Text>
               </TouchableOpacity>
               {branches.map((branch) => {
-                const active = assignBranchId === Number(branch.id);
+                const active = assignBranchId === branch.id;
                 return (
                   <TouchableOpacity
                     key={branch.id}
                     style={[styles.chip, active && styles.chipActive]}
-                    onPress={() => setAssignBranchId(Number(branch.id))}
+                    onPress={() => setAssignBranchId(branch.id)}
                   >
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                      {branch.name}
-                    </Text>
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{branch.name}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -586,6 +748,19 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 14,
   },
+  toolbarLabel: { fontSize: 11, fontWeight: "800", color: "#64748b", marginBottom: 6, textTransform: "uppercase" },
+  segmentRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  segmentChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  segmentChipActive: { backgroundColor: "#1e3a8a", borderColor: "#1e3a8a" },
+  segmentChipText: { fontSize: 13, fontWeight: "700", color: "#475569" },
+  segmentChipTextActive: { color: "#fff" },
   toolbarActions: { marginTop: 10, flexDirection: "row", justifyContent: "flex-end", gap: 8 },
   chip: {
     paddingVertical: 8,
@@ -599,6 +774,29 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: "#1e3a8a", borderColor: "#1e3a8a" },
   chipText: { fontSize: 12, fontWeight: "700", color: "#475569" },
   chipTextActive: { color: "#fff" },
+  sectionHeading: { fontSize: 16, fontWeight: "800", color: "#0f172a", marginBottom: 8 },
+  sectionHint: { fontSize: 12, color: "#64748b", marginBottom: 10 },
+  staffCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  staffCardTop: { flexDirection: "row", justifyContent: "space-between" },
+  badgeRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", marginTop: 4 },
+  badge: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#1d4ed8",
+    backgroundColor: "#eff6ff",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    overflow: "hidden",
+  },
+  inactiveTag: { marginTop: 6, fontSize: 12, fontWeight: "700", color: "#b91c1c" },
   chartSection: {
     backgroundColor: "#ffffff",
     borderRadius: 16,
@@ -645,7 +843,7 @@ const styles = StyleSheet.create({
   },
   metricLabel: { fontSize: 11, color: "#64748b", fontWeight: "700" },
   metricValue: { fontSize: 13, color: "#0f172a", fontWeight: "800", marginTop: 4 },
-  empty: { textAlign: "center", color: "#64748b", fontWeight: "600", marginTop: 20 },
+  empty: { textAlign: "center", color: "#64748b", fontWeight: "600", marginTop: 12, marginBottom: 8 },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.45)",
@@ -665,6 +863,7 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   modalTitle: { fontSize: 16, fontWeight: "800", color: "#0f172a" },
   modalCloseText: { fontSize: 16, color: "#64748b", fontWeight: "700" },
+  stepHint: { fontSize: 13, color: "#0f172a", fontWeight: "700", marginBottom: 8 },
   input: {
     marginTop: 10,
     borderWidth: 1,
@@ -676,6 +875,29 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   sectionLabel: { marginTop: 12, marginBottom: 8, color: "#334155", fontWeight: "700" },
+  rolePickRow: { flexDirection: "row", gap: 10, marginTop: 8 },
+  rolePick: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+  },
+  rolePickOn: { borderColor: "#2563eb", backgroundColor: "#eff6ff" },
+  rolePickText: { fontWeight: "700", color: "#64748b" },
+  rolePickTextOn: { color: "#1d4ed8" },
+  summaryBox: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    marginTop: 8,
+  },
+  summaryLine: { fontSize: 14, color: "#334155", marginBottom: 6 },
+  summaryBold: { fontWeight: "800", color: "#0f172a" },
   modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 14 },
   secondaryBtn: {
     flexDirection: "row",
@@ -683,8 +905,8 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: "#e2e8f0",
     borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   secondaryBtnText: { color: "#334155", fontSize: 12, fontWeight: "700" },
   primaryBtn: {
@@ -693,9 +915,8 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: "#2563eb",
     borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   primaryBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
 });
-

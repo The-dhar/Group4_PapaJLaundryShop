@@ -33,7 +33,7 @@ class Employee extends Model
 
     public function branch(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'branch_id');
+        return $this->belongsTo(Branch::class, 'branch_id');
     }
 
     public function histories(): HasMany
@@ -41,4 +41,3 @@ class Employee extends Model
         return $this->hasMany(EmployeeBranchHistory::class);
     }
 }
-
