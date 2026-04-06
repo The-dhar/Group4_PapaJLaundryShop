@@ -11,13 +11,25 @@ import Swal from 'sweetalert2';
 import { jsPDF } from 'jspdf';
 import { BsPencilSquare, BsTrash } from 'react-icons/bs';
 
-/** Split "Juan Dela Cruz" → first / rest for form fields */
+/** Split full name into first, optional middle, last (last token = surname). */
 function splitFullName(fullName) {
   const t = String(fullName || '').trim();
-  if (!t) return { first: '', last: '' };
+  if (!t) return { first: '', middle: '', last: '' };
   const parts = t.split(/\s+/);
-  if (parts.length === 1) return { first: parts[0], last: '' };
-  return { first: parts[0], last: parts.slice(1).join(' ') };
+  if (parts.length === 1) return { first: parts[0], middle: '', last: '' };
+  if (parts.length === 2) return { first: parts[0], middle: '', last: parts[1] };
+  return {
+    first: parts[0],
+    middle: parts.slice(1, -1).join(' '),
+    last: parts[parts.length - 1],
+  };
+}
+
+function buildFullName(first, middle, last) {
+  return [first, middle, last]
+    .map((s) => String(s || '').trim())
+    .filter(Boolean)
+    .join(' ');
 }
 
 /** Split POS address string "street, barangay, city" */
@@ -117,6 +129,7 @@ const POs = () => {
   
   // Customer States
   const [firstName, setFirstName] = useState('');
+  const [middleName, setMiddleName] = useState('');
   const [lastName, setLastName] = useState('');
   const [street, setStreet] = useState('');
   const [barangay, setBarangay] = useState('');
@@ -185,6 +198,7 @@ const POs = () => {
       const c = item.record;
       const fromName = splitFullName(c.name);
       setFirstName(String(c.first_name || fromName.first || '').trim());
+      setMiddleName(String(c.middle_name || fromName.middle || '').trim());
       setLastName(String(c.last_name || fromName.last || '').trim());
       const hasParts = c.street || c.barangay || c.city;
       if (hasParts) {
@@ -205,6 +219,7 @@ const POs = () => {
       const t = item.record;
       const nm = splitFullName(t.customer_name);
       setFirstName(nm.first);
+      setMiddleName(String(t.customer_middle_name || nm.middle || '').trim());
       setLastName(nm.last);
       const p = splitAddressLine(t.customer_address);
       setStreet(p.street);
@@ -360,7 +375,7 @@ const POs = () => {
 
   const resetForm = () => {
     setSelectedServices([]);
-    setFirstName(''); setLastName(''); setStreet(''); setBarangay(''); setCity('');
+    setFirstName(''); setMiddleName(''); setLastName(''); setStreet(''); setBarangay(''); setCity('');
     setCustomerSearchInput('');
     setCustomerSuggestions([]);
     setSuggestionOpen(false);
@@ -629,13 +644,16 @@ const POs = () => {
       return;
     }
 
-    const fullName = `${firstName.trim()} ${lastName.trim()}`;
+    const fullName = buildFullName(firstName, middleName, lastName);
     const fullAddress = `${street.trim()}, ${barangay.trim()}, ${city.trim()}`;
 
     try {
       setIsSaving(true);
       const newTransaction = await createTransaction({
         customer_name: fullName,
+        customer_first_name: firstName.trim(),
+        customer_last_name: lastName.trim(),
+        customer_middle_name: middleName.trim() || undefined,
         customer_address: fullAddress,
         services: selectedServices,
         weight: totalWeight,
@@ -750,10 +768,12 @@ const POs = () => {
                 <CustomerModal
                   isOpen={isCustomerModalOpen}
                   onClose={() => setIsCustomerModalOpen(false)}
-                  initial={{ firstName, lastName, street, barangay, city }}
+                  initial={{ firstName, middleName, lastName, street, barangay, city }}
                   transactions={transactions}
                   onSave={(data) => {
-                    setFirstName(data.firstName); setLastName(data.lastName);
+                    setFirstName(data.firstName);
+                    setMiddleName(data.middleName || '');
+                    setLastName(data.lastName);
                     setStreet(data.street); setBarangay(data.barangay); setCity(data.city);
                   }}
                 />
@@ -768,11 +788,14 @@ const POs = () => {
 
             {/* Customer Inputs */}
             <div className="for-receipt-output-customername">
-              <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                <label style={{ flex: 1 }}>First Name:
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                <label style={{ flex: '1 1 120px' }}>First Name:
                   <input type="text" className="for-receipt-customerinput" value={firstName} onChange={e => setFirstName(e.target.value)} />
                 </label>
-                <label style={{ flex: 1 }}>Last Name:
+                <label style={{ flex: '1 1 120px' }}>Middle Name <span style={{ fontWeight: 400, color: '#64748b' }}>(optional)</span>:
+                  <input type="text" className="for-receipt-customerinput" value={middleName} onChange={e => setMiddleName(e.target.value)} placeholder="Optional" />
+                </label>
+                <label style={{ flex: '1 1 120px' }}>Last Name:
                   <input type="text" className="for-receipt-customerinput" value={lastName} onChange={e => setLastName(e.target.value)} />
                 </label>
               </div>

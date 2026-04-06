@@ -61,6 +61,9 @@ export const TransactionsProvider = ({ children }) => {
 
   const createTransaction = async ({
     customer_name,
+    customer_first_name,
+    customer_last_name,
+    customer_middle_name,
     customer_address,
     services,
     weight,
@@ -92,6 +95,15 @@ export const TransactionsProvider = ({ children }) => {
 
       const payload = {
         customer_name,
+        ...(customer_first_name != null && String(customer_first_name).trim() !== ''
+          ? { customer_first_name: String(customer_first_name).trim() }
+          : {}),
+        ...(customer_last_name != null && String(customer_last_name).trim() !== ''
+          ? { customer_last_name: String(customer_last_name).trim() }
+          : {}),
+        ...(customer_middle_name != null && String(customer_middle_name).trim() !== ''
+          ? { customer_middle_name: String(customer_middle_name).trim() }
+          : {}),
         customer_address,
         services: (services || []).map((s) => ({
           serviceName: s.serviceName,
@@ -134,6 +146,7 @@ export const TransactionsProvider = ({ children }) => {
         id: result.id ?? `local-${Date.now()}`,
         receipt: result.receipt,
         customer_name,
+        customer_middle_name: result.customer_middle_name ?? customer_middle_name ?? null,
         customer_address,
         amount: Number(result.amount ?? amount) || 0,
         total_weight: Number(result.total_weight ?? weight) || 0,

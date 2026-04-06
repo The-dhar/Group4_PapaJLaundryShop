@@ -51,8 +51,11 @@ class TransactionController extends Controller
 
         $request->validate([
             'customer_name' => 'required|string',
+            'customer_middle_name' => 'nullable|string|max:255',
+            'customer_first_name' => 'nullable|string|max:255',
+            'customer_last_name' => 'nullable|string|max:255',
             'services' => 'required|array',
-            'amount' => 'required|numeric'
+            'amount' => 'required|numeric',
         ]);
 
         // get logged in branch user
@@ -67,10 +70,23 @@ class TransactionController extends Controller
             // Save customer if provided
             if ($request->customer_name) {
 
+                $middle = $request->filled('customer_middle_name')
+                    ? trim((string) $request->input('customer_middle_name'))
+                    : null;
+                $first = $request->filled('customer_first_name')
+                    ? trim((string) $request->input('customer_first_name'))
+                    : null;
+                $last = $request->filled('customer_last_name')
+                    ? trim((string) $request->input('customer_last_name'))
+                    : null;
+
                 Customer::create([
                     'branch_id' => $branchId,
                     'name' => $request->customer_name,
                     'address' => $request->customer_address,
+                    'first_name' => $first !== '' ? $first : null,
+                    'middle_name' => $middle !== '' ? $middle : null,
+                    'last_name' => $last !== '' ? $last : null,
                 ]);
 
             }
@@ -127,6 +143,7 @@ class TransactionController extends Controller
             return response()->json([
                 'receipt' => $receipt,
                 'customer_name' => $transaction->customer_name,
+                'customer_middle_name' => $transaction->customer_middle_name,
                 'customer_address' => $transaction->customer_address,
                 'services' => $request->services,
                 'amount' => $transaction->total_amount,
@@ -187,6 +204,7 @@ class TransactionController extends Controller
                 'id' => $txn->id,
                 'receipt' => $txn->receipt_number,
                 'customer_name' => $txn->customer_name,
+                'customer_middle_name' => $txn->customer_middle_name,
                 'customer_address' => $txn->customer_address,
                 'amount' => $txn->total_amount,
                 'subtotal' => (float) $txn->subtotal,

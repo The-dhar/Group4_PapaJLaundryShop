@@ -45,9 +45,18 @@ function addressKeyFromApiCustomer(c) {
   return "";
 }
 
+function buildFullName(first, middle, last) {
+  return [first, middle, last]
+    .map((s) => String(s || "").trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
 function customerNameMatchesRecord(c, targetNameNorm) {
   const byName = normalizeFullName(c.name);
-  const byParts = normalizeFullName(`${c.first_name || ""} ${c.last_name || ""}`);
+  const byParts = normalizeFullName(
+    [c.first_name, c.middle_name, c.last_name].filter(Boolean).join(" ")
+  );
   return byName === targetNameNorm || (byParts === targetNameNorm && byParts.length > 0);
 }
 
@@ -79,6 +88,7 @@ function hasDuplicateNameAndAddress(fullName, street, barangay, city, transactio
 const CustomerModal = ({ isOpen, onClose, onSave, initial, transactions = [] }) => {
   // Chopped States
   const [firstName, setFirstName] = useState("");
+  const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
   const [street, setStreet] = useState("");
   const [barangay, setBarangay] = useState("");
@@ -88,6 +98,7 @@ const CustomerModal = ({ isOpen, onClose, onSave, initial, transactions = [] }) 
     if (isOpen) {
       // If initial data exists, we pre-fill (useful for editing)
       setFirstName(initial?.firstName || "");
+      setMiddleName(initial?.middleName || "");
       setLastName(initial?.lastName || "");
       setStreet(initial?.street || "");
       setBarangay(initial?.barangay || "");
@@ -109,7 +120,7 @@ const CustomerModal = ({ isOpen, onClose, onSave, initial, transactions = [] }) 
       return;
     }
 
-    const fullName = `${firstName.trim()} ${lastName.trim()}`;
+    const fullName = buildFullName(firstName, middleName, lastName);
     const targetName = normalizeFullName(fullName);
     const targetAddr = normalizeAddressKey(street, barangay, city);
 
@@ -149,6 +160,7 @@ const CustomerModal = ({ isOpen, onClose, onSave, initial, transactions = [] }) 
 
     onSave({
       firstName,
+      middleName,
       lastName,
       street,
       barangay,
@@ -167,8 +179,8 @@ const CustomerModal = ({ isOpen, onClose, onSave, initial, transactions = [] }) 
         
         <div className="modal-body">
           {/* Name Section */}
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <div className="modal-input-group" style={{ flex: 1 }}>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <div className="modal-input-group" style={{ flex: '1 1 140px' }}>
               <label className="modal-label">First Name</label>
               <input
                 type="text"
@@ -178,7 +190,17 @@ const CustomerModal = ({ isOpen, onClose, onSave, initial, transactions = [] }) 
                 placeholder="John"
               />
             </div>
-            <div className="modal-input-group" style={{ flex: 1 }}>
+            <div className="modal-input-group" style={{ flex: '1 1 140px' }}>
+              <label className="modal-label">Middle Name <span style={{ fontWeight: 400, color: '#64748b' }}>(optional)</span></label>
+              <input
+                type="text"
+                className="modal-kilos-input"
+                value={middleName}
+                onChange={(e) => setMiddleName(e.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+            <div className="modal-input-group" style={{ flex: '1 1 140px' }}>
               <label className="modal-label">Last Name</label>
               <input
                 type="text"

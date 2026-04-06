@@ -12,6 +12,7 @@ class Transaction extends Model
         'receipt_number',
         'branch_id',
         'customer_name',
+        'customer_middle_name',
         'customer_address',
         'total_weight',
         'subtotal',
