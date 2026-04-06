@@ -218,12 +218,6 @@ const POs = () => {
     })();
   }, [sessionUser]);
 
-  const onOwnerBranchChange = (e) => {
-    const id = Number(e.target.value);
-    setOwnerBranchId(id);
-    localStorage.setItem('ownerSelectedBranchId', String(id));
-  };
-
   const mergeCustomerSources = useCallback((apiRows, txRows) => {
     const map = new Map();
     for (const c of apiRows) {
@@ -764,51 +758,6 @@ const POs = () => {
   return (
     <DashboardLayout>
       <div className="pos-wrapper">
-        {sessionUser?.role === 'owner' && branches.length > 0 ? (
-          <div
-            style={{
-              marginBottom: 12,
-              padding: '10px 12px',
-              background: '#f1f5f9',
-              borderRadius: 8,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
-            }}
-          >
-            <span style={{ fontWeight: 700, color: '#0f172a' }}>Branch for this sale</span>
-            <select
-              value={ownerBranchId ?? ''}
-              onChange={onOwnerBranchChange}
-              style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #cbd5e1', minWidth: 200 }}
-            >
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : null}
-        {sessionUser && sessionUser.role !== 'owner' ? (
-          <div
-            style={{
-              marginBottom: 12,
-              padding: '10px 12px',
-              background: '#eff6ff',
-              borderRadius: 8,
-              color: '#1e40af',
-              fontWeight: 600,
-            }}
-          >
-            {sessionUser.branch?.name
-              ? `Branch: ${sessionUser.branch.name}`
-              : sessionUser.branch_id
-                ? 'Loading branch…'
-                : 'No branch assigned. Ask the owner to assign this employee to a branch.'}
-          </div>
-        ) : null}
         <div className="pos-grid">
           {/* Service Items Section */}
           <section className="Service-item">
