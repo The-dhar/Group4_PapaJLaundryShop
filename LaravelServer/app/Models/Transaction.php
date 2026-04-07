@@ -11,6 +11,7 @@ class Transaction extends Model
     protected $fillable = [
         'receipt_number',
         'branch_id',
+        'created_by_user_id',
         'customer_name',
         'customer_middle_name',
         'customer_address',
@@ -35,5 +36,10 @@ class Transaction extends Model
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class, 'branch_id');
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by_user_id');
     }
 }

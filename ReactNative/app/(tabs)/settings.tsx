@@ -34,6 +34,7 @@ type StaffUser = {
   branch_id?: number | null;
   is_active?: boolean;
   branch?: { id: number; name: string; clerk_username?: string | null; is_active?: boolean } | null;
+  total_revenue_php?: number | string | null;
 };
 
 function formatApiErrorMessage(payload: unknown): string {

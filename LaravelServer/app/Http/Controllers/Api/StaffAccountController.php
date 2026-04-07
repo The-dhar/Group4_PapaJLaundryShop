@@ -21,11 +21,7 @@ class StaffAccountController extends Controller
             abort(403);
         }
 
-        return User::query()
-            ->whereIn('role', ['clerk', 'staff'])
-            ->with(['branch:id,name,clerk_username,is_active'])
-            ->orderBy('name')
-            ->get();
+        return $this->staffAccountsWithRevenue()->get();
     }
 
     /**
@@ -146,7 +142,30 @@ class StaffAccountController extends Controller
             $user->tokens()->delete();
         }
 
-        return response()->json($user->fresh());
+        return response()->json($this->staffUserWithRevenue($user));
+    }
+
+    /**
+     * Clerk/staff rows with branch + sum of paid POS sales they created (`total_revenue_php`).
+     */
+    protected function staffAccountsWithRevenue()
+    {
+        return User::query()
+            ->whereIn('role', ['clerk', 'staff'])
+            ->with(['branch:id,name,clerk_username,is_active'])
+            ->withSum([
+                'createdTransactions as total_revenue_php' => function ($q) {
+                    $q->where('payment_status', 'paid')->where('archived', false);
+                },
+            ], 'total_amount')
+            ->orderBy('name');
+    }
+
+    protected function staffUserWithRevenue(User $user): User
+    {
+        return $this->staffAccountsWithRevenue()
+            ->whereKey($user->id)
+            ->firstOrFail();
     }
 
     /**

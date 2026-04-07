@@ -110,6 +110,9 @@ class TransactionController extends Controller
                 // Branch: manager = self; owner = selected branch_id
                 'branch_id' => $branchId,
 
+                // Staff/manager attribution for revenue reporting; owner POS sales stay unattributed
+                'created_by_user_id' => $user->isOwner() ? null : $user->id,
+
                 'customer_name' => $request->customer_name,
                 'customer_address' => $request->customer_address,
 

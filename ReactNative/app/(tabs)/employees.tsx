@@ -31,34 +31,23 @@ type StaffUser = {
   branch_id: number | null;
   is_active?: boolean;
   branch?: { id: number; name: string } | null;
+  /** Sum of paid POS transactions this login created (from API). */
+  total_revenue_php?: number | string | null;
 };
 
-type EmployeeHistory = {
-  id: number;
-  branch_name: string | null;
-  role: string | null;
-  period_label: string | null;
-  revenue_outcome?: string | null;
-};
+type RoleFilter = "all" | "clerk" | "staff";
 
+/** HR / clerk record from `/employees` (revenue metrics for chart). */
 type HrEmployee = {
   id: number;
   name: string;
   username: string;
-  role: string;
-  status: string;
-  revenue_outcome: string | null;
+  net_revenue_php: number;
   gain_percent: number;
   loss_percent: number;
-  net_revenue_php: number;
-  clerk_since: string | null;
-  branch_id: number | null;
+  revenue_outcome: string | null;
   branch_name: string | null;
-  branch_email: string | null;
-  history: EmployeeHistory[];
 };
-
-type RoleFilter = "all" | "clerk" | "staff";
 
 /** Laravel JSON: { message, errors?: { field: string[] } } */
 function formatLaravelApiError(data: unknown, httpStatus?: number): string {
@@ -88,6 +77,16 @@ function formatLaravelApiError(data: unknown, httpStatus?: number): string {
     return msg;
   }
   return "Unable to create staff account.";
+}
+
+/** X-axis label for chart: email local-part, or display name. */
+function chartLabelForStaffUser(s: StaffUser): string {
+  if (s.email) {
+    const local = String(s.email).split("@")[0];
+    return local.length > 10 ? `${local.slice(0, 9)}…` : local;
+  }
+  const n = (s.name || "?").trim();
+  return n.length > 10 ? `${n.slice(0, 9)}…` : n;
 }
 
 const getOutcomeColor = (outcome: string | null) => {
@@ -124,9 +123,9 @@ export default function EmployeesScreen() {
   const [cBranchId, setCBranchId] = useState<number | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  const [assignOpen, setAssignOpen] = useState(false);
-  const [assignEmployee, setAssignEmployee] = useState<HrEmployee | null>(null);
-  const [assignBranchId, setAssignBranchId] = useState<number | null>(null);
+  const [assignStaffOpen, setAssignStaffOpen] = useState(false);
+  const [assignStaffUser, setAssignStaffUser] = useState<StaffUser | null>(null);
+  const [assignStaffBranchId, setAssignStaffBranchId] = useState<number | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -174,31 +173,40 @@ export default function EmployeesScreen() {
     return list;
   }, [staffUsers, roleFilter, selectedBranchName]);
 
-  const filteredHr = useMemo(() => {
-    if (!selectedBranchName) return hrEmployees;
-    return hrEmployees.filter((e) => e.branch_name === selectedBranchName);
-  }, [hrEmployees, selectedBranchName]);
-
+  /** Revenue share chart: one bar per staff login; peso amounts from POS totals when API provides them, else HR name match. */
   const clerkSharePercentChart = useMemo(() => {
-    const list = filteredHr;
+    const list = filteredStaff;
     if (list.length === 0) {
       return { labels: [""], data: [0] };
     }
-    const amounts = list.map((e) => Math.max(0, Number(e.net_revenue_php || 0)));
+    const amounts = list.map((s) => {
+      if ("total_revenue_php" in s && s.total_revenue_php != null && s.total_revenue_php !== "") {
+        return Math.max(0, Number(s.total_revenue_php));
+      }
+      const key = (s.name || "").trim().toLowerCase();
+      const h = hrEmployees.find((e) => (e.name || "").trim().toLowerCase() === key);
+      return Math.max(0, Number(h?.net_revenue_php || 0));
+    });
     const sum = amounts.reduce((a, b) => a + b, 0);
     const data =
       sum > 0
         ? amounts.map((a) => Number(((a / sum) * 100).toFixed(1)))
         : amounts.map(() => 0);
-    const labels = list.map((e) => {
-      const n = (e.name || e.username || "?").trim();
-      return n.length > 9 ? `${n.slice(0, 8)}…` : n;
-    });
+    const labels = list.map((s) => chartLabelForStaffUser(s));
     return { labels, data };
-  }, [filteredHr]);
+  }, [filteredStaff, hrEmployees]);
 
   const chartWindowW = Dimensions.get("window").width;
   const clerkChartWidth = Math.max(chartWindowW - 48, clerkSharePercentChart.labels.length * 56);
+
+  const hrMatchForStaff = useCallback(
+    (s: StaffUser) => {
+      const key = (s.name || "").trim().toLowerCase();
+      if (!key) return null;
+      return hrEmployees.find((h) => (h.name || "").trim().toLowerCase() === key) ?? null;
+    },
+    [hrEmployees]
+  );
 
   const resetCreate = () => {
     setCreateStep(1);
@@ -259,15 +267,14 @@ export default function EmployeesScreen() {
     }
   };
 
-  const openAssign = (employee: HrEmployee) => {
-    setAssignEmployee(employee);
-    setAssignBranchId(employee.branch_id ?? null);
-    setAssignOpen(true);
+  const openStaffAssign = (staff: StaffUser) => {
+    setAssignStaffUser(staff);
+    setAssignStaffBranchId(staff.branch?.id ?? null);
+    setAssignStaffOpen(true);
   };
 
-  const assignBranch = async () => {
-    if (!assignEmployee) return;
-
+  const assignStaffBranch = async () => {
+    if (!assignStaffUser) return;
     try {
       setIsSaving(true);
       if (!token) throw new Error("Not authenticated");
@@ -276,26 +283,23 @@ export default function EmployeesScreen() {
         Authorization: `Bearer ${token}`,
         Accept: "application/json",
       };
-      const response = await fetch(`${API_URL}/employees/${assignEmployee.id}/assign-branch`, {
+      const response = await fetch(`${API_URL}/staff-accounts/${assignStaffUser.id}`, {
         method: "PUT",
         headers,
         body: JSON.stringify({
-          branch_id: assignBranchId,
-          period_label: "Reassigned from mobile",
+          branch_id: assignStaffBranchId,
         }),
       });
-
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
-        Alert.alert("Assign failed", err?.message || "Unable to assign branch.");
+        Alert.alert("Assign failed", formatLaravelApiError(err, response.status));
         return;
       }
-
-      setAssignOpen(false);
-      setAssignEmployee(null);
-      setAssignBranchId(null);
+      setAssignStaffOpen(false);
+      setAssignStaffUser(null);
+      setAssignStaffBranchId(null);
       await loadData();
-      Alert.alert("Updated", "Branch assignment saved.");
+      Alert.alert("Updated", "Branch assignment saved for this web login.");
     } catch (error) {
       console.log(error);
       Alert.alert("Assign failed", "Unable to assign branch.");
@@ -439,36 +443,17 @@ export default function EmployeesScreen() {
           </View>
         </View>
 
-        <Text style={styles.sectionHeading}>Staff logins (web)</Text>
-        {filteredStaff.length === 0 && !isLoading ? (
-          <Text style={styles.empty}>No staff accounts match this filter.</Text>
-        ) : (
-          filteredStaff.map((s) => (
-            <View key={`staff-${s.id}`} style={styles.staffCard}>
-              <View style={styles.staffCardTop}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.name}>{s.name}</Text>
-                  <Text style={styles.sub}>{s.email}</Text>
-                  <View style={styles.badgeRow}>
-                    <Text style={styles.badge}>{s.role?.toUpperCase()}</Text>
-                    <Text style={styles.sub}> · {s.branch?.name || "Unassigned"}</Text>
-                  </View>
-                  {s.is_active === false ? <Text style={styles.inactiveTag}>Inactive</Text> : null}
-                </View>
-              </View>
-            </View>
-          ))
-        )}
+        <Text style={styles.sectionHeading}>Revenue share</Text>
+        <Text style={styles.sectionHint}>
+          One bar per web staff login (same filters as below). Percentages are shares of total paid POS revenue for
+          those staff (from the database). If the API does not expose totals yet, amounts fall back to HR when names
+          match.
+        </Text>
 
-        <Text style={[styles.sectionHeading, { marginTop: 20 }]}>HR records</Text>
-        <Text style={styles.sectionHint}>Revenue and assign for HR employee records (not web logins).</Text>
-
-        {filteredHr.length > 0 ? (
+        {filteredStaff.length > 0 ? (
           <View style={styles.chartSection}>
-            <Text style={styles.chartSectionTitle}>Previous clerks — revenue share</Text>
-            <Text style={styles.chartSectionSub}>
-              Each bar is % of total net revenue for clerks in this list (not peso amounts).
-            </Text>
+            <Text style={styles.chartSectionTitle}>Staff — revenue share</Text>
+            <Text style={styles.chartSectionSub}>Percent of total net revenue (not peso amounts).</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <BarChart
                 data={{
@@ -486,7 +471,7 @@ export default function EmployeesScreen() {
                   decimalPlaces: 1,
                   color: () => "rgba(37, 99, 235, 1)",
                   labelColor: () => "#334155",
-                  formatYLabel: (y: string) => `${y}%`,
+                  formatYLabel: (y: string) => String(y),
                   propsForLabels: { fontSize: 11 },
                   propsForBackgroundLines: { stroke: "#e2e8f0", strokeWidth: 1 },
                 }}
@@ -497,44 +482,65 @@ export default function EmployeesScreen() {
               />
             </ScrollView>
           </View>
+        ) : !isLoading ? (
+          <Text style={styles.empty}>No staff accounts for this filter — nothing to chart.</Text>
         ) : null}
 
-        {filteredHr.map((employee) => (
-          <View key={employee.id} style={styles.card}>
-            <View style={styles.cardTop}>
-              <View style={styles.cardMain}>
-                <Text style={styles.name}>{employee.name}</Text>
-                <Text style={styles.sub}>@{employee.username}</Text>
-                <Text style={styles.sub}>{employee.status}</Text>
-                <Text style={styles.sub}>Branch: {employee.branch_name || "Unassigned"}</Text>
-                <Text style={[styles.sub, { color: getOutcomeColor(employee.revenue_outcome) }]}>
-                  Outcome: {employee.revenue_outcome || "n/a"}
-                </Text>
+        <Text style={[styles.sectionHeading, { marginTop: 20 }]}>Staff logins (web)</Text>
+        <Text style={styles.sectionHint}>
+          Accounts that can sign in on the web POS. Assign a branch so they work in that location.
+        </Text>
+        {filteredStaff.length === 0 && !isLoading ? (
+          <Text style={styles.empty}>No staff accounts match this filter.</Text>
+        ) : (
+          filteredStaff.map((s) => {
+            const linked = hrMatchForStaff(s);
+            const hasDbTotal = "total_revenue_php" in s && s.total_revenue_php != null && s.total_revenue_php !== "";
+            const net = hasDbTotal
+              ? Math.max(0, Number(s.total_revenue_php))
+              : linked
+                ? Number(linked.net_revenue_php || 0)
+                : 0;
+            const gain = linked ? linked.gain_percent || 0 : 0;
+            const loss = linked ? linked.loss_percent || 0 : 0;
+            const outcome = linked?.revenue_outcome || null;
+            const handle = s.email ? `@${String(s.email).split("@")[0]}` : "—";
+            return (
+              <View key={`staff-${s.id}`} style={styles.card}>
+                <View style={styles.cardTop}>
+                  <View style={styles.cardMain}>
+                    <Text style={styles.name}>{s.name}</Text>
+                    <Text style={styles.sub}>{handle}</Text>
+                    <Text style={styles.sub}>{s.is_active === false ? "Inactive" : "Active"}</Text>
+                    <Text style={styles.sub}>Branch: {s.branch?.name || "Unassigned"}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 2 }}>
+                      <Text style={styles.badge}>{(s.role || "staff").toUpperCase()}</Text>
+                      <Text
+                        style={[styles.sub, { color: outcome ? getOutcomeColor(outcome) : "#64748b" }]}
+                      >
+                        Outcome: {outcome || (linked ? "n/a" : "—")}
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity style={styles.assignBtn} onPress={() => openStaffAssign(s)}>
+                    <Ionicons name="git-branch-outline" size={14} color="#fff" />
+                    <Text style={styles.assignBtnText}>Assign</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={[styles.sub, { marginTop: 4, fontSize: 11 }]}>{s.email}</Text>
+                <View style={styles.metrics}>
+                  <View style={styles.metric}>
+                    <Text style={styles.metricLabel}>Net Revenue</Text>
+                    <Text style={styles.metricValue}>₱ {net.toFixed(2)}</Text>
+                  </View>
+                  <View style={styles.metric}>
+                    <Text style={styles.metricLabel}>Gain/Loss %</Text>
+                    <Text style={styles.metricValue}>{linked ? `${gain} / ${loss}` : "— / —"}</Text>
+                  </View>
+                </View>
               </View>
-
-              <TouchableOpacity style={styles.assignBtn} onPress={() => openAssign(employee)}>
-                <Ionicons name="git-branch-outline" size={14} color="#fff" />
-                <Text style={styles.assignBtnText}>Assign</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.metrics}>
-              <View style={styles.metric}>
-                <Text style={styles.metricLabel}>Net Revenue</Text>
-                <Text style={styles.metricValue}>P {Number(employee.net_revenue_php || 0).toFixed(2)}</Text>
-              </View>
-              <View style={styles.metric}>
-                <Text style={styles.metricLabel}>Gain/Loss %</Text>
-                <Text style={styles.metricValue}>
-                  {employee.gain_percent || 0} / {employee.loss_percent || 0}
-                </Text>
-              </View>
-            </View>
-          </View>
-        ))}
-
-        {!isLoading && filteredHr.length === 0 && (
-          <Text style={styles.empty}>No HR records for this branch filter.</Text>
+            );
+          })
         )}
       </ScrollView>
 
@@ -690,31 +696,37 @@ export default function EmployeesScreen() {
         </View>
       </Modal>
 
-      <Modal visible={assignOpen} transparent animationType="fade">
+      <Modal visible={assignStaffOpen} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Assign Branch</Text>
-              <TouchableOpacity onPress={() => setAssignOpen(false)}>
+              <Text style={styles.modalTitle}>Assign branch (web login)</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setAssignStaffOpen(false);
+                  setAssignStaffUser(null);
+                }}
+              >
                 <Text style={styles.modalCloseText}>X</Text>
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.sectionLabel}>{assignEmployee?.name}</Text>
+            <Text style={styles.sectionLabel}>{assignStaffUser?.name}</Text>
+            <Text style={[styles.sub, { marginBottom: 8 }]}>{assignStaffUser?.email}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <TouchableOpacity
-                style={[styles.chip, assignBranchId === null && styles.chipActive]}
-                onPress={() => setAssignBranchId(null)}
+                style={[styles.chip, assignStaffBranchId === null && styles.chipActive]}
+                onPress={() => setAssignStaffBranchId(null)}
               >
-                <Text style={[styles.chipText, assignBranchId === null && styles.chipTextActive]}>Unassigned</Text>
+                <Text style={[styles.chipText, assignStaffBranchId === null && styles.chipTextActive]}>Unassigned</Text>
               </TouchableOpacity>
               {branches.map((branch) => {
-                const active = assignBranchId === branch.id;
+                const active = assignStaffBranchId === branch.id;
                 return (
                   <TouchableOpacity
                     key={branch.id}
                     style={[styles.chip, active && styles.chipActive]}
-                    onPress={() => setAssignBranchId(branch.id)}
+                    onPress={() => setAssignStaffBranchId(branch.id)}
                   >
                     <Text style={[styles.chipText, active && styles.chipTextActive]}>{branch.name}</Text>
                   </TouchableOpacity>
@@ -723,16 +735,23 @@ export default function EmployeesScreen() {
             </ScrollView>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.secondaryBtn} onPress={() => setAssignOpen(false)}>
+              <TouchableOpacity
+                style={styles.secondaryBtn}
+                onPress={() => {
+                  setAssignStaffOpen(false);
+                  setAssignStaffUser(null);
+                }}
+              >
                 <Text style={styles.secondaryBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryBtn} onPress={assignBranch} disabled={isSaving}>
+              <TouchableOpacity style={styles.primaryBtn} onPress={assignStaffBranch} disabled={isSaving}>
                 <Text style={styles.primaryBtnText}>{isSaving ? "Saving..." : "Save"}</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
+
     </SafeAreaView>
   );
 }
@@ -818,16 +837,6 @@ const styles = StyleSheet.create({
   chipTextActive: { color: "#fff" },
   sectionHeading: { fontSize: 16, fontWeight: "800", color: "#0f172a", marginBottom: 8 },
   sectionHint: { fontSize: 12, color: "#64748b", marginBottom: 10 },
-  staffCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  staffCardTop: { flexDirection: "row", justifyContent: "space-between" },
-  badgeRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", marginTop: 4 },
   badge: {
     fontSize: 11,
     fontWeight: "800",
@@ -838,7 +847,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     overflow: "hidden",
   },
-  inactiveTag: { marginTop: 6, fontSize: 12, fontWeight: "700", color: "#b91c1c" },
   chartSection: {
     backgroundColor: "#ffffff",
     borderRadius: 16,
