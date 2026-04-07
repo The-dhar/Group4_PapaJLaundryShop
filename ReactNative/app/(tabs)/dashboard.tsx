@@ -517,15 +517,17 @@ export default function DashboardAnalytics() {
                 <Pressable
                   onPressIn={() => setBranchTooltip(prev => ({ ...prev, visible: true }))}
                   onPressOut={() => setBranchTooltip(prev => ({ ...prev, visible: false }))}
-                  style={{ width: branchComparisonChartWidth + 140 }}
+                  style={{ width: branchComparisonChartWidth + 50 }}
                 >
                   <AnyBarChart
                     data={{
                       labels: currentBranchLabels,
                       datasets: [{ data: currentBranchValues }],
                     }}
-                    width={branchComparisonChartWidth + 200}
+                    width={branchComparisonChartWidth + 50}
                     height={220}
+                    yAxisLabel="₱"
+                    yAxisSuffix=""
                     chartConfig={{
                       backgroundColor: "#ffffff",
                       backgroundGradientFrom: "#ffffff",
@@ -533,11 +535,9 @@ export default function DashboardAnalytics() {
                       decimalPlaces: 0,
                       color: () => `rgba(59, 130, 246, 1)`,
                       labelColor: () => `rgba(30, 41, 59, 1)`,
-                      // Make x-axis labels slightly larger on small screens and make y-axis labels more readable
                       propsForLabels: {
                         fontSize: isSmallScreen ? 10 : 12,
                       },
-                      formatYLabel: (y: string) => `₱${parseInt(y).toLocaleString()}`,
                       propsForBackgroundLines: {
                         stroke: "#00000051",
                         strokeWidth: 1,
@@ -546,7 +546,7 @@ export default function DashboardAnalytics() {
                     verticalLabelRotation={0}
                     fromZero={true}
                     showValuesOnTopOfBars={true}
-                    style={{ marginLeft: -120, paddingRight: 40, paddingLeft: 15, borderRadius: 12, marginTop: 8 }}
+                    style={{ marginLeft: -20, borderRadius: 12, marginTop: 8 }}
                     // @ts-ignore - BarChart typings don't include onDataPointClick but runtime supports it
                     onDataPointClick={(data: any) => {
                       setBranchTooltip({
@@ -574,8 +574,10 @@ export default function DashboardAnalytics() {
                   labels: currentBranchLabels,
                   datasets: [{ data: currentBranchValues }]
                 }}
-                width={branchPerformanceChartWidth + 200}
+                width={branchPerformanceChartWidth + 50}
                 height={isSmallScreen ? 260 : 300}
+                yAxisLabel="₱"
+                yAxisSuffix=""
                 chartConfig={{
                   backgroundColor: "#ffffff",
                   backgroundGradientFrom: "#ffffff",
@@ -583,12 +585,9 @@ export default function DashboardAnalytics() {
                   decimalPlaces: 0,
                   color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
                   labelColor: (opacity = 1) => `rgba(30, 41, 59, ${opacity})`,
-                  // Make x-axis labels slightly larger on small screens and ensure y-axis labels are readable
                   propsForLabels: {
                     fontSize: isSmallScreen ? 10 : 12,
                   },
-                  // Ensure y-axis values render as numbers with peso sign
-                  formatYLabel: (y: string) => `₱${parseInt(y).toLocaleString()}`,
                   barPercentage: currentBranchLabels.length > 10 ? 0.4 : 0.6,
                   propsForBackgroundLines: {
                     strokeDasharray: "",
@@ -596,11 +595,9 @@ export default function DashboardAnalytics() {
                     strokeWidth: 1,
                   },
                 }}
-                style={{ marginLeft: -120, paddingRight: 40, paddingLeft: 15, borderRadius: 12, marginTop: 10 }}
+                style={{ marginLeft: -20, borderRadius: 12, marginTop: 10 }}
                 verticalLabelRotation={0}
                 fromZero={true}
-                yAxisLabel=""
-                yAxisSuffix=""
                 segments={4}
                 showValuesOnTopOfBars={true}
               />
