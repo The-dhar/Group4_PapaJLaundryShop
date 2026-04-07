@@ -34,4 +34,6 @@ RUN mkdir -p storage/logs \
 
 EXPOSE 10000
 
-CMD php artisan config:clear && php artisan migrate --force && php artisan db:seed --force && php artisan serve --host=0.0.0.0 --port=${PORT:-10000}
+# Seed only when you need it (Render Shell / one-off job), not on every deploy — it can fail or block health checks.
+# Use sh -c so $PORT from Render is expanded at runtime; exec replaces the shell so signals reach PHP.
+CMD sh -c 'set -e && php artisan migrate --force && php artisan storage:link --force && exec php artisan serve --host=0.0.0.0 --port="${PORT:-10000}"'

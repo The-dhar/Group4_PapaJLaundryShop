@@ -36,6 +36,12 @@ class ServicePrice extends Model
 
         $relative = '/storage/'.ltrim(str_replace('\\', '/', $this->image_path), '/');
 
+        // Render / production: set APP_URL to your public https://… origin so URLs never depend on proxy quirks.
+        $configured = rtrim((string) config('app.url'), '/');
+        if ($configured !== '' && ! str_contains($configured, 'localhost') && ! str_contains($configured, '127.0.0.1')) {
+            return $configured.$relative;
+        }
+
         if (function_exists('request') && request() && request()->getHttpHost()) {
             return request()->getSchemeAndHttpHost().$relative;
         }
