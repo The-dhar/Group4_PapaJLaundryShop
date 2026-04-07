@@ -5,7 +5,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import Ionicons from '@expo/vector-icons/Ionicons';

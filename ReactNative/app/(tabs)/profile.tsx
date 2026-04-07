@@ -5,7 +5,6 @@ import {
   Dimensions,
   Modal,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -15,6 +14,7 @@ import {
   View,
   Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";

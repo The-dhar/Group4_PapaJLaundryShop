@@ -5,7 +5,6 @@ import {
   type AppStateStatus,
   Dimensions,
   Modal,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { BarChart } from "react-native-chart-kit";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useAuth } from "@/contexts/AuthContext";

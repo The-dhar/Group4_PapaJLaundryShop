@@ -1,7 +1,8 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useState } from 'react';
-import { Dimensions, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Pressable } from 'react-native';
+import { Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View, Pressable } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LineChart } from 'react-native-chart-kit';
 import { useFocusEffect } from "@react-navigation/native";
 import { API_URL } from "../../config/api";

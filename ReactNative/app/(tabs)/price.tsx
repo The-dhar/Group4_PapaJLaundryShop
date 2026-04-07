@@ -3,8 +3,6 @@ import {
   ActivityIndicator,
   Dimensions,
   LayoutAnimation,
-  Platform,
-  UIManager,
   View,
   Text,
   ScrollView,
@@ -13,13 +11,9 @@ import {
   TextInput,
   Alert,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
-} from 'react-native';
-
-if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
@@ -109,6 +103,8 @@ const LaundryPriceManager = () => {
 
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
+  /** True when creating from Additional Charges tab (category fixed to Misc). */
+  const [createForAdditional, setCreateForAdditional] = useState(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [editedTiers, setEditedTiers] = useState<Tier[]>([]);
   const [newService, setNewService] = useState<NewService>({
@@ -193,7 +189,7 @@ const LaundryPriceManager = () => {
       return null;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"],
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.85,
@@ -227,38 +223,29 @@ const LaundryPriceManager = () => {
   const handleSaveChanges = () => {
     if (!selectedService) return;
 
-    const isPenalty = selectedService.name === "Penalty";
-    if (!isPenalty && !editedName.trim()) {
-      Alert.alert("Error", "Service name is required.");
+    if (!editedName.trim()) {
+      Alert.alert("Error", "Name is required.");
       return;
     }
+
+    const isMisc = isAdditionalChargeService(selectedService);
     const tiersChanged = JSON.stringify(editedTiers) !== JSON.stringify(selectedService.tiers);
-    const metaChanged =
-      !isPenalty &&
-      (editedName.trim() !== selectedService.name || editedCategory !== selectedService.category);
-    const imageDirty = !isPenalty && (editImageUri !== null || editRemoveImage);
+    const metaChanged = isMisc
+      ? editedName.trim() !== selectedService.name
+      : editedName.trim() !== selectedService.name || editedCategory !== selectedService.category;
+    const imageDirty = editImageUri !== null || editRemoveImage;
 
     if (!tiersChanged && !metaChanged && !imageDirty) {
       setIsEditModalOpen(false);
       return;
     }
 
-    if (isPenalty) {
-      if (!tiersChanged) {
-        setIsEditModalOpen(false);
-        return;
-      }
+    if (tiersChanged) {
       const effectiveDate = new Date();
       effectiveDate.setDate(effectiveDate.getDate() + 7);
       setPendingEffectiveDate(effectiveDate);
     } else {
-      if (tiersChanged) {
-        const effectiveDate = new Date();
-        effectiveDate.setDate(effectiveDate.getDate() + 7);
-        setPendingEffectiveDate(effectiveDate);
-      } else {
-        setPendingEffectiveDate(null);
-      }
+      setPendingEffectiveDate(null);
     }
 
     setConfirmKind("edit");
@@ -266,7 +253,6 @@ const LaundryPriceManager = () => {
 
   const submitEditAfterConfirm = async () => {
     if (!selectedService) return;
-    if (selectedService.name === "Penalty" && !pendingEffectiveDate) return;
 
     setIsMutating(true);
     try {
@@ -275,42 +261,8 @@ const LaundryPriceManager = () => {
         return;
       }
 
-      const isPenalty = selectedService.name === "Penalty";
-
-      if (isPenalty) {
-        const response = await fetch(`${API_URL}/service-prices/${selectedService.id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-          body: JSON.stringify({
-            tiers: editedTiers,
-            effective_date: pendingEffectiveDate!.toISOString().slice(0, 10),
-          }),
-        });
-
-        if (!response.ok) {
-          let msg = "Failed to update pricing.";
-          try {
-            const err = await response.json();
-            if (err?.message) msg = typeof err.message === "string" ? err.message : msg;
-          } catch {
-            /* ignore */
-          }
-          Alert.alert("Error", msg);
-          return;
-        }
-
-        const updated = await response.json();
-        const merged = mergeServiceFromApi(updated);
-        setServices((prev) => prev.map((s) => (s.id === merged.id ? merged : s)));
-        setConfirmKind(null);
-        setPendingEffectiveDate(null);
-        setIsEditModalOpen(false);
-        return;
-      }
+      const isMisc = isAdditionalChargeService(selectedService);
+      const categoryForApi = isMisc ? "Misc" : editedCategory;
 
       const eff =
         pendingEffectiveDate != null ? pendingEffectiveDate.toISOString().slice(0, 10) : undefined;
@@ -318,7 +270,7 @@ const LaundryPriceManager = () => {
       if (editImageUri) {
         const form = new FormData();
         form.append("name", editedName.trim());
-        form.append("category", editedCategory);
+        form.append("category", categoryForApi);
         appendTiersToFormData(form, editedTiers);
         if (eff) form.append("effective_date", eff);
         if (editRemoveImage) form.append("remove_image", "1");
@@ -352,7 +304,7 @@ const LaundryPriceManager = () => {
       } else {
         const body: Record<string, unknown> = {
           name: editedName.trim(),
-          category: editedCategory,
+          category: categoryForApi,
           tiers: editedTiers,
         };
         if (eff) body.effective_date = eff;
@@ -482,6 +434,7 @@ const LaundryPriceManager = () => {
 
       setServices((prev) => [...prev, service]);
       setConfirmKind(null);
+      setCreateForAdditional(false);
       setIsCreateModalOpen(false);
       setCreateImageUri(null);
       setNewService({
@@ -497,9 +450,22 @@ const LaundryPriceManager = () => {
     }
   };
 
+  const openCreateModal = () => {
+    setCreateForAdditional(priceSectionTab === "additional");
+    setNewService({
+      name: "",
+      category: priceSectionTab === "additional" ? "Misc" : "Wash & Fold",
+      tiers: [{ range: "", price: "", description: "" }],
+    });
+    setCreateImageUri(null);
+    setConfirmKind(null);
+    setIsCreateModalOpen(true);
+  };
+
   const confirmDeleteService = (service: Service) => {
+    const isMisc = isAdditionalChargeService(service);
     Alert.alert(
-      "Delete service",
+      isMisc ? "Delete additional charge" : "Delete service",
       `Remove “${service.name}” from the server? This cannot be undone.`,
       [
         { text: "Cancel", style: "cancel" },
@@ -650,15 +616,13 @@ const LaundryPriceManager = () => {
               </Text>
             </View>
 
-            {priceSectionTab === "services" ? (
-              <TouchableOpacity
-                onPress={() => setIsCreateModalOpen(true)}
-                style={[styles.createButton, isMutating && styles.buttonDisabled]}
-                disabled={isMutating}
-              >
-                <Text style={styles.createButtonText}>+ Create</Text>
-              </TouchableOpacity>
-            ) : null}
+            <TouchableOpacity
+              onPress={openCreateModal}
+              style={[styles.createButton, isMutating && styles.buttonDisabled]}
+              disabled={isMutating}
+            >
+              <Text style={styles.createButtonText}>+ Create</Text>
+            </TouchableOpacity>
           </View>
 
           {loadError ? (
@@ -693,21 +657,23 @@ const LaundryPriceManager = () => {
             ) : null}
             {displayedRows.map((service) => (
               <View key={service.id} style={styles.serviceCard}>
-                {/* Service Header */}
+                {/* Title row: image + text use full width; actions on separate row to avoid squeezed text */}
                 <View style={styles.serviceHeader}>
-                  <View style={styles.serviceHeaderLeft}>
-                    {service.imageUrl ? (
-                      <Image
-                        source={{ uri: service.imageUrl }}
-                        style={styles.serviceThumb}
-                        contentFit="cover"
-                        transition={200}
-                      />
-                    ) : (
-                      <View style={styles.serviceThumbPlaceholder}>
-                        <Ionicons name="image-outline" size={28} color="#94a3b8" />
-                      </View>
-                    )}
+                  <View style={styles.serviceHeaderTop}>
+                    <View style={styles.serviceThumbWrap}>
+                      {service.imageUrl ? (
+                        <Image
+                          source={{ uri: service.imageUrl }}
+                          style={styles.serviceThumb}
+                          contentFit="cover"
+                          transition={200}
+                        />
+                      ) : (
+                        <View style={styles.serviceThumbPlaceholder}>
+                          <Ionicons name="image-outline" size={28} color="#94a3b8" />
+                        </View>
+                      )}
+                    </View>
                     <View style={styles.serviceInfo}>
                       <Text style={styles.serviceName}>{service.name}</Text>
                       <Text style={styles.serviceCategory}>{service.category}</Text>
@@ -721,15 +687,13 @@ const LaundryPriceManager = () => {
                     </View>
                   </View>
                   <View style={styles.serviceActions}>
-                    {priceSectionTab === "services" ? (
-                      <TouchableOpacity
-                        onPress={() => confirmDeleteService(service)}
-                        style={[styles.deleteServiceBtn, isMutating && styles.buttonDisabled]}
-                        disabled={isMutating}
-                      >
-                        <Ionicons name="trash-outline" size={20} color="#fff" />
-                      </TouchableOpacity>
-                    ) : null}
+                    <TouchableOpacity
+                      onPress={() => confirmDeleteService(service)}
+                      style={[styles.deleteServiceBtn, isMutating && styles.buttonDisabled]}
+                      disabled={isMutating}
+                    >
+                      <Ionicons name="trash-outline" size={20} color="#fff" />
+                    </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => handleEditService(service)}
                       style={[styles.editButton, isMutating && styles.buttonDisabled]}
@@ -789,44 +753,30 @@ const LaundryPriceManager = () => {
 
             {/* Modal Body */}
             <ScrollView style={styles.modalBody}>
-              {selectedService?.name === 'Penalty' ? (
-                <View style={styles.tierEditCard}>
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Penalty Price (₱)</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Enter price"
-                      value={editedTiers[0]?.price.toString() ?? '0'}
-                      onChangeText={(text) => handleUpdatePrice(0, "price", text)}
-                      keyboardType="numeric"
-                    />
-                  </View>
-
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Description</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Enter description"
-                      value={editedTiers[0]?.description ?? ""}
-                      onChangeText={(text) => handleUpdatePrice(0, "description", text)}
-                    />
-                  </View>
-                </View>
-              ) : (
-                <>
+              <>
                   <View style={styles.tierEditCard}>
                     <Text style={styles.sectionTitle}>Details</Text>
                     <View style={styles.inputGroup}>
-                      <Text style={styles.inputLabel}>Service name *</Text>
+                      <Text style={styles.inputLabel}>
+                        {selectedService && isAdditionalChargeService(selectedService)
+                          ? "Charge name *"
+                          : "Service name *"}
+                      </Text>
                       <TextInput
                         style={styles.input}
-                        placeholder="Service name"
+                        placeholder={selectedService && isAdditionalChargeService(selectedService) ? "e.g. Penalty" : "Service name"}
                         value={editedName}
                         onChangeText={setEditedName}
                       />
                     </View>
                     <View style={styles.inputGroup}>
                       <Text style={styles.inputLabel}>Category</Text>
+                      {selectedService && isAdditionalChargeService(selectedService) ? (
+                        <View style={styles.miscCategoryBadge}>
+                          <Text style={styles.miscCategoryBadgeText}>Misc</Text>
+                          <Text style={styles.miscCategoryHint}>Listed under Additional Charges</Text>
+                        </View>
+                      ) : (
                       <View style={styles.categoryButtons}>
                         <TouchableOpacity
                           onPress={() => setEditedCategory("Wash & Fold")}
@@ -861,6 +811,7 @@ const LaundryPriceManager = () => {
                           </Text>
                         </TouchableOpacity>
                       </View>
+                      )}
                     </View>
                     <Text style={[styles.inputLabel, { marginTop: 4 }]}>Photo</Text>
                     <View style={styles.imagePickRow}>
@@ -972,13 +923,10 @@ const LaundryPriceManager = () => {
                   </View>
                   ))}
 
-                  {selectedService?.name !== "Penalty" && (
-                    <TouchableOpacity onPress={handleAddTier} style={styles.addTierButton}>
-                      <Text style={styles.addTierButtonText}>+ Add Tier</Text>
-                    </TouchableOpacity>
-                  )}
-                </>
-              )}
+                  <TouchableOpacity onPress={handleAddTier} style={styles.addTierButton}>
+                    <Text style={styles.addTierButtonText}>+ Add Tier</Text>
+                  </TouchableOpacity>
+              </>
             </ScrollView>
 
             {/* Modal Footer */}
@@ -1018,10 +966,13 @@ const LaundryPriceManager = () => {
           <View style={styles.modalContainer}>
             {/* Modal Header */}
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Create New Service</Text>
+              <Text style={styles.modalTitle}>
+                {createForAdditional ? "Create additional charge" : "Create new service"}
+              </Text>
               <TouchableOpacity
                 onPress={() => {
                   setConfirmKind(null);
+                  setCreateForAdditional(false);
                   setCreateImageUri(null);
                   setIsCreateModalOpen(false);
                 }}
@@ -1074,10 +1025,10 @@ const LaundryPriceManager = () => {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Service Name *</Text>
+                <Text style={styles.inputLabel}>{createForAdditional ? "Charge name *" : "Service name *"}</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="Enter service name"
+                  placeholder={createForAdditional ? "e.g. Rush fee" : "Enter service name"}
                   value={newService.name}
                   onChangeText={(text) => setNewService({ ...newService, name: text })}
                 />
@@ -1085,6 +1036,12 @@ const LaundryPriceManager = () => {
 
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Category</Text>
+                {createForAdditional ? (
+                  <View style={styles.miscCategoryBadge}>
+                    <Text style={styles.miscCategoryBadgeText}>Misc</Text>
+                    <Text style={styles.miscCategoryHint}>Shows under Additional Charges</Text>
+                  </View>
+                ) : (
                 <View style={styles.categoryButtons}>
                   <TouchableOpacity
                     onPress={() => setNewService({ ...newService, category: 'Wash & Fold' })}
@@ -1115,6 +1072,7 @@ const LaundryPriceManager = () => {
                     </Text>
                   </TouchableOpacity>
                 </View>
+                )}
               </View>
 
               <Text style={styles.sectionTitle}>Price Tiers</Text>
@@ -1180,6 +1138,7 @@ const LaundryPriceManager = () => {
               <TouchableOpacity
                 onPress={() => {
                   setConfirmKind(null);
+                  setCreateForAdditional(false);
                   setCreateImageUri(null);
                   setIsCreateModalOpen(false);
                 }}
@@ -1193,7 +1152,9 @@ const LaundryPriceManager = () => {
                 style={[styles.footerButton, styles.saveButton, isMutating && styles.buttonDisabled]}
                 disabled={isMutating}
               >
-                <Text style={styles.saveButtonText}>Create Service</Text>
+                <Text style={styles.saveButtonText}>
+                  {createForAdditional ? "Create charge" : "Create service"}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1205,7 +1166,11 @@ const LaundryPriceManager = () => {
         <View style={styles.confirmOverlay}>
           <View style={styles.confirmCard}>
             <Text style={styles.confirmTitle}>
-              {confirmKind === "edit" ? "Confirm price update" : "Confirm new service"}
+              {confirmKind === "edit"
+                ? "Confirm price update"
+                : createForAdditional
+                  ? "Confirm additional charge"
+                  : "Confirm new service"}
             </Text>
             {confirmKind === "edit" && pendingEffectiveDate ? (
               <Text style={styles.confirmMessage}>
@@ -1224,7 +1189,9 @@ const LaundryPriceManager = () => {
             {confirmKind === "create" ? (
               <Text style={styles.confirmMessage}>
                 {newService.name} · {newService.category} · {newService.tiers.length} tier(s).{"\n\n"}
-                Create this service on the server?
+                {createForAdditional
+                  ? "Create this additional charge on the server?"
+                  : "Create this service on the server?"}
               </Text>
             ) : null}
             <View style={styles.confirmActions}>
@@ -1456,30 +1423,30 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   serviceHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 16,
+    marginBottom: 14,
     paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
+    gap: 14,
   },
-  serviceHeaderLeft: {
+  /** Image + title row: full width so text wraps at words, not one character per line */
+  serviceHeaderTop: {
     flexDirection: "row",
-    flex: 1,
-    gap: 12,
     alignItems: "flex-start",
-    marginRight: 8,
+    gap: 14,
+  },
+  serviceThumbWrap: {
+    flexShrink: 0,
   },
   serviceThumb: {
-    width: 56,
-    height: 56,
+    width: 64,
+    height: 64,
     borderRadius: 12,
     backgroundColor: "#f1f5f9",
   },
   serviceThumbPlaceholder: {
-    width: 56,
-    height: 56,
+    width: 64,
+    height: 64,
     borderRadius: 12,
     backgroundColor: "#f1f5f9",
     alignItems: "center",
@@ -1488,30 +1455,37 @@ const styles = StyleSheet.create({
   serviceActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "flex-end",
+    gap: 10,
+    flexShrink: 0,
   },
   deleteServiceBtn: {
     backgroundColor: "#ef4444",
+    minWidth: 44,
+    minHeight: 44,
     paddingHorizontal: 12,
-    paddingVertical: 10,
     borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
   },
   serviceInfo: {
     flex: 1,
+    minWidth: 0,
+    paddingRight: 4,
   },
   serviceName: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: '700',
     color: '#0f172a',
-    marginBottom: 4,
+    marginBottom: 6,
+    lineHeight: 26,
   },
   serviceCategory: {
     fontSize: 14,
     color: '#64748b',
     fontWeight: '500',
     marginBottom: 8,
+    lineHeight: 20,
   },
   effectiveDateBadge: {
     backgroundColor: '#fef3c7',
@@ -1526,11 +1500,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   editButton: {
-     flexDirection: "row", 
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: '#3b82f6',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: 12,
+    gap: 6,
   },
   editButtonText: {
     color: '#ffffff',
@@ -1538,33 +1514,40 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   tiersContainer: {
-    gap: 8,
+    gap: 10,
   },
   tierItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: '#f8fafc',
-    padding: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 18,
     borderRadius: 12,
+    gap: 14,
   },
   tierInfo: {
     flex: 1,
+    minWidth: 0,
+    paddingRight: 8,
   },
   tierRange: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     color: '#0f172a',
-    marginBottom: 2,
+    marginBottom: 4,
+    lineHeight: 22,
   },
   tierDescription: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#64748b',
+    lineHeight: 18,
   },
   tierPrice: {
     fontSize: 18,
     fontWeight: '700',
     color: '#16a34a',
+    flexShrink: 0,
   },
   modalOverlay: {
     flex: 1,
@@ -1798,6 +1781,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: "#b91c1c",
+  },
+  miscCategoryBadge: {
+    backgroundColor: "#f1f5f9",
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  miscCategoryBadgeText: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  miscCategoryHint: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 4,
+    fontWeight: "600",
   },
   sectionTitle: {
     fontSize: 18,
