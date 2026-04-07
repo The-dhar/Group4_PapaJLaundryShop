@@ -90,9 +90,6 @@ function rangeForPreset(preset: Exclude<PeriodPreset, "range">): [string, string
   return [`${y}-01-01`, `${y}-12-31`];
 }
 
-// BarChart typing workaround to allow runtime onDataPointClick
-const AnyBarChart: any = BarChart;
-
 const { width: screenWidth } = Dimensions.get("window");
 const isSmallScreen = screenWidth < 375;
 const chartPadding = isSmallScreen ? 40 : 60;
@@ -125,6 +122,13 @@ export default function DashboardAnalytics() {
     y: 0,
     value: 0,
     label: '',
+    visible: false,
+  });
+  const [branchPerfTooltip, setBranchPerfTooltip] = useState({
+    x: 0,
+    y: 0,
+    value: 0,
+    label: "",
     visible: false,
   });
 
@@ -177,6 +181,11 @@ export default function DashboardAnalytics() {
       loadDashboard();
     }, [loadDashboard])
   );
+
+  // Ensure charts refresh immediately when date range changes.
+  React.useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
 
   const dailyRevenue = useMemo(() => {
     const days = eachYmdInRange(rangeFrom <= rangeTo ? rangeFrom : rangeTo, rangeFrom <= rangeTo ? rangeTo : rangeFrom);
@@ -519,15 +528,13 @@ export default function DashboardAnalytics() {
                   onPressOut={() => setBranchTooltip(prev => ({ ...prev, visible: false }))}
                   style={{ width: branchComparisonChartWidth + 50 }}
                 >
-                  <AnyBarChart
+                  <LineChart
                     data={{
                       labels: currentBranchLabels,
                       datasets: [{ data: currentBranchValues }],
                     }}
                     width={branchComparisonChartWidth + 50}
                     height={220}
-                    yAxisLabel="₱"
-                    yAxisSuffix=""
                     chartConfig={{
                       backgroundColor: "#ffffff",
                       backgroundGradientFrom: "#ffffff",
@@ -543,12 +550,12 @@ export default function DashboardAnalytics() {
                         strokeWidth: 1,
                       },
                     }}
+                    formatYLabel={(yValue) => `₱${parseInt(yValue).toLocaleString()}`}
+                    bezier
                     verticalLabelRotation={0}
                     fromZero={true}
-                    showValuesOnTopOfBars={true}
                     style={{ marginLeft: -20, borderRadius: 12, marginTop: 8 }}
-                    // @ts-ignore - BarChart typings don't include onDataPointClick but runtime supports it
-                    onDataPointClick={(data: any) => {
+                    onDataPointClick={(data) => {
                       setBranchTooltip({
                         x: data.x,
                         y: data.y,
@@ -570,14 +577,13 @@ export default function DashboardAnalytics() {
           <View style={styles.barChartWrapper}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center', marginLeft: 0 }}>
               <BarChart
+              <LineChart
                 data={{
                   labels: currentBranchLabels,
                   datasets: [{ data: currentBranchValues }]
                 }}
                 width={branchPerformanceChartWidth + 50}
                 height={isSmallScreen ? 260 : 300}
-                yAxisLabel="₱"
-                yAxisSuffix=""
                 chartConfig={{
                   backgroundColor: "#ffffff",
                   backgroundGradientFrom: "#ffffff",
@@ -595,13 +601,41 @@ export default function DashboardAnalytics() {
                     strokeWidth: 1,
                   },
                 }}
+                formatYLabel={(yValue) => `₱${parseInt(yValue).toLocaleString()}`}
+                bezier
                 style={{ marginLeft: -20, borderRadius: 12, marginTop: 10 }}
                 verticalLabelRotation={0}
                 fromZero={true}
                 segments={4}
-                showValuesOnTopOfBars={true}
+                onDataPointClick={(data) => {
+                  setBranchPerfTooltip({
+                    x: data.x,
+                    y: data.y,
+                    value: data.value,
+                    label: currentBranchLabels[data.index],
+                    visible: true,
+                  });
+                }}
               />
             </ScrollView>
+            {branchPerfTooltip.visible && (
+              <View
+                style={{
+                  position: "absolute",
+                  left: branchPerfTooltip.x - 40,
+                  top: branchPerfTooltip.y - 50,
+                  backgroundColor: "#4188faff",
+                  paddingVertical: 6,
+                  paddingHorizontal: 10,
+                  borderRadius: 8,
+                  zIndex: 20,
+                }}
+              >
+                <Text style={{ color: "white", fontWeight: "700" }}>
+                  {branchPerfTooltip.label}: ₱{branchPerfTooltip.value.toLocaleString()}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
       </ScrollView>
