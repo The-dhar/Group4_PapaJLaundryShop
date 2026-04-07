@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
+  type AppStateStatus,
   Modal,
   Platform,
   Pressable,
@@ -15,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { API_URL } from "../../config/api";
 
@@ -79,6 +82,7 @@ async function confirmAsync(
 }
 
 const EmployeeSettingsScreen = () => {
+  const SETTINGS_POLL_MS = 30_000;
   const router = useRouter();
   const { token, logout } = useAuth();
 
@@ -141,11 +145,32 @@ const EmployeeSettingsScreen = () => {
     }
   };
 
-  useEffect(() => {
-    loadStaff();
-    loadBranches();
-    loadCurrentUser();
+  const loadSettingsData = useCallback(async () => {
+    await Promise.all([loadStaff(), loadBranches(), loadCurrentUser()]);
   }, [token]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadSettingsData();
+
+      const intervalId = setInterval(() => {
+        loadSettingsData();
+      }, SETTINGS_POLL_MS);
+
+      const onAppState = (next: AppStateStatus) => {
+        if (next === "active") {
+          loadSettingsData();
+        }
+      };
+
+      const appSub = AppState.addEventListener("change", onAppState);
+
+      return () => {
+        clearInterval(intervalId);
+        appSub.remove();
+      };
+    }, [loadSettingsData])
+  );
 
   const isOwner = currentUser?.role === "owner";
 
