@@ -63,6 +63,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/staff-accounts', [StaffAccountController::class, 'index']);
     Route::post('/staff-accounts', [StaffAccountController::class, 'store']);
+    Route::post('/staff-accounts/verification/send', [StaffAccountController::class, 'sendVerificationCode']);
+    Route::post('/staff-accounts/verification/check', [StaffAccountController::class, 'verifyCode']);
     Route::put('/staff-accounts/{id}', [StaffAccountController::class, 'update']);
 
 });
