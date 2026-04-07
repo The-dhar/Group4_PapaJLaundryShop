@@ -1,6 +1,8 @@
 import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
+  AppState,
+  type AppStateStatus,
   Dimensions,
   Modal,
   SafeAreaView,
@@ -30,6 +32,8 @@ type StaffUser = {
   role: string;
   branch_id: number | null;
   is_active?: boolean;
+  /** True while staff has an active web POS session (updated on login/logout). */
+  is_online?: boolean;
   branch?: { id: number; name: string } | null;
   /** Sum of paid POS transactions this login created (from API). */
   total_revenue_php?: number | string | null;
@@ -97,6 +101,9 @@ const getOutcomeColor = (outcome: string | null) => {
   return "#64748b";
 };
 
+/** How often to refetch staff / HR / branches while this screen is focused. */
+const EMPLOYEES_POLL_MS = 30_000;
+
 export default function EmployeesScreen() {
   const router = useRouter();
   const { token, logout } = useAuth();
@@ -127,9 +134,10 @@ export default function EmployeesScreen() {
   const [assignStaffUser, setAssignStaffUser] = useState<StaffUser | null>(null);
   const [assignStaffBranchId, setAssignStaffBranchId] = useState<number | null>(null);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       if (!token) throw new Error("Not authenticated");
       const headers = {
         Authorization: `Bearer ${token}`,
@@ -151,15 +159,31 @@ export default function EmployeesScreen() {
       setBranches(Array.isArray(branchesData) ? branchesData : []);
     } catch (error) {
       console.log(error);
-      Alert.alert("Load failed", "Unable to load data. Check your connection.");
+      if (!silent) {
+        Alert.alert("Load failed", "Unable to load data. Check your connection.");
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, [token]);
 
   useFocusEffect(
     useCallback(() => {
       loadData();
+
+      const intervalId = setInterval(() => {
+        loadData({ silent: true });
+      }, EMPLOYEES_POLL_MS);
+
+      const onAppState = (next: AppStateStatus) => {
+        if (next === "active") loadData({ silent: true });
+      };
+      const appSub = AppState.addEventListener("change", onAppState);
+
+      return () => {
+        clearInterval(intervalId);
+        appSub.remove();
+      };
     }, [loadData])
   );
 
@@ -511,7 +535,19 @@ export default function EmployeesScreen() {
                   <View style={styles.cardMain}>
                     <Text style={styles.name}>{s.name}</Text>
                     <Text style={styles.sub}>{handle}</Text>
-                    <Text style={styles.sub}>{s.is_active === false ? "Inactive" : "Active"}</Text>
+                    <Text
+                      style={[
+                        styles.sub,
+                        styles.presenceLabel,
+                        s.is_active === false
+                          ? styles.presenceDisabled
+                          : s.is_online
+                            ? styles.presenceActive
+                            : styles.presenceInactive,
+                      ]}
+                    >
+                      {s.is_active === false ? "Disabled" : s.is_online ? "Active" : "Inactive"}
+                    </Text>
                     <Text style={styles.sub}>Branch: {s.branch?.name || "Unassigned"}</Text>
                     <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 2 }}>
                       <Text style={styles.badge}>{(s.role || "staff").toUpperCase()}</Text>
@@ -870,6 +906,10 @@ const styles = StyleSheet.create({
   cardMain: { flex: 1, minWidth: 0 },
   name: { fontSize: 16, fontWeight: "800", color: "#0f172a" },
   sub: { fontSize: 12, color: "#64748b", marginTop: 2 },
+  presenceLabel: { fontWeight: "700" },
+  presenceActive: { color: "#16a34a" },
+  presenceInactive: { color: "#dc2626" },
+  presenceDisabled: { color: "#94a3b8" },
   assignBtn: {
     flexDirection: "row",
     alignItems: "center",

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { BsGrid1X2Fill, BsCart3, BsBoxSeam, BsReceiptCutoff, BsDoorOpen, BsCashStack, BsLightningCharge, BsArchive, BsList } from 'react-icons/bs';
 import '../componentstyle/sidebarstyle.css';
+import { API_URL } from '../config/api';
 
 function getUserFromStorage() {
     try {
@@ -26,7 +27,21 @@ const Sidebar = ({ sidebarOpen, toggleSidebar }) => {
         user?.clerk_username?.trim() ||
         '';
 
-    const confirmLogout = () => {
+    const confirmLogout = async () => {
+        const token = localStorage.getItem('token');
+        if (token) {
+            try {
+                await fetch(`${API_URL}/logout`, {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+            } catch {
+                /* still clear local session */
+            }
+        }
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         setShowLogoutConfirm(false);

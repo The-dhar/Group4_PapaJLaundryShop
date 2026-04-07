@@ -33,6 +33,7 @@ type StaffUser = {
   role: string;
   branch_id?: number | null;
   is_active?: boolean;
+  is_online?: boolean;
   branch?: { id: number; name: string; clerk_username?: string | null; is_active?: boolean } | null;
   total_revenue_php?: number | string | null;
 };
@@ -320,7 +321,15 @@ const EmployeeSettingsScreen = () => {
                         {staff.name}
                         {staff.is_active === false ? (
                           <Text style={styles.inactiveLabel}> (Inactive)</Text>
-                        ) : null}
+                        ) : (
+                          <Text
+                            style={
+                              staff.is_online ? styles.staffOnlineLabel : styles.staffOfflineLabel
+                            }
+                          >
+                            {staff.is_online ? " · Active" : " · Inactive"}
+                          </Text>
+                        )}
                       </Text>
                       <Text style={styles.roleBadge}>
                         {(staff.role || "").toUpperCase()} · {staff.email}
@@ -555,6 +564,8 @@ const styles = StyleSheet.create({
   branchTextBlock: { flex: 1, minWidth: 0 },
   branchName: { fontSize: 16, fontWeight: "700", color: "#1e293b" },
   inactiveLabel: { fontSize: 14, fontWeight: "600", color: "#94a3b8" },
+  staffOnlineLabel: { fontSize: 14, fontWeight: "700", color: "#16a34a" },
+  staffOfflineLabel: { fontSize: 14, fontWeight: "700", color: "#dc2626" },
   roleBadge: { fontSize: 12, color: "#64748b", marginTop: 2, fontWeight: "600" },
   branchSubtext: { fontSize: 13, color: "#64748b", marginTop: 2 },
   editButton: { padding: 8 },

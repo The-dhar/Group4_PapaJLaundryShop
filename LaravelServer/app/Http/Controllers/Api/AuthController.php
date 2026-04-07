@@ -44,6 +44,11 @@ class AuthController extends Controller
             ], 403);
         }
 
+        if ($user->isBranchEmployee()) {
+            $user->is_online = true;
+            $user->save();
+        }
+
         $user->load(['branch:id,name,clerk_username']);
 
         $token = $user->createToken('api-token')->plainTextToken;
@@ -56,7 +61,14 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        $user = $request->user();
+
+        if ($user->isBranchEmployee()) {
+            $user->is_online = false;
+            $user->save();
+        }
+
+        $user->currentAccessToken()->delete();
 
         return response()->json([
             'message' => 'Logged out successfully',

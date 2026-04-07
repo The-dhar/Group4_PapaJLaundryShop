@@ -25,6 +25,7 @@ class User extends Authenticatable
         'branch_id',
         'clerk_username',
         'is_active',
+        'is_online',
     ];
 
     protected $hidden = [
@@ -39,6 +40,7 @@ class User extends Authenticatable
         return [
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'is_online' => 'boolean',
         ];
     }
 

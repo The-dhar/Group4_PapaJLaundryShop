@@ -139,6 +139,8 @@ class StaffAccountController extends Controller
         $user->save();
 
         if (array_key_exists('is_active', $validated) && $validated['is_active'] === false) {
+            $user->is_online = false;
+            $user->save();
             $user->tokens()->delete();
         }
 

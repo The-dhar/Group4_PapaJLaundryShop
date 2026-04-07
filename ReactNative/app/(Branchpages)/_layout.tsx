@@ -1,8 +1,15 @@
+import { useAuth } from '@/contexts/AuthContext';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import React from 'react';
 
 export default function BranchPagesLayout() {
+  const { token } = useAuth();
+
+  if (!token) {
+    return <Redirect href="/(openingApps)/login" />;
+  }
+
   return (
     <Tabs
       screenOptions={{
