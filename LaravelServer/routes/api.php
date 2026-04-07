@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BranchController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\EmployeeController;
+use App\Http\Controllers\Api\ServiceCategoryController;
 use App\Http\Controllers\Api\ServicePriceController;
 use App\Http\Controllers\Api\StaffAccountController;
 use App\Http\Controllers\Api\TransactionController;
@@ -55,6 +56,11 @@ Route::middleware('auth:sanctum')->group(function () {
     /** Multipart updates (image upload) from mobile clients; same handler as PUT. */
     Route::post('/service-prices/{id}', [ServicePriceController::class, 'update']);
     Route::delete('/service-prices/{id}', [ServicePriceController::class, 'destroy']);
+
+    Route::get('/service-categories', [ServiceCategoryController::class, 'index']);
+    Route::post('/service-categories', [ServiceCategoryController::class, 'store']);
+    Route::put('/service-categories/{id}', [ServiceCategoryController::class, 'update']);
+    Route::delete('/service-categories/{id}', [ServiceCategoryController::class, 'destroy']);
 
     Route::get('/employees', [EmployeeController::class, 'index']);
     Route::post('/employees', [EmployeeController::class, 'store']);

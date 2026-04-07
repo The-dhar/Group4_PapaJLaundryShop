@@ -29,6 +29,14 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
 
   if (!isOpen || !item) return null;
 
+  const parseTierRange = (text) => {
+    const normalized = String(text || '').toLowerCase().replace(/[–—]/g, '-');
+    const nums = normalized.match(/(\d+(\.\d+)?)/g)?.map(Number) || [];
+    if (nums.length >= 2) return { min: nums[0], max: nums[1] };
+    if (nums.length === 1) return { min: nums[0], max: nums[0] };
+    return null;
+  };
+
   /** =======================
    * MAIN PRICING LOGIC
    * ======================= */
@@ -39,6 +47,27 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
     const name = item.name.toLowerCase();
 
     if (isNaN(kv)) return null;
+
+    // Prefer API-configured tiers when available.
+    if (Array.isArray(item.pricing) && item.pricing.length > 0) {
+      const matched = item.pricing.find((tier) => {
+        const r = parseTierRange(tier.weight);
+        return r ? kv >= r.min && kv <= r.max : false;
+      });
+      if (matched) {
+        return {
+          computedTotal: Number(matched.price || 0),
+          label: `₱${Number(matched.price || 0).toFixed(2)} (${matched.weight})`,
+        };
+      }
+      const last = item.pricing[item.pricing.length - 1];
+      if (last) {
+        return {
+          computedTotal: Number(last.price || 0),
+          label: `₱${Number(last.price || 0).toFixed(2)} (${last.weight})`,
+        };
+      }
+    }
 
     /** ------------------------------
      * FIXED: DRYING SERVICE CARD
