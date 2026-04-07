@@ -1,7 +1,10 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
+  LayoutAnimation,
+  Platform,
+  UIManager,
   View,
   Text,
   ScrollView,
@@ -13,11 +16,17 @@ import {
   SafeAreaView,
   StatusBar,
 } from 'react-native';
+
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { API_URL } from "../../config/api";
+import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
+import { API_URL, resolvePublicFileUrl } from "../../config/api";
 
 /** Scroll area max height so the sheet scrolls internally; avoids the footer clipping the last controls. */
 const CREATE_SERVICE_SCROLL_MAX_H = Math.round(Dimensions.get("window").height * 0.52);
@@ -30,10 +39,11 @@ type PriceService = {
   tiers: PriceTier[];
   updatedAt: string | null;
   effectiveDate: string | null;
+  imageUrl: string | null;
 };
 
-function mapServiceRows(data: unknown): PriceService[] {
-  return (Array.isArray(data) ? data : []).map((item: any) => ({
+function mergeServiceFromApi(item: any): PriceService {
+  return {
     id: Number(item.id),
     name: String(item.name),
     category: String(item.category),
@@ -44,16 +54,52 @@ function mapServiceRows(data: unknown): PriceService[] {
           description: String(t.description || ""),
         }))
       : [],
-    updatedAt: item.updated_at || null,
-    effectiveDate: item.effective_date || null,
-  }));
+    updatedAt: item.updated_at ?? null,
+    effectiveDate: item.effective_date ?? null,
+    imageUrl:
+      item.image_url != null && item.image_url !== ""
+        ? resolvePublicFileUrl(String(item.image_url))
+        : null,
+  };
 }
+
+function mapServiceRows(data: unknown): PriceService[] {
+  return (Array.isArray(data) ? data : []).map((item: any) => mergeServiceFromApi(item));
+}
+
+function imageMimeFromUri(uri: string): { name: string; type: string } {
+  const tail = uri.split("/").pop() || "photo.jpg";
+  const ext = tail.includes(".") ? tail.split(".").pop()?.toLowerCase() : "jpg";
+  if (ext === "png") return { name: "upload.png", type: "image/png" };
+  if (ext === "webp") return { name: "upload.webp", type: "image/webp" };
+  return { name: "upload.jpg", type: "image/jpeg" };
+}
+
+/** Laravel parses `tiers[0][range]` multipart keys into an array; JSON strings often stay strings and fail validation. */
+function appendTiersToFormData(
+  form: FormData,
+  tiers: { range: string; price: number; description: string }[]
+) {
+  tiers.forEach((tier, index) => {
+    form.append(`tiers[${index}][range]`, tier.range);
+    form.append(`tiers[${index}][price]`, String(tier.price));
+    form.append(`tiers[${index}][description]`, tier.description ?? "");
+  });
+}
+
+/** Matches backend seed: additional charges (e.g. Penalty) use category `Misc`. */
+function isAdditionalChargeService(s: PriceService): boolean {
+  return s.category === "Misc";
+}
+
+type PriceSectionTab = "services" | "additional";
 
 const LaundryPriceManager = () => {
   type Tier = PriceTier;
   type Service = PriceService;
   type NewService = { name: string; category: string; tiers: { range: string; price: string; description: string }[] };
 
+  const [priceSectionTab, setPriceSectionTab] = useState<PriceSectionTab>("services");
   const [services, setServices] = useState<Service[]>([]);
   const [isLoadingPrices, setIsLoadingPrices] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -70,6 +116,12 @@ const LaundryPriceManager = () => {
     category: 'Wash & Fold',
     tiers: [{ range: '', price: '', description: '' }],
   });
+  const [createImageUri, setCreateImageUri] = useState<string | null>(null);
+
+  const [editedName, setEditedName] = useState("");
+  const [editedCategory, setEditedCategory] = useState("Wash & Fold");
+  const [editImageUri, setEditImageUri] = useState<string | null>(null);
+  const [editRemoveImage, setEditRemoveImage] = useState(false);
 
   const { token, logout } = useAuth();
 
@@ -121,9 +173,42 @@ const LaundryPriceManager = () => {
     }, [loadServices])
   );
 
+  const servicesTabRows = useMemo(
+    () => services.filter((s) => !isAdditionalChargeService(s)),
+    [services]
+  );
+  const additionalTabRows = useMemo(() => services.filter(isAdditionalChargeService), [services]);
+  const displayedRows = priceSectionTab === "services" ? servicesTabRows : additionalTabRows;
+
+  const onSelectPriceSection = (tab: PriceSectionTab) => {
+    if (tab === priceSectionTab) return;
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setPriceSectionTab(tab);
+  };
+
+  const pickServiceImage = async (): Promise<string | null> => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert("Permission needed", "Allow photo library access to attach an image.");
+      return null;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets?.[0]?.uri) return null;
+    return result.assets[0].uri;
+  };
+
   const handleEditService = (service: Service) => {
     setSelectedService(service);
     setEditedTiers(JSON.parse(JSON.stringify(service.tiers)) as Tier[]);
+    setEditedName(service.name);
+    setEditedCategory(service.category);
+    setEditImageUri(null);
+    setEditRemoveImage(false);
     setIsEditModalOpen(true);
   };
 
@@ -142,21 +227,46 @@ const LaundryPriceManager = () => {
   const handleSaveChanges = () => {
     if (!selectedService) return;
 
-    const hasChanges = JSON.stringify(editedTiers) !== JSON.stringify(selectedService.tiers);
+    const isPenalty = selectedService.name === "Penalty";
+    if (!isPenalty && !editedName.trim()) {
+      Alert.alert("Error", "Service name is required.");
+      return;
+    }
+    const tiersChanged = JSON.stringify(editedTiers) !== JSON.stringify(selectedService.tiers);
+    const metaChanged =
+      !isPenalty &&
+      (editedName.trim() !== selectedService.name || editedCategory !== selectedService.category);
+    const imageDirty = !isPenalty && (editImageUri !== null || editRemoveImage);
 
-    if (!hasChanges) {
+    if (!tiersChanged && !metaChanged && !imageDirty) {
       setIsEditModalOpen(false);
       return;
     }
 
-    const effectiveDate = new Date();
-    effectiveDate.setDate(effectiveDate.getDate() + 7);
-    setPendingEffectiveDate(effectiveDate);
-    setConfirmKind('edit');
+    if (isPenalty) {
+      if (!tiersChanged) {
+        setIsEditModalOpen(false);
+        return;
+      }
+      const effectiveDate = new Date();
+      effectiveDate.setDate(effectiveDate.getDate() + 7);
+      setPendingEffectiveDate(effectiveDate);
+    } else {
+      if (tiersChanged) {
+        const effectiveDate = new Date();
+        effectiveDate.setDate(effectiveDate.getDate() + 7);
+        setPendingEffectiveDate(effectiveDate);
+      } else {
+        setPendingEffectiveDate(null);
+      }
+    }
+
+    setConfirmKind("edit");
   };
 
   const submitEditAfterConfirm = async () => {
-    if (!selectedService || !pendingEffectiveDate) return;
+    if (!selectedService) return;
+    if (selectedService.name === "Penalty" && !pendingEffectiveDate) return;
 
     setIsMutating(true);
     try {
@@ -165,51 +275,124 @@ const LaundryPriceManager = () => {
         return;
       }
 
-      const response = await fetch(`${API_URL}/service-prices/${selectedService.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-        body: JSON.stringify({
-          tiers: editedTiers,
-          effective_date: pendingEffectiveDate.toISOString().slice(0, 10),
-        }),
-      });
+      const isPenalty = selectedService.name === "Penalty";
 
-      if (!response.ok) {
-        let msg = "Failed to update pricing.";
-        try {
-          const err = await response.json();
-          if (err?.message) msg = typeof err.message === "string" ? err.message : msg;
-        } catch {
-          /* ignore */
+      if (isPenalty) {
+        const response = await fetch(`${API_URL}/service-prices/${selectedService.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            tiers: editedTiers,
+            effective_date: pendingEffectiveDate!.toISOString().slice(0, 10),
+          }),
+        });
+
+        if (!response.ok) {
+          let msg = "Failed to update pricing.";
+          try {
+            const err = await response.json();
+            if (err?.message) msg = typeof err.message === "string" ? err.message : msg;
+          } catch {
+            /* ignore */
+          }
+          Alert.alert("Error", msg);
+          return;
         }
-        Alert.alert("Error", msg);
+
+        const updated = await response.json();
+        const merged = mergeServiceFromApi(updated);
+        setServices((prev) => prev.map((s) => (s.id === merged.id ? merged : s)));
+        setConfirmKind(null);
+        setPendingEffectiveDate(null);
+        setIsEditModalOpen(false);
         return;
       }
 
-      const updated = await response.json();
+      const eff =
+        pendingEffectiveDate != null ? pendingEffectiveDate.toISOString().slice(0, 10) : undefined;
 
-      const updatedServices = services.map((service) =>
-        service.id === selectedService.id
-          ? {
-              ...service,
-              tiers: Array.isArray(updated.tiers) ? updated.tiers : editedTiers,
-              updatedAt: updated.updated_at || new Date().toISOString(),
-              effectiveDate: updated.effective_date || pendingEffectiveDate.toISOString(),
-            }
-          : service
-      );
+      if (editImageUri) {
+        const form = new FormData();
+        form.append("name", editedName.trim());
+        form.append("category", editedCategory);
+        appendTiersToFormData(form, editedTiers);
+        if (eff) form.append("effective_date", eff);
+        if (editRemoveImage) form.append("remove_image", "1");
+        const { name: imgName, type: imgType } = imageMimeFromUri(editImageUri);
+        form.append("image", { uri: editImageUri, name: imgName, type: imgType } as any);
 
-      setServices(updatedServices);
+        const response = await fetch(`${API_URL}/service-prices/${selectedService.id}`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+          body: form,
+        });
+
+        if (!response.ok) {
+          let msg = "Failed to update service.";
+          try {
+            const err = await response.json();
+            if (err?.message) msg = typeof err.message === "string" ? err.message : msg;
+          } catch {
+            /* ignore */
+          }
+          Alert.alert("Error", msg);
+          return;
+        }
+
+        const updated = await response.json();
+        const merged = mergeServiceFromApi(updated);
+        setServices((prev) => prev.map((s) => (s.id === merged.id ? merged : s)));
+      } else {
+        const body: Record<string, unknown> = {
+          name: editedName.trim(),
+          category: editedCategory,
+          tiers: editedTiers,
+        };
+        if (eff) body.effective_date = eff;
+        if (editRemoveImage) body.remove_image = true;
+
+        const response = await fetch(`${API_URL}/service-prices/${selectedService.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+          let msg = "Failed to update service.";
+          try {
+            const err = await response.json();
+            if (err?.message) msg = typeof err.message === "string" ? err.message : msg;
+          } catch {
+            /* ignore */
+          }
+          Alert.alert("Error", msg);
+          return;
+        }
+
+        const updated = await response.json();
+        const merged = mergeServiceFromApi(updated);
+        setServices((prev) => prev.map((s) => (s.id === merged.id ? merged : s)));
+      }
+
       setConfirmKind(null);
       setPendingEffectiveDate(null);
+      setEditImageUri(null);
+      setEditRemoveImage(false);
       setIsEditModalOpen(false);
     } catch (error) {
       console.log(error);
-      Alert.alert("Error", "Failed to update pricing.");
+      Alert.alert("Error", "Failed to update service.");
     } finally {
       setIsMutating(false);
     }
@@ -227,7 +410,7 @@ const LaundryPriceManager = () => {
   };
 
   const handleCreateService = () => {
-    if (!newService.name || newService.tiers.some((t) => !t.range || !t.price)) {
+    if (!newService.name.trim() || newService.tiers.some((t) => !t.range || !t.price)) {
       Alert.alert("Error", "Please fill in all required fields");
       return;
     }
@@ -242,23 +425,45 @@ const LaundryPriceManager = () => {
         return;
       }
 
-      const response = await fetch(`${API_URL}/service-prices`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-        body: JSON.stringify({
-          name: newService.name,
-          category: newService.category,
-          tiers: newService.tiers.map((t) => ({
-            range: t.range,
-            price: parseFloat(t.price) || 0,
-            description: t.description || "",
-          })),
-        }),
-      });
+      const tiersPayload = newService.tiers.map((t) => ({
+        range: t.range,
+        price: parseFloat(t.price) || 0,
+        description: t.description || "",
+      }));
+
+      let response: Response;
+
+      if (createImageUri) {
+        const form = new FormData();
+        form.append("name", newService.name.trim());
+        form.append("category", newService.category);
+        appendTiersToFormData(form, tiersPayload);
+        const { name: imgName, type: imgType } = imageMimeFromUri(createImageUri);
+        form.append("image", { uri: createImageUri, name: imgName, type: imgType } as any);
+
+        response = await fetch(`${API_URL}/service-prices`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+          body: form,
+        });
+      } else {
+        response = await fetch(`${API_URL}/service-prices`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            name: newService.name.trim(),
+            category: newService.category,
+            tiers: tiersPayload,
+          }),
+        });
+      }
 
       if (!response.ok) {
         let msg = "Failed to create service.";
@@ -273,25 +478,12 @@ const LaundryPriceManager = () => {
       }
 
       const created = await response.json();
-
-      const service: Service = {
-        id: Number(created.id),
-        name: created.name,
-        category: created.category,
-        tiers: Array.isArray(created.tiers)
-          ? created.tiers.map((t: any) => ({
-              range: String(t.range || ""),
-              price: Number(t.price || 0),
-              description: String(t.description || ""),
-            }))
-          : [],
-        updatedAt: created.updated_at || new Date().toISOString(),
-        effectiveDate: created.effective_date || null,
-      };
+      const service = mergeServiceFromApi(created);
 
       setServices((prev) => [...prev, service]);
       setConfirmKind(null);
       setIsCreateModalOpen(false);
+      setCreateImageUri(null);
       setNewService({
         name: "",
         category: "Wash & Fold",
@@ -300,6 +492,57 @@ const LaundryPriceManager = () => {
     } catch (error) {
       console.log(error);
       Alert.alert("Error", "Failed to create service.");
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const confirmDeleteService = (service: Service) => {
+    Alert.alert(
+      "Delete service",
+      `Remove “${service.name}” from the server? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => void deleteService(service),
+        },
+      ]
+    );
+  };
+
+  const deleteService = async (service: Service) => {
+    if (!token) {
+      Alert.alert("Error", "Not signed in.");
+      return;
+    }
+    setIsMutating(true);
+    try {
+      const response = await fetch(`${API_URL}/service-prices/${service.id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        let msg = "Failed to delete service.";
+        try {
+          const err = await response.json();
+          if (err?.message) msg = typeof err.message === "string" ? err.message : msg;
+        } catch {
+          /* ignore */
+        }
+        Alert.alert("Error", msg);
+        return;
+      }
+
+      setServices((prev) => prev.filter((s) => s.id !== service.id));
+    } catch (e) {
+      console.log(e);
+      Alert.alert("Error", "Failed to delete service.");
     } finally {
       setIsMutating(false);
     }
@@ -373,19 +616,49 @@ const LaundryPriceManager = () => {
 
       <ScrollView style={styles.content}>
         <View style={styles.card}>
+          <View style={styles.sectionSegmentWrap}>
+            <Text style={styles.sectionSegmentLabel}>Manage</Text>
+            <View style={styles.sectionSegmentRow}>
+              {(
+                [
+                  ["services", "Services"],
+                  ["additional", "Additional Charges"],
+                ] as const
+              ).map(([key, label]) => {
+                const active = priceSectionTab === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={[styles.sectionSegmentChip, active && styles.sectionSegmentChipActive]}
+                    onPress={() => onSelectPriceSection(key)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.sectionSegmentChipText, active && styles.sectionSegmentChipTextActive]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
           {/* List Header */}
           <View style={styles.listHeader}>
             <View style={styles.listHeaderLeft}>
-              <Text style={styles.listHeaderTitle}>Service Pricing</Text>
+              <Text style={styles.listHeaderTitle}>
+                {priceSectionTab === "services" ? "Service pricing" : "Additional charges"}
+              </Text>
             </View>
 
-            <TouchableOpacity
-              onPress={() => setIsCreateModalOpen(true)}
-              style={[styles.createButton, isMutating && styles.buttonDisabled]}
-              disabled={isMutating}
-            >
-              <Text style={styles.createButtonText}>+ Create</Text>
-            </TouchableOpacity>
+            {priceSectionTab === "services" ? (
+              <TouchableOpacity
+                onPress={() => setIsCreateModalOpen(true)}
+                style={[styles.createButton, isMutating && styles.buttonDisabled]}
+                disabled={isMutating}
+              >
+                <Text style={styles.createButtonText}>+ Create</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
 
           {loadError ? (
@@ -406,29 +679,66 @@ const LaundryPriceManager = () => {
 
           {/* Services List */}
           <View style={styles.servicesList}>
-            {services.map((service) => (
+            {!isLoadingPrices && !loadError && displayedRows.length === 0 ? (
+              <View style={styles.emptyTabState}>
+                <Text style={styles.emptyTabTitle}>
+                  {priceSectionTab === "services" ? "No services yet" : "No additional charges"}
+                </Text>
+                <Text style={styles.emptyTabSubtitle}>
+                  {priceSectionTab === "services"
+                    ? "Create a service or pull to refresh after the server adds defaults."
+                    : "Additional charges use category “Misc” (e.g. penalty fees). They appear here."}
+                </Text>
+              </View>
+            ) : null}
+            {displayedRows.map((service) => (
               <View key={service.id} style={styles.serviceCard}>
                 {/* Service Header */}
                 <View style={styles.serviceHeader}>
-                  <View style={styles.serviceInfo}>
-                    <Text style={styles.serviceName}>{service.name}</Text>
-                    <Text style={styles.serviceCategory}>{service.category}</Text>
-                    {service.effectiveDate && (
-                      <View style={styles.effectiveDateBadge}>
-                        <Text style={styles.effectiveDateText}>
-                         Effective: {new Date(service.effectiveDate).toLocaleDateString()}
-                        </Text>
+                  <View style={styles.serviceHeaderLeft}>
+                    {service.imageUrl ? (
+                      <Image
+                        source={{ uri: service.imageUrl }}
+                        style={styles.serviceThumb}
+                        contentFit="cover"
+                        transition={200}
+                      />
+                    ) : (
+                      <View style={styles.serviceThumbPlaceholder}>
+                        <Ionicons name="image-outline" size={28} color="#94a3b8" />
                       </View>
                     )}
+                    <View style={styles.serviceInfo}>
+                      <Text style={styles.serviceName}>{service.name}</Text>
+                      <Text style={styles.serviceCategory}>{service.category}</Text>
+                      {service.effectiveDate && (
+                        <View style={styles.effectiveDateBadge}>
+                          <Text style={styles.effectiveDateText}>
+                            Effective: {new Date(service.effectiveDate).toLocaleDateString()}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
-                  <TouchableOpacity
-                    onPress={() => handleEditService(service)}
-                    style={[styles.editButton, isMutating && styles.buttonDisabled]}
-                    disabled={isMutating}
-                  >
-                    <Ionicons name="create-outline" size={20} color="#fff" />
-                    <Text style={styles.editButtonText}>Edit</Text>
-                  </TouchableOpacity>
+                  <View style={styles.serviceActions}>
+                    {priceSectionTab === "services" ? (
+                      <TouchableOpacity
+                        onPress={() => confirmDeleteService(service)}
+                        style={[styles.deleteServiceBtn, isMutating && styles.buttonDisabled]}
+                        disabled={isMutating}
+                      >
+                        <Ionicons name="trash-outline" size={20} color="#fff" />
+                      </TouchableOpacity>
+                    ) : null}
+                    <TouchableOpacity
+                      onPress={() => handleEditService(service)}
+                      style={[styles.editButton, isMutating && styles.buttonDisabled]}
+                      disabled={isMutating}
+                    >
+                      <Ionicons name="create-outline" size={20} color="#fff" />
+                      <Text style={styles.editButtonText}>Edit</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 {/* Tiers */}
@@ -466,6 +776,8 @@ const LaundryPriceManager = () => {
                 onPress={() => {
                   setConfirmKind(null);
                   setPendingEffectiveDate(null);
+                  setEditImageUri(null);
+                  setEditRemoveImage(false);
                   setIsEditModalOpen(false);
                 }}
                 style={styles.closeButton}
@@ -485,7 +797,7 @@ const LaundryPriceManager = () => {
                       style={styles.input}
                       placeholder="Enter price"
                       value={editedTiers[0]?.price.toString() ?? '0'}
-                      onChangeText={(text) => handleUpdatePrice(0, 'price', text)}
+                      onChangeText={(text) => handleUpdatePrice(0, "price", text)}
                       keyboardType="numeric"
                     />
                   </View>
@@ -495,13 +807,125 @@ const LaundryPriceManager = () => {
                     <TextInput
                       style={styles.input}
                       placeholder="Enter description"
-                      value={editedTiers[0]?.description ?? ''}
-                      onChangeText={(text) => handleUpdatePrice(0, 'description', text)}
+                      value={editedTiers[0]?.description ?? ""}
+                      onChangeText={(text) => handleUpdatePrice(0, "description", text)}
                     />
                   </View>
                 </View>
               ) : (
-                editedTiers.map((tier, index) => (
+                <>
+                  <View style={styles.tierEditCard}>
+                    <Text style={styles.sectionTitle}>Details</Text>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Service name *</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Service name"
+                        value={editedName}
+                        onChangeText={setEditedName}
+                      />
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Category</Text>
+                      <View style={styles.categoryButtons}>
+                        <TouchableOpacity
+                          onPress={() => setEditedCategory("Wash & Fold")}
+                          style={[
+                            styles.categoryButton,
+                            editedCategory === "Wash & Fold" && styles.categoryButtonActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.categoryButtonText,
+                              editedCategory === "Wash & Fold" && styles.categoryButtonTextActive,
+                            ]}
+                          >
+                            Wash & Fold
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => setEditedCategory("Dry Only")}
+                          style={[
+                            styles.categoryButton,
+                            editedCategory === "Dry Only" && styles.categoryButtonActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.categoryButtonText,
+                              editedCategory === "Dry Only" && styles.categoryButtonTextActive,
+                            ]}
+                          >
+                            Dry Only
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    <Text style={[styles.inputLabel, { marginTop: 4 }]}>Photo</Text>
+                    <View style={styles.imagePickRow}>
+                      {editImageUri ? (
+                        <Image source={{ uri: editImageUri }} style={styles.editImagePreview} contentFit="cover" />
+                      ) : selectedService?.imageUrl && !editRemoveImage ? (
+                        <Image
+                          source={{ uri: selectedService.imageUrl }}
+                          style={styles.editImagePreview}
+                          contentFit="cover"
+                        />
+                      ) : (
+                        <View style={styles.editImagePlaceholder}>
+                          <Ionicons name="image-outline" size={36} color="#94a3b8" />
+                        </View>
+                      )}
+                      <View style={styles.imagePickActions}>
+                        <TouchableOpacity
+                          style={styles.secondaryOutlineBtn}
+                          onPress={async () => {
+                            const uri = await pickServiceImage();
+                            if (uri) {
+                              setEditImageUri(uri);
+                              setEditRemoveImage(false);
+                            }
+                          }}
+                        >
+                          <Text style={styles.secondaryOutlineBtnText}>
+                            {editImageUri || (selectedService?.imageUrl && !editRemoveImage)
+                              ? "Change photo"
+                              : "Add photo"}
+                          </Text>
+                        </TouchableOpacity>
+                        {selectedService?.imageUrl && !editImageUri && !editRemoveImage ? (
+                          <TouchableOpacity
+                            style={styles.secondaryOutlineBtnDanger}
+                            onPress={() => {
+                              setEditRemoveImage(true);
+                              setEditImageUri(null);
+                            }}
+                          >
+                            <Text style={styles.secondaryOutlineBtnDangerText}>Remove photo</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                        {editImageUri ? (
+                          <TouchableOpacity
+                            style={styles.secondaryOutlineBtnDanger}
+                            onPress={() => setEditImageUri(null)}
+                          >
+                            <Text style={styles.secondaryOutlineBtnDangerText}>Discard new photo</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                        {editRemoveImage && !editImageUri ? (
+                          <TouchableOpacity
+                            style={styles.secondaryOutlineBtn}
+                            onPress={() => setEditRemoveImage(false)}
+                          >
+                            <Text style={styles.secondaryOutlineBtnText}>Undo remove</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    </View>
+                  </View>
+
+                  {editedTiers.map((tier, index) => (
                   <View key={index} style={styles.tierEditCard}>
                     <View style={styles.tierEditHeader}>
                       <Text style={styles.tierEditTitle}>Tier {index + 1}</Text>
@@ -546,16 +970,14 @@ const LaundryPriceManager = () => {
                       />
                     </View>
                   </View>
-                ))
-              )}
+                  ))}
 
-              {selectedService?.name !== 'Penalty' && (
-                <TouchableOpacity
-                  onPress={handleAddTier}
-                  style={styles.addTierButton}
-                >
-                  <Text style={styles.addTierButtonText}>+ Add Tier</Text>
-                </TouchableOpacity>
+                  {selectedService?.name !== "Penalty" && (
+                    <TouchableOpacity onPress={handleAddTier} style={styles.addTierButton}>
+                      <Text style={styles.addTierButtonText}>+ Add Tier</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
               )}
             </ScrollView>
 
@@ -565,6 +987,8 @@ const LaundryPriceManager = () => {
                 onPress={() => {
                   setConfirmKind(null);
                   setPendingEffectiveDate(null);
+                  setEditImageUri(null);
+                  setEditRemoveImage(false);
                   setIsEditModalOpen(false);
                 }}
                 style={[styles.footerButton, styles.cancelButton]}
@@ -598,6 +1022,7 @@ const LaundryPriceManager = () => {
               <TouchableOpacity
                 onPress={() => {
                   setConfirmKind(null);
+                  setCreateImageUri(null);
                   setIsCreateModalOpen(false);
                 }}
                 style={styles.closeButton}
@@ -614,6 +1039,40 @@ const LaundryPriceManager = () => {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator
             >
+              <View style={styles.tierEditCard}>
+                <Text style={styles.sectionTitle}>Photo (optional)</Text>
+                <View style={styles.imagePickRow}>
+                  {createImageUri ? (
+                    <Image source={{ uri: createImageUri }} style={styles.editImagePreview} contentFit="cover" />
+                  ) : (
+                    <View style={styles.editImagePlaceholder}>
+                      <Ionicons name="image-outline" size={36} color="#94a3b8" />
+                    </View>
+                  )}
+                  <View style={styles.imagePickActions}>
+                    <TouchableOpacity
+                      style={styles.secondaryOutlineBtn}
+                      onPress={async () => {
+                        const uri = await pickServiceImage();
+                        if (uri) setCreateImageUri(uri);
+                      }}
+                    >
+                      <Text style={styles.secondaryOutlineBtnText}>
+                        {createImageUri ? "Change photo" : "Choose photo"}
+                      </Text>
+                    </TouchableOpacity>
+                    {createImageUri ? (
+                      <TouchableOpacity
+                        style={styles.secondaryOutlineBtnDanger}
+                        onPress={() => setCreateImageUri(null)}
+                      >
+                        <Text style={styles.secondaryOutlineBtnDangerText}>Remove</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                </View>
+              </View>
+
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Service Name *</Text>
                 <TextInput
@@ -721,6 +1180,7 @@ const LaundryPriceManager = () => {
               <TouchableOpacity
                 onPress={() => {
                   setConfirmKind(null);
+                  setCreateImageUri(null);
                   setIsCreateModalOpen(false);
                 }}
                 style={[styles.footerButton, styles.cancelButton]}
@@ -757,6 +1217,9 @@ const LaundryPriceManager = () => {
                 })}
                 {"\n\n"}(7 days from now){"\n\n"}Apply this change to the server?
               </Text>
+            ) : null}
+            {confirmKind === "edit" && !pendingEffectiveDate ? (
+              <Text style={styles.confirmMessage}>Apply these changes on the server?</Text>
             ) : null}
             {confirmKind === "create" ? (
               <Text style={styles.confirmMessage}>
@@ -827,6 +1290,65 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
     overflow: 'hidden',
+  },
+  sectionSegmentWrap: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 14,
+    backgroundColor: "#f8fafc",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  sectionSegmentLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#475569",
+    marginBottom: 10,
+  },
+  sectionSegmentRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  sectionSegmentChip: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sectionSegmentChipActive: {
+    backgroundColor: "#3b82f6",
+  },
+  sectionSegmentChipText: {
+    fontSize: 13,
+    color: "#64748b",
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  sectionSegmentChipTextActive: {
+    color: "#ffffff",
+    fontWeight: "700",
+  },
+  emptyTabState: {
+    paddingVertical: 24,
+    paddingHorizontal: 8,
+    alignItems: "center",
+  },
+  emptyTabTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  emptyTabSubtitle: {
+    fontSize: 14,
+    color: "#64748b",
+    textAlign: "center",
+    lineHeight: 20,
+    maxWidth: 320,
   },
   listHeader: {
     flexDirection: 'row',
@@ -934,13 +1456,47 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   serviceHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: "#e2e8f0",
+  },
+  serviceHeaderLeft: {
+    flexDirection: "row",
+    flex: 1,
+    gap: 12,
+    alignItems: "flex-start",
+    marginRight: 8,
+  },
+  serviceThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: "#f1f5f9",
+  },
+  serviceThumbPlaceholder: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  serviceActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  deleteServiceBtn: {
+    backgroundColor: "#ef4444",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
   },
   serviceInfo: {
     flex: 1,
@@ -1190,6 +1746,58 @@ const styles = StyleSheet.create({
   },
   categoryButtonTextActive: {
     color: '#3b82f6',
+  },
+  imagePickRow: {
+    flexDirection: "row",
+    gap: 14,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  editImagePreview: {
+    width: 88,
+    height: 88,
+    borderRadius: 12,
+    backgroundColor: "#f1f5f9",
+  },
+  editImagePlaceholder: {
+    width: 88,
+    height: 88,
+    borderRadius: 12,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  imagePickActions: {
+    flex: 1,
+    gap: 8,
+  },
+  secondaryOutlineBtn: {
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+  },
+  secondaryOutlineBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#3b82f6",
+  },
+  secondaryOutlineBtnDanger: {
+    borderWidth: 2,
+    borderColor: "#fecaca",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "#fef2f2",
+    alignItems: "center",
+  },
+  secondaryOutlineBtnDangerText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#b91c1c",
   },
   sectionTitle: {
     fontSize: 18,

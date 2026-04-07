@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class ServicePrice extends Model
 {
@@ -11,10 +12,34 @@ class ServicePrice extends Model
         'category',
         'tiers',
         'effective_date',
+        'image_path',
     ];
 
     protected $casts = [
         'tiers' => 'array',
         'effective_date' => 'date',
     ];
+
+    protected $hidden = [
+        'image_path',
+    ];
+
+    protected $appends = [
+        'image_url',
+    ];
+
+    public function getImageUrlAttribute(): ?string
+    {
+        if (! $this->image_path) {
+            return null;
+        }
+
+        $relative = '/storage/'.ltrim(str_replace('\\', '/', $this->image_path), '/');
+
+        if (function_exists('request') && request() && request()->getHttpHost()) {
+            return request()->getSchemeAndHttpHost().$relative;
+        }
+
+        return Storage::disk('public')->url($this->image_path);
+    }
 }

@@ -51,6 +51,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/service-prices', [ServicePriceController::class, 'index']);
     Route::post('/service-prices', [ServicePriceController::class, 'store']);
     Route::put('/service-prices/{id}', [ServicePriceController::class, 'update']);
+    /** Multipart updates (image upload) from mobile clients; same handler as PUT. */
+    Route::post('/service-prices/{id}', [ServicePriceController::class, 'update']);
+    Route::delete('/service-prices/{id}', [ServicePriceController::class, 'destroy']);
 
     Route::get('/employees', [EmployeeController::class, 'index']);
     Route::post('/employees', [EmployeeController::class, 'store']);

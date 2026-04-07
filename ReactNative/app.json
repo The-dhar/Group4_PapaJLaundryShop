@@ -40,7 +40,14 @@
         }
       ],
       "expo-web-browser",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow access to photos to attach a service image.",
+          "cameraPermission": "Allow camera access to take a service photo."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
