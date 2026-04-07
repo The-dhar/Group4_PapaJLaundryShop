@@ -32,6 +32,12 @@ class AuthController extends Controller
             ], 403);
         }
 
+        if ($user->isBranchEmployee() && $user->branch_id === null) {
+            return response()->json([
+                'message' => 'Your account is not assigned to any branch. Ask the shop owner to assign you in Employee settings, then try again.',
+            ], 403);
+        }
+
         if ($user->role === 'manager') {
             return response()->json([
                 'message' => 'Branch manager logins are no longer used. Sign in with an employee (clerk/staff) account.',

@@ -52,11 +52,20 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (!response.ok) {
+        const msg = data.message || 'Invalid credentials.';
+        const noBranch =
+          response.status === 403 &&
+          typeof msg === 'string' &&
+          (msg.toLowerCase().includes('not assigned') ||
+            msg.toLowerCase().includes('assign you'));
         await Swal.fire({
-          title: 'Login failed',
-          text: data.message || 'Invalid credentials.',
-          icon: 'error',
-          width: 380
+          title: noBranch ? 'No branch assigned' : 'Login failed',
+          html: noBranch
+            ? `<p style="text-align:left;margin:0;">${msg}</p>`
+            : undefined,
+          text: noBranch ? undefined : msg,
+          icon: noBranch ? 'info' : 'error',
+          width: noBranch ? 440 : 380
         });
         return;
       }
@@ -73,6 +82,22 @@ export default function LoginPage() {
           text,
           icon: 'warning',
           width: 400
+        });
+        return;
+      }
+
+      const isBranchEmployee = role === 'clerk' || role === 'staff';
+      const branchId = data.user?.branch_id;
+      const hasBranch =
+        branchId !== null && branchId !== undefined && branchId !== '';
+      if (isBranchEmployee && !hasBranch) {
+        await Swal.fire({
+          title: 'No branch assigned',
+          html:
+            '<p style="text-align:left;margin:0;">Your account is not assigned to any branch. Ask the shop owner to assign you to a branch (Employees / staff settings), then try signing in again.</p>',
+          icon: 'info',
+          width: 440,
+          confirmButtonText: 'OK'
         });
         return;
       }
