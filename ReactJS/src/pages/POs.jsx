@@ -129,12 +129,31 @@ function getUserFromStorage() {
   }
 }
 
+const DEFAULT_SERVICE_ICONS = {
+  'regular clothes': '/pictures/clean-clothes.png',
+  'white clothes': '/pictures/pants.png',
+  'blankets/bed sheet': '/pictures/blanket.png',
+  'curtains/big towels': '/pictures/curtain.png',
+  comforters: '/pictures/towel.png',
+  drying: '/pictures/male-clothes.png',
+};
+
+const DEFAULT_LAUNDRY_ITEMS = [
+  { id: 1, icon: '/pictures/clean-clothes.png', name: 'Regular Clothes', pricing: [{ weight: '1-6 kg', price: 150 }, { weight: '6.1-7 kg', price: 175 }] },
+  { id: 2, icon: '/pictures/pants.png', name: 'White Clothes', pricing: [{ weight: '1-3 kg', price: 165 }, { weight: '3.1-6 kg', price: 195 }] },
+  { id: 3, icon: '/pictures/blanket.png', name: 'Blankets/Bed Sheet', pricing: [{ weight: '1-3 kg', price: 150 }, { weight: 'Additional', price: 50 }] },
+  { id: 4, icon: '/pictures/curtain.png', name: 'Curtains/Big towels', pricing: [{ weight: '1-3 kg', price: 150 }, { weight: 'Additional', price: 50 }] },
+  { id: 5, icon: '/pictures/towel.png', name: 'Comforters', pricing: [{ weight: '1-3 kg', price: 150 }, { weight: 'Additional', price: 50 }] },
+  { id: 6, icon: '/pictures/male-clothes.png', name: 'Drying', pricing: [{ weight: '1-6 kg', price: 120 }, { weight: '6.1-8 kg', price: 150 }] },
+];
+
 const POs = () => {
   const { createTransaction, transactions } = useTransactions();
 
   const [sessionUser, setSessionUser] = useState(() => getUserFromStorage());
   const [branches, setBranches] = useState([]);
   const [ownerBranchId, setOwnerBranchId] = useState(null);
+  const [laundryItems, setLaundryItems] = useState(DEFAULT_LAUNDRY_ITEMS);
 
   // --- States ---
   const [selectedItem, setSelectedItem] = useState(null);
@@ -217,6 +236,43 @@ const POs = () => {
       localStorage.setItem('user', JSON.stringify(merged));
     })();
   }, [sessionUser]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/service-prices`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!Array.isArray(data)) return;
+        const mapped = data
+          .filter((s) => String(s?.category || '').toLowerCase() !== 'misc')
+          .map((s) => {
+            const name = String(s?.name || '').trim();
+            const key = name.toLowerCase();
+            const tiers = Array.isArray(s?.tiers)
+              ? s.tiers.map((t) => ({
+                  weight: String(t?.range || ''),
+                  price: Number(t?.price || 0),
+                  description: String(t?.description || ''),
+                }))
+              : [];
+            return {
+              id: Number(s.id),
+              icon: s.image_url || DEFAULT_SERVICE_ICONS[key] || '/pictures/clean-clothes.png',
+              name,
+              pricing: tiers,
+            };
+          });
+        setLaundryItems(mapped);
+      } catch {
+        // keep current UI fallback
+      }
+    })();
+  }, []);
 
   const mergeCustomerSources = useCallback((apiRows, txRows) => {
     const map = new Map();
@@ -337,15 +393,6 @@ const POs = () => {
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
 
-  const laundryItems = [
-    { id: 1, icon: '/pictures/clean-clothes.png', name: 'Regular Clothes', pricing: [{ weight: '1–6 kilos', price: 150 }, { weight: '6.1–7 kilos', price: 175 }] },
-    { id: 2, icon: '/pictures/pants.png', name: 'White Clothes', pricing: [{ weight: '1–3 kilos', price: 165 }, { weight: '3.1–6 kilos', price: 195 }] },
-    { id: 3, icon: '/pictures/blanket.png', name: 'Blankets/Bed Sheet', pricing: [{ weight: '1–3 kg', price: 150 }, { weight: 'Additional', price: 50 }] },
-    { id: 4, icon: '/pictures/curtain.png', name: 'Curtains/Big towels', pricing: [{ weight: '1–3 kg', price: 150 }, { weight: 'Additional', price: 50 }] },
-    { id: 5, icon: '/pictures/towel.png', name: 'Comforters', pricing: [{ weight: '1–3 kg', price: 150 }, { weight: 'Additional', price: 50 }] },
-    { id: 6, icon: '/pictures/male-clothes.png', name: 'Drying', pricing: [{ weight: '1–6 kilos', price: 120 }, { weight: '6.1–8 kilos', price: 150 }] },
-  ];
-
   useEffect(() => {
     if (paymentStatus === 'full') setPaymentMethod('Cash');
     else setPaymentMethod('');
@@ -382,7 +429,7 @@ const POs = () => {
       // ADD new item
       setSelectedServices(prev => [
         ...prev,
-        { id: `${laundryItem.id}-${Date.now()}`, ...serviceData },
+        { id: `${laundryItem.id}-${Date.now()}`, sourceServiceId: laundryItem.id, ...serviceData },
       ]);
     }
     setIsModalOpen(false);
@@ -390,7 +437,9 @@ const POs = () => {
   };
 
   const handleEditService = (service) => {
-    const originalItem = laundryItems.find(item => item.name === service.serviceName);
+    const originalItem =
+      laundryItems.find(item => item.id === service.sourceServiceId) ||
+      laundryItems.find(item => item.name === service.serviceName);
     setSelectedItem({
       ...originalItem,
       initialKilos: service.kilos,

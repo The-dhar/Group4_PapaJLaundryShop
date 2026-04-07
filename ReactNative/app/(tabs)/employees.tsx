@@ -103,6 +103,7 @@ const getOutcomeColor = (outcome: string | null) => {
 
 /** How often to refetch staff / HR / branches while this screen is focused. */
 const EMPLOYEES_POLL_MS = 30_000;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function EmployeesScreen() {
   const router = useRouter();
@@ -124,6 +125,12 @@ export default function EmployeesScreen() {
   const [cMiddle, setCMiddle] = useState("");
   const [cLast, setCLast] = useState("");
   const [cEmail, setCEmail] = useState("");
+  const [cVerifyCode, setCVerifyCode] = useState("");
+  const [cCodeSent, setCCodeSent] = useState(false);
+  const [cEmailVerified, setCEmailVerified] = useState(false);
+  const [cVerifiedEmail, setCVerifiedEmail] = useState("");
+  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [isCheckingCode, setIsCheckingCode] = useState(false);
   const [cPassword, setCPassword] = useState("");
   const [cPassword2, setCPassword2] = useState("");
   const [cRole, setCRole] = useState<"clerk" | "staff">("clerk");
@@ -238,11 +245,96 @@ export default function EmployeesScreen() {
     setCMiddle("");
     setCLast("");
     setCEmail("");
+    setCVerifyCode("");
+    setCCodeSent(false);
+    setCEmailVerified(false);
+    setCVerifiedEmail("");
+    setIsSendingCode(false);
+    setIsCheckingCode(false);
     setCPassword("");
     setCPassword2("");
     setCRole("clerk");
     setCBranchId(null);
     setCreateError(null);
+  };
+
+  const normalizedCreateEmail = useMemo(() => cEmail.trim().toLowerCase(), [cEmail]);
+
+  const sendEmailCode = async () => {
+    if (!token) {
+      Alert.alert("Not authenticated", "Please login again.");
+      return;
+    }
+    if (!EMAIL_REGEX.test(normalizedCreateEmail)) {
+      Alert.alert("Invalid email", "Enter a valid email address before sending a code.");
+      return;
+    }
+    try {
+      setIsSendingCode(true);
+      const response = await fetch(`${API_URL}/staff-accounts/verification/send`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ email: normalizedCreateEmail }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        Alert.alert("Send failed", formatLaravelApiError(data, response.status));
+        return;
+      }
+      setCCodeSent(true);
+      setCEmailVerified(false);
+      setCVerifiedEmail("");
+      Alert.alert("Code sent", `A verification code was sent to ${normalizedCreateEmail}.`);
+    } catch (error) {
+      console.log(error);
+      Alert.alert("Send failed", "Unable to send verification code.");
+    } finally {
+      setIsSendingCode(false);
+    }
+  };
+
+  const verifyEmailCode = async () => {
+    if (!token) {
+      Alert.alert("Not authenticated", "Please login again.");
+      return;
+    }
+    if (!EMAIL_REGEX.test(normalizedCreateEmail)) {
+      Alert.alert("Invalid email", "Enter a valid email address first.");
+      return;
+    }
+    if (!/^\d{6}$/.test(cVerifyCode.trim())) {
+      Alert.alert("Invalid code", "Enter the 6-digit code sent to email.");
+      return;
+    }
+    try {
+      setIsCheckingCode(true);
+      const response = await fetch(`${API_URL}/staff-accounts/verification/check`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ email: normalizedCreateEmail, code: cVerifyCode.trim() }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        Alert.alert("Verify failed", formatLaravelApiError(data, response.status));
+        return;
+      }
+      setCEmailVerified(true);
+      setCVerifiedEmail(normalizedCreateEmail);
+      Alert.alert("Verified", "Email verified successfully.");
+    } catch (error) {
+      console.log(error);
+      Alert.alert("Verify failed", "Unable to verify email code.");
+    } finally {
+      setIsCheckingCode(false);
+    }
   };
 
   const createStaffAccount = async () => {
@@ -263,6 +355,7 @@ export default function EmployeesScreen() {
           middle_initial: cMiddle.trim() || null,
           last_name: cLast.trim(),
           email: cEmail.trim().toLowerCase(),
+          require_email_verification: true,
           password: cPassword,
           password_confirmation: cPassword2,
           role: cRole,
@@ -353,12 +446,20 @@ export default function EmployeesScreen() {
       return;
     }
     if (createStep === 2) {
-      if (!cEmail.trim() || !cPassword || cPassword.length < 6) {
-        Alert.alert("Required", "Valid email and password (min 6 chars) are required.");
+      if (!normalizedCreateEmail || !EMAIL_REGEX.test(normalizedCreateEmail)) {
+        Alert.alert("Required", "Enter a valid email address.");
+        return;
+      }
+      if (!cPassword || cPassword.length < 6) {
+        Alert.alert("Required", "Password must be at least 6 characters.");
         return;
       }
       if (cPassword !== cPassword2) {
         Alert.alert("Mismatch", "Passwords do not match.");
+        return;
+      }
+      if (!cEmailVerified || cVerifiedEmail !== normalizedCreateEmail) {
+        Alert.alert("Verify email", "Send and verify the email code first.");
         return;
       }
       setCreateStep(3);
@@ -620,8 +721,37 @@ export default function EmployeesScreen() {
                   autoCapitalize="none"
                   keyboardType="email-address"
                   value={cEmail}
-                  onChangeText={setCEmail}
+                  onChangeText={(text) => {
+                    setCEmail(text);
+                    setCCodeSent(false);
+                    setCEmailVerified(false);
+                    setCVerifiedEmail("");
+                    setCVerifyCode("");
+                  }}
                 />
+                <View style={styles.verifyRow}>
+                  <TouchableOpacity style={styles.secondaryBtn} onPress={sendEmailCode} disabled={isSendingCode}>
+                    <Text style={styles.secondaryBtnText}>{isSendingCode ? "Sending..." : "Send code"}</Text>
+                  </TouchableOpacity>
+                  <Text style={[styles.verifyStatus, cEmailVerified ? styles.verifyStatusOk : styles.verifyStatusPending]}>
+                    {cEmailVerified ? "Email verified" : cCodeSent ? "Code sent" : "Not verified"}
+                  </Text>
+                </View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Verification code (6 digits)"
+                  keyboardType="number-pad"
+                  value={cVerifyCode}
+                  onChangeText={setCVerifyCode}
+                  maxLength={6}
+                />
+                <TouchableOpacity
+                  style={[styles.secondaryBtn, { alignSelf: "flex-start" }]}
+                  onPress={verifyEmailCode}
+                  disabled={isCheckingCode}
+                >
+                  <Text style={styles.secondaryBtnText}>{isCheckingCode ? "Verifying..." : "Verify code"}</Text>
+                </TouchableOpacity>
                 <TextInput
                   style={styles.input}
                   placeholder="Password (min 6)"
@@ -964,6 +1094,10 @@ const styles = StyleSheet.create({
   createErrorTitle: { fontSize: 13, fontWeight: "800", color: "#b91c1c", marginBottom: 6 },
   createErrorBody: { fontSize: 13, color: "#7f1d1d", lineHeight: 20 },
   stepHint: { fontSize: 13, color: "#0f172a", fontWeight: "700", marginBottom: 8 },
+  verifyRow: { marginTop: 10, flexDirection: "row", alignItems: "center", gap: 8 },
+  verifyStatus: { fontSize: 12, fontWeight: "700" },
+  verifyStatusOk: { color: "#16a34a" },
+  verifyStatusPending: { color: "#b45309" },
   input: {
     marginTop: 10,
     borderWidth: 1,

@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BranchController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\EmployeeController;
+use App\Http\Controllers\Api\ServiceCategoryController;
 use App\Http\Controllers\Api\ServicePriceController;
 use App\Http\Controllers\Api\StaffAccountController;
 use App\Http\Controllers\Api\TransactionController;
@@ -17,6 +18,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
+Route::get('/service-price-images/{path}', [ServicePriceController::class, 'showImage'])->where('path', '.*');
 
 Route::middleware('auth:sanctum')->group(function () {
 
@@ -55,6 +57,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/service-prices/{id}', [ServicePriceController::class, 'update']);
     Route::delete('/service-prices/{id}', [ServicePriceController::class, 'destroy']);
 
+    Route::get('/service-categories', [ServiceCategoryController::class, 'index']);
+    Route::post('/service-categories', [ServiceCategoryController::class, 'store']);
+    Route::put('/service-categories/{id}', [ServiceCategoryController::class, 'update']);
+    Route::delete('/service-categories/{id}', [ServiceCategoryController::class, 'destroy']);
+
     Route::get('/employees', [EmployeeController::class, 'index']);
     Route::post('/employees', [EmployeeController::class, 'store']);
     Route::put('/employees/{id}', [EmployeeController::class, 'update']);
@@ -62,6 +69,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/staff-accounts', [StaffAccountController::class, 'index']);
     Route::post('/staff-accounts', [StaffAccountController::class, 'store']);
+    Route::post('/staff-accounts/verification/send', [StaffAccountController::class, 'sendVerificationCode']);
+    Route::post('/staff-accounts/verification/check', [StaffAccountController::class, 'verifyCode']);
     Route::put('/staff-accounts/{id}', [StaffAccountController::class, 'update']);
 
 });
