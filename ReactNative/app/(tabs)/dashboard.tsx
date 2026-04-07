@@ -576,7 +576,6 @@ export default function DashboardAnalytics() {
           </View>
           <View style={styles.barChartWrapper}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center', marginLeft: 0 }}>
-              <BarChart
               <LineChart
                 data={{
                   labels: currentBranchLabels,
