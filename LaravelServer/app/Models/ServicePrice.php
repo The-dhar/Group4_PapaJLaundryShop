@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 
 class ServicePrice extends Model
 {
@@ -34,7 +33,7 @@ class ServicePrice extends Model
             return null;
         }
 
-        $relative = '/storage/'.ltrim(str_replace('\\', '/', $this->image_path), '/');
+        $relative = '/api/service-price-images/'.ltrim(str_replace('\\', '/', $this->image_path), '/');
 
         // Render / production: set APP_URL to your public https://… origin so URLs never depend on proxy quirks.
         $configured = rtrim((string) config('app.url'), '/');
@@ -46,6 +45,6 @@ class ServicePrice extends Model
             return request()->getSchemeAndHttpHost().$relative;
         }
 
-        return Storage::disk('public')->url($this->image_path);
+        return $relative;
     }
 }

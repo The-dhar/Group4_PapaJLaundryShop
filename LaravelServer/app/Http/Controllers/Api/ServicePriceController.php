@@ -9,6 +9,30 @@ use Illuminate\Support\Facades\Storage;
 
 class ServicePriceController extends Controller
 {
+    /**
+     * Public image endpoint (no storage symlink required).
+     */
+    public function showImage(string $path)
+    {
+        $normalized = ltrim(str_replace('\\', '/', $path), '/');
+        if ($normalized === '' || str_contains($normalized, '..')) {
+            abort(404);
+        }
+
+        // Only expose service image uploads.
+        if (! str_starts_with($normalized, 'service-images/')) {
+            abort(404);
+        }
+
+        if (! Storage::disk('public')->exists($normalized)) {
+            abort(404);
+        }
+
+        return response()->file(Storage::disk('public')->path($normalized), [
+            'Cache-Control' => 'public, max-age=86400',
+        ]);
+    }
+
     public function index()
     {
         return response()->json(

@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
+Route::get('/service-price-images/{path}', [ServicePriceController::class, 'showImage'])->where('path', '.*');
 
 Route::middleware('auth:sanctum')->group(function () {
 
