@@ -221,6 +221,19 @@ export default function DashboardAnalytics() {
     return branches.map((branch) => Number((totals.get(Number(branch.id)) || 0).toFixed(2)));
   }, [transactions, branches]);
 
+  const revenueChartKey = useMemo(
+    () => `rev-${rangeFrom}-${rangeTo}-${currentRevenue.join(",")}`,
+    [rangeFrom, rangeTo, currentRevenue]
+  );
+  const branchComparisonChartKey = useMemo(
+    () => `brc-${rangeFrom}-${rangeTo}-${currentBranchValues.join(",")}`,
+    [rangeFrom, rangeTo, currentBranchValues]
+  );
+  const branchPerformanceChartKey = useMemo(
+    () => `brp-${rangeFrom}-${rangeTo}-${currentBranchValues.join(",")}`,
+    [rangeFrom, rangeTo, currentBranchValues]
+  );
+
   // Compute responsive chart widths so x-axis labels fit on narrow screens
   const revenueChartWidth = getResponsiveChartWidth(currentLabels);
   const branchComparisonChartWidth = getResponsiveChartWidth(currentBranchLabels);
@@ -457,6 +470,7 @@ export default function DashboardAnalytics() {
                 style={{ width: revenueChartWidth + 50 }}
               >
                 <LineChart
+                  key={revenueChartKey}
                   data={{
                     labels: currentLabels,
                     datasets: [{ data: currentRevenue }],
@@ -529,6 +543,7 @@ export default function DashboardAnalytics() {
                   style={{ width: branchComparisonChartWidth + 50 }}
                 >
                   <LineChart
+                    key={branchComparisonChartKey}
                     data={{
                       labels: currentBranchLabels,
                       datasets: [{ data: currentBranchValues }],
@@ -577,6 +592,7 @@ export default function DashboardAnalytics() {
           <View style={styles.barChartWrapper}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center', marginLeft: 0 }}>
               <LineChart
+                key={branchPerformanceChartKey}
                 data={{
                   labels: currentBranchLabels,
                   datasets: [{ data: currentBranchValues }]
