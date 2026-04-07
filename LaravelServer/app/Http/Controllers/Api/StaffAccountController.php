@@ -6,12 +6,96 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class StaffAccountController extends Controller
 {
+    public function sendVerificationCode(Request $request)
+    {
+        if (! $request->user()->isOwner()) {
+            return response()->json(['message' => 'Only the owner can verify employee emails.'], 403);
+        }
+
+        $validated = $request->validate([
+            'email' => 'required|email|max:255|unique:users,email',
+        ]);
+
+        $email = strtolower(trim((string) $validated['email']));
+        $code = (string) random_int(100000, 999999);
+
+        $key = $this->verificationCodeCacheKey($email);
+        Cache::put($key, $code, now()->addMinutes(10));
+        Cache::forget($this->verificationPassedCacheKey($email));
+
+        $apiKey = (string) config('services.brevo.api_key', '');
+        $senderEmail = (string) config('services.brevo.sender_email', '');
+        $senderName = (string) config('services.brevo.sender_name', 'Papa J Laundry');
+
+        if ($apiKey === '' || $senderEmail === '') {
+            return response()->json([
+                'message' => 'Brevo is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL.',
+            ], 500);
+        }
+
+        $res = Http::withHeaders([
+            'api-key' => $apiKey,
+            'accept' => 'application/json',
+            'content-type' => 'application/json',
+        ])->post('https://api.brevo.com/v3/smtp/email', [
+            'sender' => [
+                'name' => $senderName,
+                'email' => $senderEmail,
+            ],
+            'to' => [[
+                'email' => $email,
+            ]],
+            'subject' => 'Your staff account verification code',
+            'htmlContent' => '<p>Your verification code is: <strong>'.$code.'</strong></p><p>This code expires in 10 minutes.</p>',
+        ]);
+
+        if (! $res->successful()) {
+            Log::warning('staff_accounts.verify.send_failed', [
+                'status' => $res->status(),
+                'body' => $res->body(),
+            ]);
+
+            return response()->json([
+                'message' => 'Failed to send verification code. Check Brevo settings.',
+            ], 502);
+        }
+
+        return response()->json(['message' => 'Verification code sent.']);
+    }
+
+    public function verifyCode(Request $request)
+    {
+        if (! $request->user()->isOwner()) {
+            return response()->json(['message' => 'Only the owner can verify employee emails.'], 403);
+        }
+
+        $validated = $request->validate([
+            'email' => 'required|email|max:255',
+            'code' => 'required|string|size:6',
+        ]);
+
+        $email = strtolower(trim((string) $validated['email']));
+        $code = trim((string) $validated['code']);
+        $expected = (string) Cache::get($this->verificationCodeCacheKey($email), '');
+
+        if ($expected === '' || $expected !== $code) {
+            return response()->json(['message' => 'Invalid or expired verification code.'], 422);
+        }
+
+        Cache::put($this->verificationPassedCacheKey($email), true, now()->addMinutes(30));
+        Cache::forget($this->verificationCodeCacheKey($email));
+
+        return response()->json(['verified' => true, 'message' => 'Email verified.']);
+    }
+
     /**
      * List employee logins (clerk/staff) for owner (e.g. Employee settings screen).
      */
@@ -41,6 +125,7 @@ class StaffAccountController extends Controller
             'password' => 'required|string|min:6|confirmed',
             'role' => ['required', Rule::in(['clerk', 'staff'])],
             'branch_id' => 'nullable|integer|exists:branches,id',
+            'require_email_verification' => 'sometimes|boolean',
         ]);
 
         if (! empty($validated['branch_id'])) {
@@ -52,6 +137,14 @@ class StaffAccountController extends Controller
         }
 
         $validated['email'] = strtolower(trim($validated['email']));
+        if ($request->boolean('require_email_verification')) {
+            $isVerified = (bool) Cache::pull($this->verificationPassedCacheKey($validated['email']), false);
+            if (! $isVerified) {
+                throw ValidationException::withMessages([
+                    'email' => ['Please verify this email with the code first.'],
+                ]);
+            }
+        }
 
         $displayName = trim($validated['first_name'].' '.$validated['last_name']);
 
@@ -188,5 +281,15 @@ class StaffAccountController extends Controller
                 'branch_id' => ["This branch already has a {$role} assigned."],
             ]);
         }
+    }
+
+    protected function verificationCodeCacheKey(string $email): string
+    {
+        return 'staff_email_verify_code:'.sha1($email);
+    }
+
+    protected function verificationPassedCacheKey(string $email): string
+    {
+        return 'staff_email_verify_ok:'.sha1($email);
     }
 }
