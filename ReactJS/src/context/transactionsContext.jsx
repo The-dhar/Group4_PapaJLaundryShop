@@ -106,7 +106,8 @@ export const TransactionsProvider = ({ children }) => {
         (isRush ? 100 : 0) +
         ((sub_extras?.extra_detergent || 0) * 20) +
         ((sub_extras?.extra_softener || 0) * 20) +
-        (sub_extras?.stain_removal ? 50 : 0) -
+        (sub_extras?.stain_removal ? 50 : 0) +
+        Number(additional_amount || 0) -
         (discount_amount || 0);
 
       const payload = {

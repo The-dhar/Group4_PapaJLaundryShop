@@ -30,6 +30,7 @@ type PriceService = {
   id: number;
   name: string;
   category: string;
+  unit: "kg" | "per piece";
   tiers: PriceTier[];
   updatedAt: string | null;
   effectiveDate: string | null;
@@ -47,10 +48,16 @@ type PickedImage = {
 };
 
 function mergeServiceFromApi(item: any): PriceService {
+  const firstRange = String(item?.tiers?.[0]?.range || "").toLowerCase();
+  const inferredUnit: "kg" | "per piece" =
+    String(item?.unit || "").toLowerCase() === "per piece" || firstRange.includes("piece")
+      ? "per piece"
+      : "kg";
   return {
     id: Number(item.id),
     name: String(item.name),
     category: String(item.category),
+    unit: inferredUnit,
     tiers: Array.isArray(item.tiers)
       ? item.tiers.map((t: any) => ({
           range: String(t.range || ""),
@@ -65,6 +72,16 @@ function mergeServiceFromApi(item: any): PriceService {
         ? resolvePublicFileUrl(String(item.image_url))
         : null,
   };
+}
+
+function normalizeTiersForUnit(
+  tiers: { range: string; price: number; description: string }[],
+  unit: "kg" | "per piece"
+) {
+  if (unit === "per piece") {
+    return tiers.map((tier) => ({ ...tier, range: "per piece" }));
+  }
+  return tiers;
 }
 
 function mapServiceRows(data: unknown): PriceService[] {
@@ -110,12 +127,31 @@ function isAdditionalChargeService(s: PriceService): boolean {
 }
 
 type PriceSectionTab = "services" | "additional" | "categories";
+type ExtraChargeType = "fixed" | "incremental";
+
+function parseExtraChargeDescription(raw: string): { type: ExtraChargeType; description: string } {
+  const text = String(raw || "").trim();
+  const m = text.match(/^\[(?:charge_)?type:(fixed|incremental)\]\s*/i);
+  if (!m) return { type: "fixed", description: text };
+  const type = m[1].toLowerCase() === "incremental" ? "incremental" : "fixed";
+  return { type, description: text.replace(m[0], "").trim() };
+}
+
+function buildExtraChargeDescription(type: ExtraChargeType, description: string): string {
+  const clean = String(description || "").trim();
+  return `[type:${type}]${clean ? ` ${clean}` : ""}`;
+}
 
 const LaundryPriceManager = () => {
   type Tier = PriceTier;
   type Service = PriceService;
   type Category = ServiceCategory;
-  type NewService = { name: string; category: string; tiers: { range: string; price: string; description: string }[] };
+  type NewService = {
+    name: string;
+    category: string;
+    unit: "kg" | "per piece";
+    tiers: { range: string; price: string; description: string }[];
+  };
 
   const [priceSectionTab, setPriceSectionTab] = useState<PriceSectionTab>("services");
   const [services, setServices] = useState<Service[]>([]);
@@ -139,12 +175,14 @@ const LaundryPriceManager = () => {
   const [newService, setNewService] = useState<NewService>({
     name: '',
     category: '',
+    unit: "kg",
     tiers: [{ range: '', price: '', description: '' }],
   });
   const [createImageUri, setCreateImageUri] = useState<PickedImage | null>(null);
   /** Additional Charges tab: flat name / price / description (API maps to a single Misc tier). */
   const [additionalChargeDraft, setAdditionalChargeDraft] = useState({
     name: "",
+    type: "fixed" as ExtraChargeType,
     price: "",
     description: "",
   });
@@ -154,6 +192,8 @@ const LaundryPriceManager = () => {
 
   const [editedName, setEditedName] = useState("");
   const [editedCategory, setEditedCategory] = useState("");
+  const [editedUnit, setEditedUnit] = useState<"kg" | "per piece">("kg");
+  const [editedAdditionalType, setEditedAdditionalType] = useState<ExtraChargeType>("fixed");
   const [editImageUri, setEditImageUri] = useState<PickedImage | null>(null);
   const [editRemoveImage, setEditRemoveImage] = useState(false);
 
@@ -277,16 +317,19 @@ const LaundryPriceManager = () => {
     setSelectedService(service);
     if (isAdditionalChargeService(service)) {
       const t0 = service.tiers?.[0];
+      const parsed = parseExtraChargeDescription(t0?.description || "");
       setEditedTiers([
         t0
-          ? { ...t0, range: "—" }
+          ? { ...t0, range: "—", description: parsed.description }
           : { range: "—", price: 0, description: "" },
       ]);
+      setEditedAdditionalType(parsed.type);
     } else {
       setEditedTiers(JSON.parse(JSON.stringify(service.tiers)) as Tier[]);
     }
     setEditedName(service.name);
     setEditedCategory(service.category);
+  setEditedUnit(service.unit || "kg");
     setEditImageUri(null);
     setEditRemoveImage(false);
     setIsEditModalOpen(true);
@@ -375,7 +418,10 @@ const LaundryPriceManager = () => {
           name: editedName.trim(),
           category: "Misc",
           price: editedTiers[0].price,
-          description: editedTiers[0].description ?? "",
+          description: buildExtraChargeDescription(
+            editedAdditionalType,
+            editedTiers[0].description ?? ""
+          ),
         };
         if (eff) body.effective_date = eff;
 
@@ -451,7 +497,7 @@ const LaundryPriceManager = () => {
         const body: Record<string, unknown> = {
           name: editedName.trim(),
           category: categoryForApi,
-          tiers: editedTiers,
+          tiers: normalizeTiersForUnit(editedTiers, editedUnit),
         };
         if (eff) body.effective_date = eff;
         if (editRemoveImage) body.remove_image = true;
@@ -556,7 +602,10 @@ const LaundryPriceManager = () => {
             name: additionalChargeDraft.name.trim(),
             category: "Misc",
             price: parseFloat(additionalChargeDraft.price) || 0,
-            description: additionalChargeDraft.description.trim() || "",
+            description: buildExtraChargeDescription(
+              additionalChargeDraft.type,
+              additionalChargeDraft.description.trim() || ""
+            ),
           }),
         });
 
@@ -579,20 +628,24 @@ const LaundryPriceManager = () => {
         setConfirmKind(null);
         setCreateForAdditional(false);
         setIsCreateModalOpen(false);
-        setAdditionalChargeDraft({ name: "", price: "", description: "" });
+        setAdditionalChargeDraft({ name: "", type: "fixed", price: "", description: "" });
         setNewService({
           name: "",
           category: defaultServiceCategory,
+          unit: "kg",
           tiers: [{ range: "", price: "", description: "" }],
         });
         return;
       }
 
-      const tiersPayload = newService.tiers.map((t) => ({
-        range: t.range,
-        price: parseFloat(t.price) || 0,
-        description: t.description || "",
-      }));
+      const tiersPayload = normalizeTiersForUnit(
+        newService.tiers.map((t) => ({
+          range: t.range,
+          price: parseFloat(t.price) || 0,
+          description: t.description || "",
+        })),
+        newService.unit
+      );
 
       let response: Response;
 
@@ -648,10 +701,11 @@ const LaundryPriceManager = () => {
       setCreateForAdditional(false);
       setIsCreateModalOpen(false);
       setCreateImageUri(null);
-      setAdditionalChargeDraft({ name: "", price: "", description: "" });
+      setAdditionalChargeDraft({ name: "", type: "fixed", price: "", description: "" });
       setNewService({
         name: "",
         category: defaultServiceCategory,
+        unit: "kg",
         tiers: [{ range: "", price: "", description: "" }],
       });
     } catch (error) {
@@ -673,9 +727,10 @@ const LaundryPriceManager = () => {
     setNewService({
       name: "",
       category: priceSectionTab === "additional" ? "Misc" : defaultServiceCategory,
+      unit: "kg",
       tiers: [{ range: "", price: "", description: "" }],
     });
-    setAdditionalChargeDraft({ name: "", price: "", description: "" });
+    setAdditionalChargeDraft({ name: "", type: "fixed", price: "", description: "" });
     setCreateImageUri(null);
     setIsCreateCategoryPickerOpen(false);
     setConfirmKind(null);
@@ -1043,6 +1098,9 @@ const LaundryPriceManager = () => {
                       {!isAdditionalChargeService(service) ? (
                         <Text style={styles.serviceCategory}>{service.category}</Text>
                       ) : null}
+                      {!isAdditionalChargeService(service) ? (
+                        <Text style={styles.serviceCategory}>Unit: {service.unit}</Text>
+                      ) : null}
                       {service.effectiveDate && (
                         <View style={styles.effectiveDateBadge}>
                           <Text style={styles.effectiveDateText}>
@@ -1080,7 +1138,7 @@ const LaundryPriceManager = () => {
                         (tier.range === "—" || tier.range === "-" || !String(tier.range || "").trim()) ? null : (
                           <Text style={styles.tierRange}>{tier.range}</Text>
                         )}
-                        <Text style={styles.tierDescription}>{tier.description}</Text>
+                        <Text style={styles.tierDescription}>{parseExtraChargeDescription(tier.description).description}</Text>
                       </View>
                       <Text style={styles.tierPrice}>₱{tier.price.toFixed(2)}</Text>
                     </View>
@@ -1135,6 +1193,22 @@ const LaundryPriceManager = () => {
                         value={editedName}
                         onChangeText={setEditedName}
                       />
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Type</Text>
+                      <View style={styles.roleRow}>
+                        {(["fixed", "incremental"] as const).map((t) => (
+                          <TouchableOpacity
+                            key={t}
+                            style={[styles.roleChip, editedAdditionalType === t && styles.roleChipActive]}
+                            onPress={() => setEditedAdditionalType(t)}
+                          >
+                            <Text style={[styles.roleChipText, editedAdditionalType === t && styles.roleChipTextActive]}>
+                              {t === "fixed" ? "Fixed" : "Incremental"}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
                     </View>
                     <View style={styles.inputGroup}>
                       <Text style={styles.inputLabel}>Price * (₱)</Text>
@@ -1196,6 +1270,22 @@ const LaundryPriceManager = () => {
                         ))}
                       </View>
                     ) : null}
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Item unit</Text>
+                      <View style={styles.roleRow}>
+                        {(["kg", "per piece"] as const).map((u) => (
+                          <TouchableOpacity
+                            key={u}
+                            style={[styles.roleChip, editedUnit === u && styles.roleChipActive]}
+                            onPress={() => setEditedUnit(u)}
+                          >
+                            <Text style={[styles.roleChipText, editedUnit === u && styles.roleChipTextActive]}>
+                              {u}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
                     </View>
                     <Text style={[styles.inputLabel, { marginTop: 4 }]}>Photo</Text>
                     <View style={styles.imagePickRow}>
@@ -1360,7 +1450,7 @@ const LaundryPriceManager = () => {
                   setConfirmKind(null);
                   setCreateForAdditional(false);
                   setCreateImageUri(null);
-                  setAdditionalChargeDraft({ name: "", price: "", description: "" });
+                  setAdditionalChargeDraft({ name: "", type: "fixed", price: "", description: "" });
                   setIsCreateCategoryPickerOpen(false);
                   setIsCreateModalOpen(false);
                 }}
@@ -1392,6 +1482,22 @@ const LaundryPriceManager = () => {
                           setAdditionalChargeDraft((d) => ({ ...d, name: text }))
                         }
                       />
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Type</Text>
+                      <View style={styles.roleRow}>
+                        {(["fixed", "incremental"] as const).map((t) => (
+                          <TouchableOpacity
+                            key={t}
+                            style={[styles.roleChip, additionalChargeDraft.type === t && styles.roleChipActive]}
+                            onPress={() => setAdditionalChargeDraft((d) => ({ ...d, type: t }))}
+                          >
+                            <Text style={[styles.roleChipText, additionalChargeDraft.type === t && styles.roleChipTextActive]}>
+                              {t === "fixed" ? "Fixed" : "Incremental"}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
                     </View>
                     <View style={styles.inputGroup}>
                       <Text style={styles.inputLabel}>Price * (₱)</Text>
@@ -1491,6 +1597,22 @@ const LaundryPriceManager = () => {
                       </View>
                     ) : null}
                   </View>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Item unit</Text>
+                    <View style={styles.roleRow}>
+                      {(["kg", "per piece"] as const).map((u) => (
+                        <TouchableOpacity
+                          key={u}
+                          style={[styles.roleChip, newService.unit === u && styles.roleChipActive]}
+                          onPress={() => setNewService({ ...newService, unit: u })}
+                        >
+                          <Text style={[styles.roleChipText, newService.unit === u && styles.roleChipTextActive]}>
+                            {u}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
 
                   <Text style={styles.sectionTitle}>Price Tiers</Text>
 
@@ -1559,7 +1681,7 @@ const LaundryPriceManager = () => {
                   setConfirmKind(null);
                   setCreateForAdditional(false);
                   setCreateImageUri(null);
-                  setAdditionalChargeDraft({ name: "", price: "", description: "" });
+                  setAdditionalChargeDraft({ name: "", type: "fixed", price: "", description: "" });
                   setIsCreateCategoryPickerOpen(false);
                   setIsCreateModalOpen(false);
                 }}
@@ -1665,7 +1787,7 @@ const LaundryPriceManager = () => {
             {confirmKind === "create" ? (
               <Text style={styles.confirmMessage}>
                 {createForAdditional
-                  ? `${additionalChargeDraft.name.trim()} · Misc · ₱${(parseFloat(additionalChargeDraft.price) || 0).toFixed(2)}`
+                  ? `${additionalChargeDraft.name.trim()} · ${additionalChargeDraft.type === "fixed" ? "Fixed" : "Incremental"} · ₱${(parseFloat(additionalChargeDraft.price) || 0).toFixed(2)}`
                   : `${newService.name} · ${newService.category.trim() || "—"} · ${newService.tiers.length} tier(s).`}
                 {"\n\n"}
                 {createForAdditional
@@ -2402,6 +2524,18 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 16,
   },
+  roleRow: { flexDirection: "row", gap: 10, marginBottom: 8 },
+  roleChip: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+  },
+  roleChipActive: { borderColor: "#3b82f6", backgroundColor: "#eff6ff" },
+  roleChipText: { fontWeight: "700", color: "#64748b", textTransform: "capitalize" },
+  roleChipTextActive: { color: "#1d4ed8" },
    header: {
     flexDirection: "row",
     justifyContent: "space-between",

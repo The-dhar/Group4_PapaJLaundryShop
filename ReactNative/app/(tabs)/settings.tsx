@@ -5,7 +5,6 @@ import {
   AppState,
   type AppStateStatus,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -61,26 +60,6 @@ function formatApiErrorMessage(payload: unknown): string {
   return "Request failed.";
 }
 
-async function confirmAsync(
-  title: string,
-  message: string,
-  confirmLabel: string
-): Promise<boolean> {
-  if (Platform.OS === "web" && typeof window !== "undefined") {
-    return window.confirm(`${title}\n\n${message}`);
-  }
-  return new Promise((resolve) => {
-    Alert.alert(title, message, [
-      { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-      {
-        text: confirmLabel,
-        style: confirmLabel === "Deactivate" ? "destructive" : "default",
-        onPress: () => resolve(true),
-      },
-    ]);
-  });
-}
-
 const EmployeeSettingsScreen = () => {
   const SETTINGS_POLL_MS = 30_000;
   const router = useRouter();
@@ -102,6 +81,11 @@ const EmployeeSettingsScreen = () => {
   const [editBranchId, setEditBranchId] = useState<number | null>(null);
 
   const [open, setOpen] = useState(false);
+  const isSelectedDeactivated = selectedStaff?.is_active === false;
+  const isSelectedActive = !!selectedStaff && selectedStaff.is_active !== false;
+  const [pendingStatusToggle, setPendingStatusToggle] = useState<{
+    nextIsActive: boolean;
+  } | null>(null);
 
   const loadStaff = async () => {
     try {
@@ -191,6 +175,7 @@ const EmployeeSettingsScreen = () => {
     setModalVisible(false);
     setSelectedStaff(null);
     setEditPassword("");
+    setPendingStatusToggle(null);
   };
 
   const handleSave = async () => {
@@ -244,14 +229,12 @@ const EmployeeSettingsScreen = () => {
     }
   };
 
-  const handleDeactivate = async () => {
+  const openStatusConfirm = (nextIsActive: boolean) => {
+    setPendingStatusToggle({ nextIsActive });
+  };
+
+  const handleToggleActive = async (nextIsActive: boolean) => {
     if (!selectedStaff || !token) return;
-    const ok = await confirmAsync(
-      "Deactivate account",
-      "This employee will no longer be able to sign in.",
-      "Deactivate"
-    );
-    if (!ok) return;
 
     try {
       setIsSubmitting(true);
@@ -262,7 +245,7 @@ const EmployeeSettingsScreen = () => {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
-        body: JSON.stringify({ is_active: false }),
+        body: JSON.stringify({ is_active: nextIsActive }),
       });
 
       if (!res.ok) {
@@ -270,13 +253,20 @@ const EmployeeSettingsScreen = () => {
         return;
       }
 
+      // Optimistic local update so modal/list reflects status immediately.
+      setSelectedStaff((prev) => (prev ? { ...prev, is_active: nextIsActive } : prev));
+      setStaffList((prev) =>
+        prev.map((staff) =>
+          staff.id === selectedStaff.id ? { ...staff, is_active: nextIsActive } : staff
+        )
+      );
       await loadStaff();
-      closeModal();
     } catch (e) {
       console.log(e);
       Alert.alert("Error", "Something went wrong.");
     } finally {
       setIsSubmitting(false);
+      setPendingStatusToggle(null);
     }
   };
 
@@ -473,17 +463,70 @@ const EmployeeSettingsScreen = () => {
                   </Pressable>
                 </View>
 
-                {selectedStaff?.is_active !== false ? (
+                {isSelectedActive ? (
                   <Pressable
                     style={[styles.deactivateAccountBtn, isSubmitting && styles.buttonDisabled]}
-                    onPress={handleDeactivate}
+                    onPress={() => openStatusConfirm(false)}
                     disabled={isSubmitting}
                   >
                     <Text style={styles.deactivateAccountText}>Deactivate account</Text>
                   </Pressable>
                 ) : null}
+                {isSelectedDeactivated ? (
+                  <Pressable
+                    style={[styles.reactivateAccountBtn, isSubmitting && styles.buttonDisabled]}
+                    onPress={() => openStatusConfirm(true)}
+                    disabled={isSubmitting}
+                  >
+                    <Text style={styles.reactivateAccountText}>Reactivate account</Text>
+                  </Pressable>
+                ) : null}
               </View>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={pendingStatusToggle !== null} transparent animationType="fade">
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>
+              {pendingStatusToggle?.nextIsActive ? "Reactivate account" : "Deactivate account"}
+            </Text>
+            <Text style={styles.confirmMessage}>
+              {pendingStatusToggle?.nextIsActive
+                ? "This employee will be able to sign in again."
+                : "This employee will no longer be able to sign in."}
+            </Text>
+            <View style={styles.confirmActions}>
+              <Pressable
+                style={[styles.confirmCancelBtn, isSubmitting && styles.buttonDisabled]}
+                onPress={() => setPendingStatusToggle(null)}
+                disabled={isSubmitting}
+              >
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  pendingStatusToggle?.nextIsActive ? styles.confirmReactivateBtn : styles.confirmDeactivateBtn,
+                  isSubmitting && styles.buttonDisabled,
+                ]}
+                onPress={() => {
+                  if (pendingStatusToggle) {
+                    void handleToggleActive(pendingStatusToggle.nextIsActive);
+                  }
+                }}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.confirmActionText}>
+                    {pendingStatusToggle?.nextIsActive ? "Reactivate" : "Deactivate"}
+                  </Text>
+                )}
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -698,4 +741,59 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   deactivateAccountText: { color: "#ef4444", fontWeight: "700" },
+  reactivateAccountBtn: {
+    marginTop: 20,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#22c55e",
+    alignItems: "center",
+  },
+  reactivateAccountText: { color: "#22c55e", fontWeight: "700" },
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  confirmCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 18,
+  },
+  confirmTitle: { fontSize: 18, fontWeight: "800", color: "#1e293b", marginBottom: 8 },
+  confirmMessage: { fontSize: 14, color: "#475569", marginBottom: 16, lineHeight: 20 },
+  confirmActions: { flexDirection: "row", gap: 10 },
+  confirmCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+  },
+  confirmCancelText: { color: "#475569", fontWeight: "700" },
+  confirmDeactivateBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    backgroundColor: "#ef4444",
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  confirmReactivateBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    backgroundColor: "#22c55e",
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  confirmActionText: { color: "#fff", fontWeight: "700" },
 });
