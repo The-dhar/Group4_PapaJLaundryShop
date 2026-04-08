@@ -138,22 +138,15 @@ const DEFAULT_SERVICE_ICONS = {
   drying: '/pictures/male-clothes.png',
 };
 
-const DEFAULT_LAUNDRY_ITEMS = [
-  { id: 1, icon: '/pictures/clean-clothes.png', name: 'Regular Clothes', pricing: [{ weight: '1-6 kg', price: 150 }, { weight: '6.1-7 kg', price: 175 }] },
-  { id: 2, icon: '/pictures/pants.png', name: 'White Clothes', pricing: [{ weight: '1-3 kg', price: 165 }, { weight: '3.1-6 kg', price: 195 }] },
-  { id: 3, icon: '/pictures/blanket.png', name: 'Blankets/Bed Sheet', pricing: [{ weight: '1-3 kg', price: 150 }, { weight: 'Additional', price: 50 }] },
-  { id: 4, icon: '/pictures/curtain.png', name: 'Curtains/Big towels', pricing: [{ weight: '1-3 kg', price: 150 }, { weight: 'Additional', price: 50 }] },
-  { id: 5, icon: '/pictures/towel.png', name: 'Comforters', pricing: [{ weight: '1-3 kg', price: 150 }, { weight: 'Additional', price: 50 }] },
-  { id: 6, icon: '/pictures/male-clothes.png', name: 'Drying', pricing: [{ weight: '1-6 kg', price: 120 }, { weight: '6.1-8 kg', price: 150 }] },
-];
-
 const POs = () => {
   const { createTransaction, transactions } = useTransactions();
 
   const [sessionUser, setSessionUser] = useState(() => getUserFromStorage());
   const [branches, setBranches] = useState([]);
   const [ownerBranchId, setOwnerBranchId] = useState(null);
-  const [laundryItems, setLaundryItems] = useState(DEFAULT_LAUNDRY_ITEMS);
+  const [laundryItems, setLaundryItems] = useState([]);
+  /** True until API returns (no hardcoded placeholder cards on refresh). */
+  const [servicesLoading, setServicesLoading] = useState(true);
 
   // --- States ---
   const [selectedItem, setSelectedItem] = useState(null);
@@ -239,15 +232,27 @@ const POs = () => {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (!token) return;
+    if (!token) {
+      setServicesLoading(false);
+      setLaundryItems([]);
+      return;
+    }
+    let cancelled = false;
     (async () => {
+      setServicesLoading(true);
       try {
         const res = await fetch(`${API_URL}/service-prices`, {
           headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
         });
-        if (!res.ok) return;
+        if (!res.ok) {
+          if (!cancelled) setLaundryItems([]);
+          return;
+        }
         const data = await res.json();
-        if (!Array.isArray(data)) return;
+        if (!Array.isArray(data)) {
+          if (!cancelled) setLaundryItems([]);
+          return;
+        }
         const mapped = data
           .filter((s) => String(s?.category || '').toLowerCase() !== 'misc')
           .map((s) => {
@@ -267,11 +272,16 @@ const POs = () => {
               pricing: tiers,
             };
           });
-        setLaundryItems(mapped);
+        if (!cancelled) setLaundryItems(mapped);
       } catch {
-        // keep current UI fallback
+        if (!cancelled) setLaundryItems([]);
+      } finally {
+        if (!cancelled) setServicesLoading(false);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const mergeCustomerSources = useCallback((apiRows, txRows) => {
@@ -813,9 +823,16 @@ const POs = () => {
             <div className="Service-item-title">Service Items</div>
             <div className="content-wrapper">
               <div className="laundry-grid">
-                {laundryItems.map(item => (
-                  <SmallCard key={item.id} {...item} onCardClick={() => handleCardClick(item)} />
-                ))}
+                {servicesLoading ? (
+                  <div className="pos-services-loading" role="status" aria-live="polite">
+                    <span className="pos-services-loading-spinner" />
+                    <span className="pos-services-loading-text">Loading services…</span>
+                  </div>
+                ) : (
+                  laundryItems.map((item) => (
+                    <SmallCard key={item.id} {...item} onCardClick={() => handleCardClick(item)} />
+                  ))
+                )}
               </div>
             </div>
             <SmallcardModal 
