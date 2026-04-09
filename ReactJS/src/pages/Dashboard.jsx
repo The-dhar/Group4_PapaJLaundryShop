@@ -33,34 +33,82 @@ const Dashboard = () => {
     [transactions]
   );
 
+  const filteredTransactions = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now);
+    const end = new Date(now);
+
+    if (viewType === 'today') {
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+    } else if (viewType === 'week') {
+      const dow = now.getDay();
+      const mondayOffset = dow === 0 ? -6 : 1 - dow;
+      start.setDate(now.getDate() + mondayOffset);
+      start.setHours(0, 0, 0, 0);
+      end.setDate(start.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+    } else if (viewType === 'month') {
+      start.setDate(1);
+      start.setHours(0, 0, 0, 0);
+      end.setMonth(now.getMonth() + 1, 0);
+      end.setHours(23, 59, 59, 999);
+    } else if (viewType === 'year') {
+      start.setMonth(0, 1);
+      start.setHours(0, 0, 0, 0);
+      end.setMonth(11, 31);
+      end.setHours(23, 59, 59, 999);
+    }
+
+    return activeTransactions.filter((t) => {
+      const dt = new Date(t.created_at || t.updated_at || Date.now());
+      return dt >= start && dt <= end;
+    });
+  }, [activeTransactions, viewType]);
+
   const paidTotal = useMemo(
     () =>
-      activeTransactions
+      filteredTransactions
         .filter((t) => t.payment_status === 'paid')
         .reduce((sum, t) => sum + (Number(t.amount) || 0), 0),
-    [activeTransactions]
+    [filteredTransactions]
   );
 
   const debitCount = useMemo(
-    () => activeTransactions.filter((t) => t.payment_status === 'unpaid').length,
-    [activeTransactions]
+    () => filteredTransactions.filter((t) => t.payment_status === 'unpaid').length,
+    [filteredTransactions]
   );
 
   const inShopCount = useMemo(
-    () => activeTransactions.filter((t) => t.inventory_status === 'in_shop').length,
-    [activeTransactions]
+    () => filteredTransactions.filter((t) => t.inventory_status === 'in_shop').length,
+    [filteredTransactions]
   );
 
   const overdueCount = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    return activeTransactions.filter((t) => {
+    return filteredTransactions.filter((t) => {
       if (t.inventory_status !== 'in_shop' || !t.due_date) return false;
       const due = new Date(t.due_date);
       due.setHours(0, 0, 0, 0);
       return due < today;
     }).length;
-  }, [activeTransactions]);
+  }, [filteredTransactions]);
+
+  const todayData = useMemo(() => {
+    const labels = ['12AM', '3AM', '6AM', '9AM', '12PM', '3PM', '6PM', '9PM'];
+    const buckets = labels.map((name) => ({ name, revenue: 0, unpaid: 0 }));
+
+    filteredTransactions.forEach((t) => {
+      const dt = new Date(t.created_at || t.updated_at || Date.now());
+      const idx = Math.min(7, Math.floor(dt.getHours() / 3));
+      const amount = Number(t.amount) || 0;
+      if (t.payment_status === 'paid') buckets[idx].revenue += amount;
+      else buckets[idx].unpaid += amount;
+    });
+
+    return buckets;
+  }, [filteredTransactions]);
 
   const weekData = useMemo(() => {
     const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -86,7 +134,7 @@ const Dashboard = () => {
       };
     });
 
-    activeTransactions.forEach((t) => {
+    filteredTransactions.forEach((t) => {
       const dt = new Date(t.created_at || t.updated_at || Date.now());
       if (dt < monday || dt > weekEnd) return;
       const key = dt.toDateString();
@@ -98,7 +146,7 @@ const Dashboard = () => {
     });
 
     return rows.map(({ name, revenue, unpaid }) => ({ name, revenue, unpaid }));
-  }, [activeTransactions]);
+  }, [filteredTransactions]);
 
   const monthData = useMemo(() => {
     const now = new Date();
@@ -111,7 +159,7 @@ const Dashboard = () => {
       { name: 'Week 4', revenue: 0, unpaid: 0 },
     ];
 
-    activeTransactions.forEach((t) => {
+    filteredTransactions.forEach((t) => {
       const dt = new Date(t.created_at || t.updated_at || Date.now());
       if (dt.getFullYear() !== currentYear || dt.getMonth() !== currentMonth) return;
       const day = dt.getDate();
@@ -122,16 +170,50 @@ const Dashboard = () => {
     });
 
     return weekBuckets;
-  }, [activeTransactions]);
+  }, [filteredTransactions]);
 
-  const chartData = viewType === 'week' ? weekData : monthData;
+  const yearData = useMemo(() => {
+    const rows = [
+      { name: 'Jan', revenue: 0, unpaid: 0 },
+      { name: 'Feb', revenue: 0, unpaid: 0 },
+      { name: 'Mar', revenue: 0, unpaid: 0 },
+      { name: 'Apr', revenue: 0, unpaid: 0 },
+      { name: 'May', revenue: 0, unpaid: 0 },
+      { name: 'Jun', revenue: 0, unpaid: 0 },
+      { name: 'Jul', revenue: 0, unpaid: 0 },
+      { name: 'Aug', revenue: 0, unpaid: 0 },
+      { name: 'Sep', revenue: 0, unpaid: 0 },
+      { name: 'Oct', revenue: 0, unpaid: 0 },
+      { name: 'Nov', revenue: 0, unpaid: 0 },
+      { name: 'Dec', revenue: 0, unpaid: 0 },
+    ];
+
+    filteredTransactions.forEach((t) => {
+      const dt = new Date(t.created_at || t.updated_at || Date.now());
+      const monthIdx = dt.getMonth();
+      const amount = Number(t.amount) || 0;
+      if (t.payment_status === 'paid') rows[monthIdx].revenue += amount;
+      else rows[monthIdx].unpaid += amount;
+    });
+
+    return rows;
+  }, [filteredTransactions]);
+
+  const chartData =
+    viewType === 'today'
+      ? todayData
+      : viewType === 'week'
+        ? weekData
+        : viewType === 'month'
+          ? monthData
+          : yearData;
 
   const recentTransactions = useMemo(
     () =>
-      [...activeTransactions]
+      [...filteredTransactions]
         .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
         .slice(0, 8),
-    [activeTransactions]
+    [filteredTransactions]
   );
 
   return (
@@ -178,6 +260,12 @@ const Dashboard = () => {
         {/* REVENUE LINE CHART */}
         <Card title="Revenue and Debit sales">
           <div className="chart-controls">
+            <button
+              className={`chart-toggle-btn ${viewType === 'today' ? 'active' : ''}`}
+              onClick={() => setViewType('today')}
+            >
+              Today
+            </button>
             <button 
               className={`chart-toggle-btn ${viewType === 'week' ? 'active' : ''}`}
               onClick={() => setViewType('week')}
@@ -189,6 +277,12 @@ const Dashboard = () => {
               onClick={() => setViewType('month')}
             >
               Monthly
+            </button>
+            <button
+              className={`chart-toggle-btn ${viewType === 'year' ? 'active' : ''}`}
+              onClick={() => setViewType('year')}
+            >
+              Yearly
             </button>
           </div>
 
