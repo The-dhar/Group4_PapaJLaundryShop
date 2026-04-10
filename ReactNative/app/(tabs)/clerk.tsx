@@ -68,6 +68,45 @@ const WEB_DATE_INPUT_STYLE: CSSProperties = {
   cursor: "pointer",
 };
 
+type BranchOption = {
+  id: number;
+  name: string;
+};
+
+/** Web: native <select> for branch filter (RN Web has no built-in dropdown). */
+function WebBranchSelect({
+  value,
+  branches,
+  onChange,
+}: {
+  value: number | null;
+  branches: BranchOption[];
+  onChange: (branchId: number | null) => void;
+}) {
+  const v = value == null ? "" : String(value);
+  return (
+    <View style={{ marginBottom: 8 }}>
+      {createElement(
+        "select",
+        {
+          value: v,
+          onChange: (e: ChangeEvent<HTMLSelectElement>) => {
+            const raw = e.target.value;
+            onChange(raw === "" ? null : Number(raw));
+          },
+          style: WEB_DATE_INPUT_STYLE,
+        },
+        [
+          createElement("option", { key: "all", value: "" }, "All branches"),
+          ...branches.map((b) =>
+            createElement("option", { key: b.id, value: String(b.id) }, b.name)
+          ),
+        ]
+      )}
+    </View>
+  );
+}
+
 function WebHtmlDateField({
   label,
   value,
@@ -116,6 +155,8 @@ type FilterState = {
   dateFrom: string;
   dateTo: string;
   includeArchived: boolean;
+  /** Owner only: `null` = all branches. Ignored for non-owners (API scopes by login). */
+  branchId: number | null;
   payment: PaymentFilter;
   inventory: InventoryFilter;
 };
@@ -314,9 +355,12 @@ export default function ClerkLogsList() {
   const [filters, setFilters] = useState<FilterState>(() => ({
     ...defaultDateRange(),
     includeArchived: true,
+    branchId: null,
     payment: "all",
     inventory: "all",
   }));
+
+  const [branches, setBranches] = useState<BranchOption[]>([]);
 
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [draftFilters, setDraftFilters] = useState<FilterState>(filters);
@@ -325,11 +369,13 @@ export default function ClerkLogsList() {
   const [datePickerField, setDatePickerField] = useState<null | "from" | "to">(null);
   const [pickerTempDate, setPickerTempDate] = useState(() => new Date());
   const [iosDatePickerVisible, setIosDatePickerVisible] = useState(false);
+  const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
 
   useEffect(() => {
     if (!filterModalVisible) {
       setDatePickerField(null);
       setIosDatePickerVisible(false);
+      setBranchDropdownOpen(false);
     }
   }, [filterModalVisible]);
 
@@ -363,9 +409,16 @@ export default function ClerkLogsList() {
   const pageData = filteredLogs.slice(startIndex, startIndex + rowsPerPage);
 
   const router = useRouter();
-  const { token, logout } = useAuth();
+  const { token, logout, user } = useAuth();
+  const isOwner = String(user?.role ?? "") === "owner";
   const [open, setOpen] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+
+  const draftBranchDisplayLabel = useMemo(() => {
+    if (draftFilters.branchId == null) return "All branches";
+    const b = branches.find((x) => x.id === draftFilters.branchId);
+    return b?.name ?? "Branch";
+  }, [draftFilters.branchId, branches]);
 
   const runExport = useCallback(
     async (kind: "excel" | "pdf") => {
@@ -388,6 +441,29 @@ export default function ClerkLogsList() {
     [filteredLogs]
   );
 
+  const loadBranches = useCallback(async () => {
+    try {
+      if (!token) return;
+      const res = await fetch(`${API_URL}/branches`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      setBranches(
+        list
+          .map((b: { id?: number; name?: string }) => ({
+            id: Number(b.id),
+            name: String(b.name ?? ""),
+          }))
+          .filter((b) => Number.isFinite(b.id) && b.name)
+          .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
+      );
+    } catch (e) {
+      console.log(e);
+    }
+  }, [token]);
+
   const loadClerkLogs = useCallback(async () => {
     try {
       if (!token) return;
@@ -396,6 +472,9 @@ export default function ClerkLogsList() {
       qs.set("include_archived", filters.includeArchived ? "1" : "0");
       if (filters.dateFrom.trim()) qs.set("date_from", filters.dateFrom.trim());
       if (filters.dateTo.trim()) qs.set("date_to", filters.dateTo.trim());
+      if (isOwner && filters.branchId != null) {
+        qs.set("branch_id", String(filters.branchId));
+      }
 
       const response = await fetch(`${API_URL}/transactions?${qs.toString()}`, {
         headers: {
@@ -430,12 +509,13 @@ export default function ClerkLogsList() {
     } catch (error) {
       console.log(error);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.includeArchived, token]);
+  }, [filters.dateFrom, filters.dateTo, filters.includeArchived, filters.branchId, isOwner, token]);
 
   useFocusEffect(
     useCallback(() => {
-      loadClerkLogs();
-    }, [loadClerkLogs])
+      void loadBranches();
+      void loadClerkLogs();
+    }, [loadBranches, loadClerkLogs])
   );
 
   useEffect(() => {
@@ -795,6 +875,30 @@ export default function ClerkLogsList() {
               />
             </View>
 
+            {isOwner ? (
+              <>
+                <Text style={styles.filterSectionLabel}>Branch</Text>
+                {Platform.OS === "web" ? (
+                  <WebBranchSelect
+                    value={draftFilters.branchId}
+                    branches={branches}
+                    onChange={(branchId) => setDraftFilters((d) => ({ ...d, branchId }))}
+                  />
+                ) : (
+                  <TouchableOpacity
+                    style={styles.branchDropdownBtn}
+                    onPress={() => setBranchDropdownOpen(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.branchDropdownBtnText} numberOfLines={1}>
+                      {draftBranchDisplayLabel}
+                    </Text>
+                    <Ionicons name="chevron-down" size={20} color="#64748b" />
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : null}
+
             <Text style={styles.filterSectionLabel}>Payment</Text>
             <View style={styles.presetRow}>
               <Chip
@@ -865,6 +969,67 @@ export default function ClerkLogsList() {
           ) : null}
         </View>
       </Modal>
+
+      {Platform.OS !== "web" && (
+        <Modal
+          visible={branchDropdownOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setBranchDropdownOpen(false)}
+        >
+          <View style={styles.branchPickerModalRoot}>
+            <Pressable style={styles.branchPickerBackdrop} onPress={() => setBranchDropdownOpen(false)} />
+            <View style={styles.branchPickerSheetWrap} pointerEvents="box-none">
+              <View style={styles.branchPickerCard}>
+                <ScrollView style={styles.branchPickerScroll} keyboardShouldPersistTaps="handled">
+                  <TouchableOpacity
+                    style={[
+                      styles.branchPickerRow,
+                      draftFilters.branchId === null && styles.branchPickerRowSelected,
+                    ]}
+                    onPress={() => {
+                      setDraftFilters((d) => ({ ...d, branchId: null }));
+                      setBranchDropdownOpen(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.branchPickerRowText,
+                        draftFilters.branchId === null && styles.branchPickerRowTextSelected,
+                      ]}
+                    >
+                      All branches
+                    </Text>
+                  </TouchableOpacity>
+                  {branches.map((b) => (
+                    <TouchableOpacity
+                      key={b.id}
+                      style={[
+                        styles.branchPickerRow,
+                        draftFilters.branchId === b.id && styles.branchPickerRowSelected,
+                      ]}
+                      onPress={() => {
+                        setDraftFilters((d) => ({ ...d, branchId: b.id }));
+                        setBranchDropdownOpen(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.branchPickerRowText,
+                          draftFilters.branchId === b.id && styles.branchPickerRowTextSelected,
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {b.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
 
       {Platform.OS === "ios" && (
         <Modal visible={iosDatePickerVisible && !!datePickerField} transparent animationType="slide">
@@ -1316,6 +1481,51 @@ const styles = StyleSheet.create({
   },
   dateFieldText: { flex: 1, fontSize: 14, fontWeight: "600", color: "#1e293b" },
   dateFieldPlaceholder: { fontWeight: "500", color: "#94a3b8" },
+
+  branchDropdownBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: "#f8fafc",
+    gap: 8,
+    marginBottom: 8,
+  },
+  branchDropdownBtnText: { flex: 1, fontSize: 14, fontWeight: "600", color: "#1e293b" },
+
+  branchPickerModalRoot: { flex: 1 },
+  branchPickerBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  branchPickerSheetWrap: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+  },
+  branchPickerCard: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    maxHeight: "70%",
+    overflow: "hidden",
+  },
+  branchPickerScroll: { maxHeight: 400 },
+  branchPickerRow: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  branchPickerRowSelected: { backgroundColor: "#eff6ff" },
+  branchPickerRowText: { fontSize: 15, fontWeight: "600", color: "#1e293b" },
+  branchPickerRowTextSelected: { color: "#1d4ed8" },
 
   iosPickerBackdrop: {
     flex: 1,

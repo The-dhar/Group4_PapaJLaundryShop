@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   ActivityIndicator,
@@ -73,6 +73,12 @@ const BranchAccountManager = () => {
       loadBranches();
     }, [loadBranches])
   );
+
+  const branchesSorted = useMemo(() => {
+    return [...branches].sort((a, b) =>
+      String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" })
+    );
+  }, [branches]);
 
   const handleConfirm = async () => {
     const name = branchName.trim();
@@ -206,7 +212,7 @@ const BranchAccountManager = () => {
 
           <View style={styles.tableContent}>
 
-            {branches.map((branch, index) => (
+            {branchesSorted.map((branch, index) => (
 
               <View key={branch.id} style={styles.branchRowWrapper}>
 
@@ -238,7 +244,7 @@ const BranchAccountManager = () => {
 
                 </View>
 
-                {index < branches.length - 1 && (
+                {index < branchesSorted.length - 1 && (
                   <View style={styles.rowDivider} />
                 )}
 
