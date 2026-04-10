@@ -14,6 +14,21 @@ function getUserFromStorage() {
     }
 }
 
+/** First + middle initial + last from API user; falls back to `name` (not email). */
+function getUserDisplayName(user) {
+    if (!user || typeof user !== 'object') return '';
+    const first = String(user.first_name ?? '').trim();
+    const middle = String(user.middle_initial ?? '').trim();
+    const last = String(user.last_name ?? '').trim();
+    const parts = [first, middle, last].filter(Boolean);
+    if (parts.length > 0) {
+        return parts.join(' ');
+    }
+    const full = String(user.name ?? '').trim();
+    if (full) return full;
+    return '';
+}
+
 const Sidebar = ({ sidebarOpen, toggleSidebar }) => {
     const navigate = useNavigate();
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -22,10 +37,7 @@ const Sidebar = ({ sidebarOpen, toggleSidebar }) => {
         user?.branch?.name?.trim() ||
         user?.name?.trim() ||
         'Branch';
-    const accountUsername =
-        user?.email?.trim() ||
-        user?.clerk_username?.trim() ||
-        '';
+    const accountDisplayName = getUserDisplayName(user) || '—';
 
     const confirmLogout = async () => {
         const token = localStorage.getItem('token');
@@ -104,7 +116,7 @@ const Sidebar = ({ sidebarOpen, toggleSidebar }) => {
             <div className="sidebar-footer">
                 <div className="sidebar-account">
                     <div className="account-name">{branchDisplayName}</div>
-                    <div className="account-role">{accountUsername || '—'}</div>
+                    <div className="account-role">{accountDisplayName}</div>
                 </div>
                 <hr className="sidebar-separator" />
                 <a
