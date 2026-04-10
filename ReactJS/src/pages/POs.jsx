@@ -984,6 +984,7 @@ const POs = () => {
 
                 <div className="for-receipt-bottom">
                   <div className="for-receipt-calendar">
+                     Laundry to be claimed on
                     <input type="date" className="for-receipt-date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
                   </div>
                 </div>
