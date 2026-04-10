@@ -1,6 +1,7 @@
 import { useAuth } from "@/contexts/AuthContext";
+import { useBranchPages } from "@/contexts/BranchPagesContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LineChart } from 'react-native-chart-kit';
@@ -13,7 +14,12 @@ export default function RevenueDashboard() {
   const [revenueView, setRevenueView] = useState("weekly");
   const router = useRouter();
   const { token } = useAuth();
+  const { setBranch } = useBranchPages();
   const { branchId, branchName } = useLocalSearchParams<{ branchId?: string; branchName?: string }>();
+
+  useEffect(() => {
+    setBranch(branchId ?? null, branchName ?? null);
+  }, [branchId, branchName, setBranch]);
   const [receipts, setReceipts] = useState<any[]>([]);
   const [fetchError, setFetchError] = useState<string | null>(null);
 

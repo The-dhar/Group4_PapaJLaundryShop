@@ -129,12 +129,34 @@ function getUserFromStorage() {
   }
 }
 
+const DEFAULT_SERVICE_ICONS = {
+  'regular clothes': '/pictures/clean-clothes.png',
+  'white clothes': '/pictures/pants.png',
+  'blankets/bed sheet': '/pictures/blanket.png',
+  'curtains/big towels': '/pictures/curtain.png',
+  comforters: '/pictures/towel.png',
+  drying: '/pictures/male-clothes.png',
+};
+
+function parseChargeTypeFromDescription(raw) {
+  const text = String(raw || '').trim();
+  const m = text.match(/^\[(?:charge_)?type:(fixed|incremental)\]\s*/i);
+  if (!m) return { type: 'fixed', description: text };
+  return {
+    type: m[1].toLowerCase() === 'incremental' ? 'incremental' : 'fixed',
+    description: text.replace(m[0], '').trim(),
+  };
+}
+
 const POs = () => {
   const { createTransaction, transactions } = useTransactions();
 
   const [sessionUser, setSessionUser] = useState(() => getUserFromStorage());
   const [branches, setBranches] = useState([]);
   const [ownerBranchId, setOwnerBranchId] = useState(null);
+  const [laundryItems, setLaundryItems] = useState([]);
+  /** True until API returns (no hardcoded placeholder cards on refresh). */
+  const [servicesLoading, setServicesLoading] = useState(true);
 
   // --- States ---
   const [selectedItem, setSelectedItem] = useState(null);
@@ -142,8 +164,10 @@ const POs = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingServiceId, setEditingServiceId] = useState(null); // Tracks if we are editing an item
 
-  const [activeExtras, setActiveExtras] = useState({ discount: false, express: false });
+  const [activeExtras, setActiveExtras] = useState({ discount: false });
   const [discountAmount, setDiscountAmount] = useState(0);
+  const [dynamicExtras, setDynamicExtras] = useState([]);
+  const [selectedDynamicExtras, setSelectedDynamicExtras] = useState({});
   
   // Customer States
   const [firstName, setFirstName] = useState('');
@@ -161,11 +185,6 @@ const POs = () => {
   const [paymentMethod, setPaymentMethod] = useState('');
   const [amountPaid, setAmountPaid] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [subExtras, setSubExtras] = useState({
-    extra_detergent: 0,
-    extra_softener: 0,
-    stain_removal: false,
-  });
   const [pastSearches, setPastSearches] = useState([]);
 
   const [customerSearchInput, setCustomerSearchInput] = useState('');
@@ -176,6 +195,45 @@ const POs = () => {
 
   useEffect(() => {
     setPastSearches(JSON.parse(localStorage.getItem('pastSearches') || '[]'));
+  }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setDynamicExtras([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/service-prices`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!Array.isArray(data)) return;
+        const miscRows = data
+          .filter((s) => String(s?.category || '').toLowerCase() === 'misc')
+          .map((s) => {
+            const t0 = Array.isArray(s?.tiers) ? s.tiers[0] : null;
+            const parsed = parseChargeTypeFromDescription(String(t0?.description || ''));
+            return {
+              id: Number(s.id),
+              name: String(s?.name || '').trim(),
+              price: Number(t0?.price || 0),
+              description: parsed.description,
+              type: parsed.type,
+            };
+          })
+          .filter((row) => row.name);
+        if (!cancelled) setDynamicExtras(miscRows);
+      } catch {
+        if (!cancelled) setDynamicExtras([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -217,6 +275,60 @@ const POs = () => {
       localStorage.setItem('user', JSON.stringify(merged));
     })();
   }, [sessionUser]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setServicesLoading(false);
+      setLaundryItems([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setServicesLoading(true);
+      try {
+        const res = await fetch(`${API_URL}/service-prices`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+        });
+        if (!res.ok) {
+          if (!cancelled) setLaundryItems([]);
+          return;
+        }
+        const data = await res.json();
+        if (!Array.isArray(data)) {
+          if (!cancelled) setLaundryItems([]);
+          return;
+        }
+        const mapped = data
+          .filter((s) => String(s?.category || '').toLowerCase() !== 'misc')
+          .map((s) => {
+            const name = String(s?.name || '').trim();
+            const key = name.toLowerCase();
+            const tiers = Array.isArray(s?.tiers)
+              ? s.tiers.map((t) => ({
+                  weight: String(t?.range || ''),
+                  price: Number(t?.price || 0),
+                  description: String(t?.description || ''),
+                }))
+              : [];
+            return {
+              id: Number(s.id),
+              icon: s.image_url || DEFAULT_SERVICE_ICONS[key] || '/pictures/clean-clothes.png',
+              name,
+              pricing: tiers,
+            };
+          });
+        if (!cancelled) setLaundryItems(mapped);
+      } catch {
+        if (!cancelled) setLaundryItems([]);
+      } finally {
+        if (!cancelled) setServicesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const mergeCustomerSources = useCallback((apiRows, txRows) => {
     const map = new Map();
@@ -337,15 +449,6 @@ const POs = () => {
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
 
-  const laundryItems = [
-    { id: 1, icon: '/pictures/clean-clothes.png', name: 'Regular Clothes', pricing: [{ weight: '1–6 kilos', price: 150 }, { weight: '6.1–7 kilos', price: 175 }] },
-    { id: 2, icon: '/pictures/pants.png', name: 'White Clothes', pricing: [{ weight: '1–3 kilos', price: 165 }, { weight: '3.1–6 kilos', price: 195 }] },
-    { id: 3, icon: '/pictures/blanket.png', name: 'Blankets/Bed Sheet', pricing: [{ weight: '1–3 kg', price: 150 }, { weight: 'Additional', price: 50 }] },
-    { id: 4, icon: '/pictures/curtain.png', name: 'Curtains/Big towels', pricing: [{ weight: '1–3 kg', price: 150 }, { weight: 'Additional', price: 50 }] },
-    { id: 5, icon: '/pictures/towel.png', name: 'Comforters', pricing: [{ weight: '1–3 kg', price: 150 }, { weight: 'Additional', price: 50 }] },
-    { id: 6, icon: '/pictures/male-clothes.png', name: 'Drying', pricing: [{ weight: '1–6 kilos', price: 120 }, { weight: '6.1–8 kilos', price: 150 }] },
-  ];
-
   useEffect(() => {
     if (paymentStatus === 'full') setPaymentMethod('Cash');
     else setPaymentMethod('');
@@ -382,7 +485,7 @@ const POs = () => {
       // ADD new item
       setSelectedServices(prev => [
         ...prev,
-        { id: `${laundryItem.id}-${Date.now()}`, ...serviceData },
+        { id: `${laundryItem.id}-${Date.now()}`, sourceServiceId: laundryItem.id, ...serviceData },
       ]);
     }
     setIsModalOpen(false);
@@ -390,7 +493,9 @@ const POs = () => {
   };
 
   const handleEditService = (service) => {
-    const originalItem = laundryItems.find(item => item.name === service.serviceName);
+    const originalItem =
+      laundryItems.find(item => item.id === service.sourceServiceId) ||
+      laundryItems.find(item => item.name === service.serviceName);
     setSelectedItem({
       ...originalItem,
       initialKilos: service.kilos,
@@ -424,10 +529,10 @@ const POs = () => {
   const calculateExtras = () => {
     let total = 0;
     if (activeExtras.discount) total -= Number(discountAmount || 0);
-    if (activeExtras.express) total += 100;
-    total += Number(subExtras.extra_detergent || 0) * 20;
-    total += Number(subExtras.extra_softener || 0) * 20;
-    if (subExtras.stain_removal) total += 50;
+    total += dynamicExtras.reduce((sum, extra) => {
+      const qty = Number(selectedDynamicExtras[extra.id] || 0);
+      return sum + qty * Number(extra.price || 0);
+    }, 0);
     return total;
   };
 
@@ -440,11 +545,11 @@ const POs = () => {
     setCustomerSuggestions([]);
     setSuggestionOpen(false);
     setDueDate('');
-    setActiveExtras({ discount: false, express: false });
+    setActiveExtras({ discount: false });
     setDiscountAmount(0);
     setPaymentStatus('later');
     setAmountPaid('');
-    setSubExtras({ extra_detergent: 0, extra_softener: 0, stain_removal: false });
+    setSelectedDynamicExtras({});
   };
 
   const printThermalReceipt = (txn) => {
@@ -689,6 +794,23 @@ const POs = () => {
     window.open(doc.output('bloburl'));
   };
 
+  const dynamicExtrasTotal = useMemo(
+    () =>
+      dynamicExtras.reduce((sum, extra) => {
+        const qty = Number(selectedDynamicExtras[extra.id] || 0);
+        return sum + qty * Number(extra.price || 0);
+      }, 0),
+    [dynamicExtras, selectedDynamicExtras]
+  );
+
+  const selectedDynamicExtraNames = useMemo(
+    () =>
+      dynamicExtras
+        .filter((extra) => Number(selectedDynamicExtras[extra.id] || 0) > 0)
+        .map((extra) => extra.name),
+    [dynamicExtras, selectedDynamicExtras]
+  );
+
   const handleCompleteTransaction = async () => {
     setSaveError('');
     if (!firstName.trim() || !lastName.trim() || !street.trim() || !barangay.trim() || !city.trim()) {
@@ -729,11 +851,15 @@ const POs = () => {
         weight: totalWeight,
         amount: Number(totalPayment.toFixed(2)),
         due_date: dueDate,
-        extra_charge_type: Object.keys(activeExtras).filter(k => activeExtras[k]).join(', ') || 'none',
+        extra_charge_type:
+          [
+            ...Object.keys(activeExtras).filter((k) => activeExtras[k]),
+            ...selectedDynamicExtraNames,
+          ].join(', ') || 'none',
         discount_amount: activeExtras.discount ? Number(discountAmount) : 0,
-        additional_amount: 0,
+        additional_amount: dynamicExtrasTotal,
         active_extras: activeExtras,
-        sub_extras: subExtras,
+        sub_extras: {},
         payment_status: paymentStatus === 'full' ? 'paid' : 'unpaid',
         payment_method: paymentMethod,
         paid_amount: Number(amountPaid) || 0,
@@ -764,9 +890,16 @@ const POs = () => {
             <div className="Service-item-title">Service Items</div>
             <div className="content-wrapper">
               <div className="laundry-grid">
-                {laundryItems.map(item => (
-                  <SmallCard key={item.id} {...item} onCardClick={() => handleCardClick(item)} />
-                ))}
+                {servicesLoading ? (
+                  <div className="pos-services-loading" role="status" aria-live="polite">
+                    <span className="pos-services-loading-spinner" />
+                    <span className="pos-services-loading-text">Loading services…</span>
+                  </div>
+                ) : (
+                  laundryItems.map((item) => (
+                    <SmallCard key={item.id} {...item} onCardClick={() => handleCardClick(item)} />
+                  ))
+                )}
               </div>
             </div>
             <SmallcardModal 
@@ -908,79 +1041,67 @@ const POs = () => {
               <div className="extras-box">
                 <h3>Extra Charges</h3>
                 <div className="payment-options">
-                  {['discount', 'express'].map((type) => (
-                    <label key={type} className="payment-option">
-                      <input 
-                        type="checkbox" 
-                        checked={activeExtras[type]} 
-                        onChange={() => setActiveExtras(prev => ({ ...prev, [type]: !prev[type] }))} 
-                      />
-                      <span style={{ textTransform: 'capitalize' }}>{type === 'express' ? 'Rush' : type}</span>
-                    </label>
-                  ))}
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                    <label className="payment-option" style={{ margin: 0, cursor: 'pointer' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={subExtras.extra_detergent > 0} 
-                        onChange={(e) => setSubExtras(prev => ({ ...prev, extra_detergent: e.target.checked ? 1 : 0 }))} 
-                      />
-                      <span>Extra Detergent (P20)</span>
-                    </label>
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                      <button 
-                        type="button"
-                        onClick={() => setSubExtras(prev => ({ ...prev, extra_detergent: Math.max(0, prev.extra_detergent - 1) }))} 
-                        style={{ background: '#6c757d', color: '#fff', border: 'none', width: '22px', height: '22px', cursor: 'pointer', fontSize: '12px', borderRadius: '4px 0 0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      >-</button>
-                      <input 
-                        type="text" 
-                        value={subExtras.extra_detergent} 
-                        readOnly 
-                        style={{ width: '30px', height: '22px', textAlign: 'center', border: '1px solid #ccc', borderLeft: 'none', borderRight: 'none', boxSizing: 'border-box', fontSize: '12px', margin: 0, outline: 'none' }} 
-                      />
-                      <button 
-                        type="button"
-                        onClick={() => setSubExtras(prev => ({ ...prev, extra_detergent: prev.extra_detergent + 1 }))} 
-                        style={{ background: '#6c757d', color: '#fff', border: 'none', width: '22px', height: '22px', cursor: 'pointer', fontSize: '12px', borderRadius: '0 4px 4px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      >+</button>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                    <label className="payment-option" style={{ margin: 0, cursor: 'pointer' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={subExtras.extra_softener > 0} 
-                        onChange={(e) => setSubExtras(prev => ({ ...prev, extra_softener: e.target.checked ? 1 : 0 }))} 
-                      />
-                      <span>Extra Softener (P20)</span>
-                    </label>
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                      <button 
-                        type="button"
-                        onClick={() => setSubExtras(prev => ({ ...prev, extra_softener: Math.max(0, prev.extra_softener - 1) }))} 
-                        style={{ background: '#6c757d', color: '#fff', border: 'none', width: '22px', height: '22px', cursor: 'pointer', fontSize: '12px', borderRadius: '4px 0 0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      >-</button>
-                      <input 
-                        type="text" 
-                        value={subExtras.extra_softener} 
-                        readOnly 
-                        style={{ width: '30px', height: '22px', textAlign: 'center', border: '1px solid #ccc', borderLeft: 'none', borderRight: 'none', boxSizing: 'border-box', fontSize: '12px', margin: 0, outline: 'none' }} 
-                      />
-                      <button 
-                        type="button"
-                        onClick={() => setSubExtras(prev => ({ ...prev, extra_softener: prev.extra_softener + 1 }))} 
-                        style={{ background: '#6c757d', color: '#fff', border: 'none', width: '22px', height: '22px', cursor: 'pointer', fontSize: '12px', borderRadius: '0 4px 4px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      >+</button>
-                    </div>
-                  </div>
-
-                  <label className="payment-option" style={{ cursor: 'pointer' }}>
-                    <input type="checkbox" checked={subExtras.stain_removal} onChange={() => setSubExtras(prev => ({ ...prev, stain_removal: !prev.stain_removal }))} />
-                    <span>Stain Removal (P50)</span>
+                  <label className="payment-option">
+                    <input 
+                      type="checkbox" 
+                      checked={activeExtras.discount} 
+                      onChange={() => setActiveExtras(prev => ({ ...prev, discount: !prev.discount }))} 
+                    />
+                    <span>Discount</span>
                   </label>
+                  {dynamicExtras.map((extra) => {
+                    const qty = Number(selectedDynamicExtras[extra.id] || 0);
+                    const isIncremental = extra.type === 'incremental';
+                    return (
+                      <div key={extra.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                        <label className="payment-option" style={{ margin: 0, cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={qty > 0}
+                            onChange={(e) =>
+                              setSelectedDynamicExtras((prev) => ({
+                                ...prev,
+                                [extra.id]: e.target.checked ? Math.max(1, Number(prev[extra.id] || 0)) : 0,
+                              }))
+                            }
+                          />
+                          <span>
+                            {extra.name} ({isIncremental ? 'Incremental' : 'Fixed'} · P{Number(extra.price || 0).toFixed(2)})
+                          </span>
+                        </label>
+                        {isIncremental ? (
+                          <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedDynamicExtras((prev) => ({
+                                  ...prev,
+                                  [extra.id]: Math.max(0, Number(prev[extra.id] || 0) - 1),
+                                }))
+                              }
+                              style={{ background: '#6c757d', color: '#fff', border: 'none', width: '22px', height: '22px', cursor: 'pointer', fontSize: '12px', borderRadius: '4px 0 0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            >-</button>
+                            <input
+                              type="text"
+                              value={qty}
+                              readOnly
+                              style={{ width: '30px', height: '22px', textAlign: 'center', border: '1px solid #ccc', borderLeft: 'none', borderRight: 'none', boxSizing: 'border-box', fontSize: '12px', margin: 0, outline: 'none' }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedDynamicExtras((prev) => ({
+                                  ...prev,
+                                  [extra.id]: Number(prev[extra.id] || 0) + 1,
+                                }))
+                              }
+                              style={{ background: '#6c757d', color: '#fff', border: 'none', width: '22px', height: '22px', cursor: 'pointer', fontSize: '12px', borderRadius: '0 4px 4px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            >+</button>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {activeExtras.discount && (
@@ -1023,21 +1144,18 @@ const POs = () => {
               <div className="for-receipt-totals">
                 <div className="total-row"><span>Subtotal:</span><span>P{subtotal.toFixed(2)}</span></div>
                 
-                {activeExtras.express && (
-                  <div className="total-row" style={{ color: '#555', fontSize: '13px', margin: '2px 0' }}><span>Rush Order:</span><span>P100.00</span></div>
-                )}
-                
-                {subExtras.extra_detergent > 0 && (
-                  <div className="total-row" style={{ color: '#555', fontSize: '13px', margin: '2px 0' }}><span>Extra Detergent (x{subExtras.extra_detergent}):</span><span>P{(subExtras.extra_detergent * 20).toFixed(2)}</span></div>
-                )}
-
-                {subExtras.extra_softener > 0 && (
-                  <div className="total-row" style={{ color: '#555', fontSize: '13px', margin: '2px 0' }}><span>Extra Softener (x{subExtras.extra_softener}):</span><span>P{(subExtras.extra_softener * 20).toFixed(2)}</span></div>
-                )}
-
-                {subExtras.stain_removal && (
-                  <div className="total-row" style={{ color: '#555', fontSize: '13px', margin: '2px 0' }}><span>Stain Removal:</span><span>P50.00</span></div>
-                )}
+                {dynamicExtras
+                  .filter((extra) => Number(selectedDynamicExtras[extra.id] || 0) > 0)
+                  .map((extra) => {
+                    const qty = Number(selectedDynamicExtras[extra.id] || 0);
+                    const isIncremental = extra.type === 'incremental';
+                    return (
+                      <div key={`summary-${extra.id}`} className="total-row" style={{ color: '#555', fontSize: '13px', margin: '2px 0' }}>
+                        <span>{isIncremental ? `${extra.name} (x${qty})` : extra.name}:</span>
+                        <span>P{(qty * Number(extra.price || 0)).toFixed(2)}</span>
+                      </div>
+                    );
+                  })}
 
                 {activeExtras.discount && discountAmount > 0 && (
                   <div className="total-row" style={{ color: '#e53935', fontSize: '13px', margin: '2px 0' }}><span>Discount:</span><span>-P{Number(discountAmount).toFixed(2)}</span></div>

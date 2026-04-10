@@ -30,17 +30,34 @@ type PriceService = {
   id: number;
   name: string;
   category: string;
+  unit: "kg" | "per piece";
   tiers: PriceTier[];
   updatedAt: string | null;
   effectiveDate: string | null;
   imageUrl: string | null;
 };
+type ServiceCategory = {
+  id: number;
+  name: string;
+};
+type PickedImage = {
+  uri: string;
+  name: string;
+  type: string;
+  file?: any;
+};
 
 function mergeServiceFromApi(item: any): PriceService {
+  const firstRange = String(item?.tiers?.[0]?.range || "").toLowerCase();
+  const inferredUnit: "kg" | "per piece" =
+    String(item?.unit || "").toLowerCase() === "per piece" || firstRange.includes("piece")
+      ? "per piece"
+      : "kg";
   return {
     id: Number(item.id),
     name: String(item.name),
     category: String(item.category),
+    unit: inferredUnit,
     tiers: Array.isArray(item.tiers)
       ? item.tiers.map((t: any) => ({
           range: String(t.range || ""),
@@ -57,6 +74,16 @@ function mergeServiceFromApi(item: any): PriceService {
   };
 }
 
+function normalizeTiersForUnit(
+  tiers: { range: string; price: number; description: string }[],
+  unit: "kg" | "per piece"
+) {
+  if (unit === "per piece") {
+    return tiers.map((tier) => ({ ...tier, range: "per piece" }));
+  }
+  return tiers;
+}
+
 function mapServiceRows(data: unknown): PriceService[] {
   return (Array.isArray(data) ? data : []).map((item: any) => mergeServiceFromApi(item));
 }
@@ -67,6 +94,19 @@ function imageMimeFromUri(uri: string): { name: string; type: string } {
   if (ext === "png") return { name: "upload.png", type: "image/png" };
   if (ext === "webp") return { name: "upload.webp", type: "image/webp" };
   return { name: "upload.jpg", type: "image/jpeg" };
+}
+
+function extractApiErrorMessage(err: any, fallback: string): string {
+  const lines: string[] = [];
+  if (err?.errors && typeof err.errors === "object") {
+    Object.values(err.errors).forEach((v: any) => {
+      if (Array.isArray(v)) v.forEach((x) => typeof x === "string" && lines.push(x));
+      else if (typeof v === "string") lines.push(v);
+    });
+  }
+  if (lines.length) return lines.join("\n");
+  if (typeof err?.message === "string" && err.message.trim()) return err.message;
+  return fallback;
 }
 
 /** Laravel parses `tiers[0][range]` multipart keys into an array; JSON strings often stay strings and fail validation. */
@@ -86,40 +126,103 @@ function isAdditionalChargeService(s: PriceService): boolean {
   return s.category === "Misc";
 }
 
-type PriceSectionTab = "services" | "additional";
+type PriceSectionTab = "services" | "additional" | "categories";
+type ExtraChargeType = "fixed" | "incremental";
+
+function parseExtraChargeDescription(raw: string): { type: ExtraChargeType; description: string } {
+  const text = String(raw || "").trim();
+  const m = text.match(/^\[(?:charge_)?type:(fixed|incremental)\]\s*/i);
+  if (!m) return { type: "fixed", description: text };
+  const type = m[1].toLowerCase() === "incremental" ? "incremental" : "fixed";
+  return { type, description: text.replace(m[0], "").trim() };
+}
+
+function buildExtraChargeDescription(type: ExtraChargeType, description: string): string {
+  const clean = String(description || "").trim();
+  return `[type:${type}]${clean ? ` ${clean}` : ""}`;
+}
 
 const LaundryPriceManager = () => {
   type Tier = PriceTier;
   type Service = PriceService;
-  type NewService = { name: string; category: string; tiers: { range: string; price: string; description: string }[] };
+  type Category = ServiceCategory;
+  type NewService = {
+    name: string;
+    category: string;
+    unit: "kg" | "per piece";
+    tiers: { range: string; price: string; description: string }[];
+  };
 
   const [priceSectionTab, setPriceSectionTab] = useState<PriceSectionTab>("services");
   const [services, setServices] = useState<Service[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isLoadingPrices, setIsLoadingPrices] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isMutating, setIsMutating] = useState(false);
   const [confirmKind, setConfirmKind] = useState<'edit' | 'create' | null>(null);
   const [pendingEffectiveDate, setPendingEffectiveDate] = useState<Date | null>(null);
+  const [pendingDeleteService, setPendingDeleteService] = useState<Service | null>(null);
+  const [pendingDeleteCategory, setPendingDeleteCategory] = useState<Category | null>(null);
 
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState<boolean>(false);
   /** True when creating from Additional Charges tab (category fixed to Misc). */
   const [createForAdditional, setCreateForAdditional] = useState(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [editedTiers, setEditedTiers] = useState<Tier[]>([]);
   const [newService, setNewService] = useState<NewService>({
     name: '',
-    category: 'Wash & Fold',
+    category: '',
+    unit: "kg",
     tiers: [{ range: '', price: '', description: '' }],
   });
-  const [createImageUri, setCreateImageUri] = useState<string | null>(null);
+  const [createImageUri, setCreateImageUri] = useState<PickedImage | null>(null);
+  /** Additional Charges tab: flat name / price / description (API maps to a single Misc tier). */
+  const [additionalChargeDraft, setAdditionalChargeDraft] = useState({
+    name: "",
+    type: "fixed" as ExtraChargeType,
+    price: "",
+    description: "",
+  });
+  const [categoryDraftName, setCategoryDraftName] = useState("");
+  const [isCreateCategoryPickerOpen, setIsCreateCategoryPickerOpen] = useState(false);
+  const [isEditCategoryPickerOpen, setIsEditCategoryPickerOpen] = useState(false);
 
   const [editedName, setEditedName] = useState("");
-  const [editedCategory, setEditedCategory] = useState("Wash & Fold");
-  const [editImageUri, setEditImageUri] = useState<string | null>(null);
+  const [editedCategory, setEditedCategory] = useState("");
+  const [editedUnit, setEditedUnit] = useState<"kg" | "per piece">("kg");
+  const [editedAdditionalType, setEditedAdditionalType] = useState<ExtraChargeType>("fixed");
+  const [editImageUri, setEditImageUri] = useState<PickedImage | null>(null);
   const [editRemoveImage, setEditRemoveImage] = useState(false);
 
   const { token, logout } = useAuth();
+
+  const loadCategories = useCallback(async () => {
+    try {
+      if (!token) {
+        setCategories([]);
+        return;
+      }
+      const response = await fetch(`${API_URL}/service-categories`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
+      if (!response.ok) {
+        return;
+      }
+      const data = await response.json();
+      const mapped: Category[] = (Array.isArray(data) ? data : [])
+        .map((c: any) => ({ id: Number(c.id), name: String(c.name || "").trim() }))
+        .filter((c) => !!c.name && c.name.toLowerCase() !== "misc");
+      setCategories(mapped);
+    } catch {
+      /* ignore */
+    }
+  }, [token]);
 
   const loadServices = useCallback(async () => {
     setLoadError(null);
@@ -166,23 +269,28 @@ const LaundryPriceManager = () => {
   useFocusEffect(
     useCallback(() => {
       loadServices();
-    }, [loadServices])
+      loadCategories();
+    }, [loadServices, loadCategories])
   );
 
   const servicesTabRows = useMemo(
     () => services.filter((s) => !isAdditionalChargeService(s)),
     [services]
   );
+  /** No default label: empty until owner adds at least one category in the Category tab. */
+  const defaultServiceCategory = useMemo(() => categories[0]?.name ?? "", [categories]);
   const additionalTabRows = useMemo(() => services.filter(isAdditionalChargeService), [services]);
   const displayedRows = priceSectionTab === "services" ? servicesTabRows : additionalTabRows;
 
   const onSelectPriceSection = (tab: PriceSectionTab) => {
     if (tab === priceSectionTab) return;
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsCreateCategoryPickerOpen(false);
+    setIsEditCategoryPickerOpen(false);
     setPriceSectionTab(tab);
   };
 
-  const pickServiceImage = async (): Promise<string | null> => {
+  const pickServiceImage = async (): Promise<PickedImage | null> => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert("Permission needed", "Allow photo library access to attach an image.");
@@ -195,14 +303,33 @@ const LaundryPriceManager = () => {
       quality: 0.85,
     });
     if (result.canceled || !result.assets?.[0]?.uri) return null;
-    return result.assets[0].uri;
+    const asset: any = result.assets[0];
+    const guessed = imageMimeFromUri(asset.uri);
+    return {
+      uri: asset.uri,
+      name: asset.fileName || guessed.name,
+      type: asset.mimeType || guessed.type,
+      file: asset.file,
+    };
   };
 
   const handleEditService = (service: Service) => {
     setSelectedService(service);
-    setEditedTiers(JSON.parse(JSON.stringify(service.tiers)) as Tier[]);
+    if (isAdditionalChargeService(service)) {
+      const t0 = service.tiers?.[0];
+      const parsed = parseExtraChargeDescription(t0?.description || "");
+      setEditedTiers([
+        t0
+          ? { ...t0, range: "—", description: parsed.description }
+          : { range: "—", price: 0, description: "" },
+      ]);
+      setEditedAdditionalType(parsed.type);
+    } else {
+      setEditedTiers(JSON.parse(JSON.stringify(service.tiers)) as Tier[]);
+    }
     setEditedName(service.name);
     setEditedCategory(service.category);
+  setEditedUnit(service.unit || "kg");
     setEditImageUri(null);
     setEditRemoveImage(false);
     setIsEditModalOpen(true);
@@ -229,11 +356,30 @@ const LaundryPriceManager = () => {
     }
 
     const isMisc = isAdditionalChargeService(selectedService);
+    if (!isMisc && !editedCategory.trim()) {
+      Alert.alert("Error", "Please select a category.");
+      return;
+    }
+    if (isMisc) {
+      if (editedTiers.length === 0) {
+        Alert.alert("Error", "Price information is missing.");
+        return;
+      }
+      const p = editedTiers[0].price;
+      if (typeof p !== "number" || Number.isNaN(p) || p < 0) {
+        Alert.alert("Error", "Please enter a valid price.");
+        return;
+      }
+    } else if (editedTiers.length === 0 || editedTiers.some((t) => !String(t.range || "").trim())) {
+      Alert.alert("Error", "Each tier must have a range.");
+      return;
+    }
+
     const tiersChanged = JSON.stringify(editedTiers) !== JSON.stringify(selectedService.tiers);
     const metaChanged = isMisc
       ? editedName.trim() !== selectedService.name
       : editedName.trim() !== selectedService.name || editedCategory !== selectedService.category;
-    const imageDirty = editImageUri !== null || editRemoveImage;
+    const imageDirty = !isMisc && (editImageUri !== null || editRemoveImage);
 
     if (!tiersChanged && !metaChanged && !imageDirty) {
       setIsEditModalOpen(false);
@@ -267,6 +413,52 @@ const LaundryPriceManager = () => {
       const eff =
         pendingEffectiveDate != null ? pendingEffectiveDate.toISOString().slice(0, 10) : undefined;
 
+      if (isMisc) {
+        const body: Record<string, unknown> = {
+          name: editedName.trim(),
+          category: "Misc",
+          price: editedTiers[0].price,
+          description: buildExtraChargeDescription(
+            editedAdditionalType,
+            editedTiers[0].description ?? ""
+          ),
+        };
+        if (eff) body.effective_date = eff;
+
+        const response = await fetch(`${API_URL}/service-prices/${selectedService.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+          let msg = "Failed to update additional charge.";
+          try {
+            const err = await response.json();
+            msg = extractApiErrorMessage(err, msg);
+          } catch {
+            /* ignore */
+          }
+          Alert.alert("Error", msg);
+          return;
+        }
+
+        const updated = await response.json();
+        const merged = mergeServiceFromApi(updated);
+        setServices((prev) => prev.map((s) => (s.id === merged.id ? merged : s)));
+
+        setConfirmKind(null);
+        setPendingEffectiveDate(null);
+        setEditImageUri(null);
+        setEditRemoveImage(false);
+        setIsEditModalOpen(false);
+        return;
+      }
+
       if (editImageUri) {
         const form = new FormData();
         form.append("name", editedName.trim());
@@ -274,8 +466,8 @@ const LaundryPriceManager = () => {
         appendTiersToFormData(form, editedTiers);
         if (eff) form.append("effective_date", eff);
         if (editRemoveImage) form.append("remove_image", "1");
-        const { name: imgName, type: imgType } = imageMimeFromUri(editImageUri);
-        form.append("image", { uri: editImageUri, name: imgName, type: imgType } as any);
+        if (editImageUri.file) form.append("image", editImageUri.file as any);
+        else form.append("image", { uri: editImageUri.uri, name: editImageUri.name, type: editImageUri.type } as any);
 
         const response = await fetch(`${API_URL}/service-prices/${selectedService.id}`, {
           method: "POST",
@@ -290,7 +482,7 @@ const LaundryPriceManager = () => {
           let msg = "Failed to update service.";
           try {
             const err = await response.json();
-            if (err?.message) msg = typeof err.message === "string" ? err.message : msg;
+            msg = extractApiErrorMessage(err, msg);
           } catch {
             /* ignore */
           }
@@ -305,7 +497,7 @@ const LaundryPriceManager = () => {
         const body: Record<string, unknown> = {
           name: editedName.trim(),
           category: categoryForApi,
-          tiers: editedTiers,
+          tiers: normalizeTiersForUnit(editedTiers, editedUnit),
         };
         if (eff) body.effective_date = eff;
         if (editRemoveImage) body.remove_image = true;
@@ -324,7 +516,7 @@ const LaundryPriceManager = () => {
           let msg = "Failed to update service.";
           try {
             const err = await response.json();
-            if (err?.message) msg = typeof err.message === "string" ? err.message : msg;
+            msg = extractApiErrorMessage(err, msg);
           } catch {
             /* ignore */
           }
@@ -362,8 +554,29 @@ const LaundryPriceManager = () => {
   };
 
   const handleCreateService = () => {
-    if (!newService.name.trim() || newService.tiers.some((t) => !t.range || !t.price)) {
-      Alert.alert("Error", "Please fill in all required fields");
+    if (createForAdditional) {
+      if (!additionalChargeDraft.name.trim()) {
+        Alert.alert("Error", "Extra charges name is required.");
+        return;
+      }
+      const p = parseFloat(additionalChargeDraft.price);
+      if (
+        !additionalChargeDraft.price.trim() ||
+        Number.isNaN(p) ||
+        p < 0
+      ) {
+        Alert.alert("Error", "Please enter a valid price.");
+        return;
+      }
+      setConfirmKind("create");
+      return;
+    }
+    if (!newService.category.trim()) {
+      Alert.alert("Error", "Please select a category.");
+      return;
+    }
+    if (!newService.name.trim() || newService.tiers.some((t) => !String(t.range || "").trim() || !String(t.price || "").trim())) {
+      Alert.alert("Error", "Please fill in service name and required tier fields.");
       return;
     }
     setConfirmKind("create");
@@ -377,11 +590,62 @@ const LaundryPriceManager = () => {
         return;
       }
 
-      const tiersPayload = newService.tiers.map((t) => ({
-        range: t.range,
-        price: parseFloat(t.price) || 0,
-        description: t.description || "",
-      }));
+      if (createForAdditional) {
+        const response = await fetch(`${API_URL}/service-prices`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            name: additionalChargeDraft.name.trim(),
+            category: "Misc",
+            price: parseFloat(additionalChargeDraft.price) || 0,
+            description: buildExtraChargeDescription(
+              additionalChargeDraft.type,
+              additionalChargeDraft.description.trim() || ""
+            ),
+          }),
+        });
+
+        if (!response.ok) {
+          let msg = "Failed to create additional charge.";
+          try {
+            const err = await response.json();
+            msg = extractApiErrorMessage(err, msg);
+          } catch {
+            /* ignore */
+          }
+          Alert.alert("Error", msg);
+          return;
+        }
+
+        const created = await response.json();
+        const service = mergeServiceFromApi(created);
+
+        setServices((prev) => [...prev, service]);
+        setConfirmKind(null);
+        setCreateForAdditional(false);
+        setIsCreateModalOpen(false);
+        setAdditionalChargeDraft({ name: "", type: "fixed", price: "", description: "" });
+        setNewService({
+          name: "",
+          category: defaultServiceCategory,
+          unit: "kg",
+          tiers: [{ range: "", price: "", description: "" }],
+        });
+        return;
+      }
+
+      const tiersPayload = normalizeTiersForUnit(
+        newService.tiers.map((t) => ({
+          range: t.range,
+          price: parseFloat(t.price) || 0,
+          description: t.description || "",
+        })),
+        newService.unit
+      );
 
       let response: Response;
 
@@ -390,8 +654,8 @@ const LaundryPriceManager = () => {
         form.append("name", newService.name.trim());
         form.append("category", newService.category);
         appendTiersToFormData(form, tiersPayload);
-        const { name: imgName, type: imgType } = imageMimeFromUri(createImageUri);
-        form.append("image", { uri: createImageUri, name: imgName, type: imgType } as any);
+        if (createImageUri.file) form.append("image", createImageUri.file as any);
+        else form.append("image", { uri: createImageUri.uri, name: createImageUri.name, type: createImageUri.type } as any);
 
         response = await fetch(`${API_URL}/service-prices`, {
           method: "POST",
@@ -421,7 +685,7 @@ const LaundryPriceManager = () => {
         let msg = "Failed to create service.";
         try {
           const err = await response.json();
-          if (err?.message) msg = typeof err.message === "string" ? err.message : msg;
+          msg = extractApiErrorMessage(err, msg);
         } catch {
           /* ignore */
         }
@@ -437,9 +701,11 @@ const LaundryPriceManager = () => {
       setCreateForAdditional(false);
       setIsCreateModalOpen(false);
       setCreateImageUri(null);
+      setAdditionalChargeDraft({ name: "", type: "fixed", price: "", description: "" });
       setNewService({
         name: "",
-        category: "Wash & Fold",
+        category: defaultServiceCategory,
+        unit: "kg",
         tiers: [{ range: "", price: "", description: "" }],
       });
     } catch (error) {
@@ -451,31 +717,138 @@ const LaundryPriceManager = () => {
   };
 
   const openCreateModal = () => {
+    if (priceSectionTab === "categories") {
+      setSelectedCategory(null);
+      setCategoryDraftName("");
+      setIsCategoryModalOpen(true);
+      return;
+    }
     setCreateForAdditional(priceSectionTab === "additional");
     setNewService({
       name: "",
-      category: priceSectionTab === "additional" ? "Misc" : "Wash & Fold",
+      category: priceSectionTab === "additional" ? "Misc" : defaultServiceCategory,
+      unit: "kg",
       tiers: [{ range: "", price: "", description: "" }],
     });
+    setAdditionalChargeDraft({ name: "", type: "fixed", price: "", description: "" });
     setCreateImageUri(null);
+    setIsCreateCategoryPickerOpen(false);
     setConfirmKind(null);
     setIsCreateModalOpen(true);
   };
 
-  const confirmDeleteService = (service: Service) => {
-    const isMisc = isAdditionalChargeService(service);
-    Alert.alert(
-      isMisc ? "Delete additional charge" : "Delete service",
-      `Remove “${service.name}” from the server? This cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => void deleteService(service),
-        },
-      ]
+  const openEditCategoryModal = (category: Category) => {
+    setSelectedCategory(category);
+    setCategoryDraftName(category.name);
+    setIsCategoryModalOpen(true);
+  };
+
+  const submitCategory = async () => {
+    if (!token) {
+      Alert.alert("Error", "Not signed in.");
+      return;
+    }
+    const name = categoryDraftName.trim();
+    if (!name) {
+      Alert.alert("Error", "Category name is required.");
+      return;
+    }
+    const normalized = name.toLowerCase();
+    const duplicate = categories.some(
+      (c) => c.name.toLowerCase() === normalized && c.id !== (selectedCategory?.id ?? -1)
     );
+    if (duplicate) {
+      Alert.alert("Duplicate category", "That category name already exists.");
+      return;
+    }
+    setIsMutating(true);
+    try {
+      const isEdit = selectedCategory !== null;
+      const url = isEdit
+        ? `${API_URL}/service-categories/${selectedCategory.id}`
+        : `${API_URL}/service-categories`;
+      const response = await fetch(url, {
+        method: isEdit ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ name }),
+      });
+      if (!response.ok) {
+        let msg = isEdit ? "Failed to update category." : "Failed to create category.";
+        try {
+          const err = await response.json();
+          msg = extractApiErrorMessage(err, msg);
+        } catch {
+          /* ignore */
+        }
+        Alert.alert("Error", msg);
+        return;
+      }
+
+      const data = await response.json();
+      const saved = { id: Number(data.id), name: String(data.name || "") };
+      setCategories((prev) =>
+        isEdit
+          ? prev.map((c) => (c.id === saved.id ? saved : c))
+          : [...prev, saved].sort((a, b) => a.name.localeCompare(b.name))
+      );
+      setIsCategoryModalOpen(false);
+      setSelectedCategory(null);
+      setCategoryDraftName("");
+    } catch (e) {
+      console.log(e);
+      Alert.alert("Error", "Failed to save category.");
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const confirmDeleteCategory = (category: Category) => {
+    if (isMutating) return;
+    setPendingDeleteCategory(category);
+  };
+
+  const deleteCategory = async (category: Category) => {
+    if (!token) {
+      Alert.alert("Error", "Not signed in.");
+      return;
+    }
+    setIsMutating(true);
+    try {
+      const response = await fetch(`${API_URL}/service-categories/${category.id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
+      if (!response.ok) {
+        let msg = "Failed to delete category.";
+        try {
+          const err = await response.json();
+          msg = extractApiErrorMessage(err, msg);
+        } catch {
+          /* ignore */
+        }
+        Alert.alert("Error", msg);
+        return;
+      }
+      setCategories((prev) => prev.filter((c) => c.id !== category.id));
+      setPendingDeleteCategory(null);
+    } catch (e) {
+      console.log(e);
+      Alert.alert("Error", "Failed to delete category.");
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const confirmDeleteService = (service: Service) => {
+    if (isMutating) return;
+    setPendingDeleteService(service);
   };
 
   const deleteService = async (service: Service) => {
@@ -506,6 +879,7 @@ const LaundryPriceManager = () => {
       }
 
       setServices((prev) => prev.filter((s) => s.id !== service.id));
+      setPendingDeleteService(null);
     } catch (e) {
       console.log(e);
       Alert.alert("Error", "Failed to delete service.");
@@ -589,6 +963,7 @@ const LaundryPriceManager = () => {
                 [
                   ["services", "Services"],
                   ["additional", "Additional Charges"],
+                  ["categories", "Category"],
                 ] as const
               ).map(([key, label]) => {
                 const active = priceSectionTab === key;
@@ -612,7 +987,11 @@ const LaundryPriceManager = () => {
           <View style={styles.listHeader}>
             <View style={styles.listHeaderLeft}>
               <Text style={styles.listHeaderTitle}>
-                {priceSectionTab === "services" ? "Service pricing" : "Additional charges"}
+                {priceSectionTab === "services"
+                  ? "Service pricing"
+                  : priceSectionTab === "additional"
+                    ? "Additional charges"
+                    : "Service categories"}
               </Text>
             </View>
 
@@ -641,42 +1020,87 @@ const LaundryPriceManager = () => {
             </View>
           ) : null}
 
-          {/* Services List */}
+          {/* Services / Categories List */}
           <View style={styles.servicesList}>
-            {!isLoadingPrices && !loadError && displayedRows.length === 0 ? (
+            {!isLoadingPrices &&
+            !loadError &&
+            ((priceSectionTab === "categories" && categories.length === 0) ||
+              (priceSectionTab !== "categories" && displayedRows.length === 0)) ? (
               <View style={styles.emptyTabState}>
                 <Text style={styles.emptyTabTitle}>
-                  {priceSectionTab === "services" ? "No services yet" : "No additional charges"}
+                  {priceSectionTab === "services"
+                    ? "No services yet"
+                    : priceSectionTab === "additional"
+                      ? "No additional charges"
+                      : "No categories yet"}
                 </Text>
                 <Text style={styles.emptyTabSubtitle}>
                   {priceSectionTab === "services"
                     ? "Create a service or pull to refresh after the server adds defaults."
-                    : "Additional charges use category “Misc” (e.g. penalty fees). They appear here."}
+                    : priceSectionTab === "additional"
+                      ? "Additional charges use category “Misc” (e.g. penalty fees). They appear here."
+                      : "Add categories in the Category tab first, then assign them when creating a service."}
                 </Text>
               </View>
             ) : null}
-            {displayedRows.map((service) => (
+            {priceSectionTab === "categories"
+              ? categories.map((category) => (
+                  <View key={category.id} style={styles.serviceCard}>
+                    <View style={styles.serviceHeader}>
+                      <View style={styles.serviceHeaderTop}>
+                        <View style={styles.serviceInfo}>
+                          <Text style={styles.serviceName}>{category.name}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.serviceActions}>
+                        <TouchableOpacity
+                          onPress={() => confirmDeleteCategory(category)}
+                          style={[styles.deleteServiceBtn, isMutating && styles.buttonDisabled]}
+                          disabled={isMutating}
+                        >
+                          <Ionicons name="trash-outline" size={20} color="#fff" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => openEditCategoryModal(category)}
+                          style={[styles.editButton, isMutating && styles.buttonDisabled]}
+                          disabled={isMutating}
+                        >
+                          <Ionicons name="create-outline" size={20} color="#fff" />
+                          <Text style={styles.editButtonText}>Edit</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                ))
+              : displayedRows.map((service) => (
               <View key={service.id} style={styles.serviceCard}>
                 {/* Title row: image + text use full width; actions on separate row to avoid squeezed text */}
                 <View style={styles.serviceHeader}>
                   <View style={styles.serviceHeaderTop}>
-                    <View style={styles.serviceThumbWrap}>
-                      {service.imageUrl ? (
-                        <Image
-                          source={{ uri: service.imageUrl }}
-                          style={styles.serviceThumb}
-                          contentFit="cover"
-                          transition={200}
-                        />
-                      ) : (
-                        <View style={styles.serviceThumbPlaceholder}>
-                          <Ionicons name="image-outline" size={28} color="#94a3b8" />
-                        </View>
-                      )}
-                    </View>
+                    {!isAdditionalChargeService(service) ? (
+                      <View style={styles.serviceThumbWrap}>
+                        {service.imageUrl ? (
+                          <Image
+                            source={{ uri: service.imageUrl }}
+                            style={styles.serviceThumb}
+                            contentFit="cover"
+                            transition={200}
+                          />
+                        ) : (
+                          <View style={styles.serviceThumbPlaceholder}>
+                            <Ionicons name="image-outline" size={28} color="#94a3b8" />
+                          </View>
+                        )}
+                      </View>
+                    ) : null}
                     <View style={styles.serviceInfo}>
                       <Text style={styles.serviceName}>{service.name}</Text>
-                      <Text style={styles.serviceCategory}>{service.category}</Text>
+                      {!isAdditionalChargeService(service) ? (
+                        <Text style={styles.serviceCategory}>{service.category}</Text>
+                      ) : null}
+                      {!isAdditionalChargeService(service) ? (
+                        <Text style={styles.serviceCategory}>Unit: {service.unit}</Text>
+                      ) : null}
                       {service.effectiveDate && (
                         <View style={styles.effectiveDateBadge}>
                           <Text style={styles.effectiveDateText}>
@@ -710,8 +1134,11 @@ const LaundryPriceManager = () => {
                   {service.tiers.map((tier, tierIndex) => (
                     <View key={tierIndex} style={styles.tierItem}>
                       <View style={styles.tierInfo}>
-                        <Text style={styles.tierRange}>{tier.range}</Text>
-                        <Text style={styles.tierDescription}>{tier.description}</Text>
+                        {isAdditionalChargeService(service) &&
+                        (tier.range === "—" || tier.range === "-" || !String(tier.range || "").trim()) ? null : (
+                          <Text style={styles.tierRange}>{tier.range}</Text>
+                        )}
+                        <Text style={styles.tierDescription}>{parseExtraChargeDescription(tier.description).description}</Text>
                       </View>
                       <Text style={styles.tierPrice}>₱{tier.price.toFixed(2)}</Text>
                     </View>
@@ -742,6 +1169,7 @@ const LaundryPriceManager = () => {
                   setPendingEffectiveDate(null);
                   setEditImageUri(null);
                   setEditRemoveImage(false);
+                  setIsEditCategoryPickerOpen(false);
                   setIsEditModalOpen(false);
                 }}
                 style={styles.closeButton}
@@ -753,70 +1181,116 @@ const LaundryPriceManager = () => {
 
             {/* Modal Body */}
             <ScrollView style={styles.modalBody}>
-              <>
+              {selectedService && isAdditionalChargeService(selectedService) ? (
+                <>
                   <View style={styles.tierEditCard}>
                     <Text style={styles.sectionTitle}>Details</Text>
                     <View style={styles.inputGroup}>
-                      <Text style={styles.inputLabel}>
-                        {selectedService && isAdditionalChargeService(selectedService)
-                          ? "Charge name *"
-                          : "Service name *"}
-                      </Text>
+                      <Text style={styles.inputLabel}>Extra Charges Name *</Text>
                       <TextInput
                         style={styles.input}
-                        placeholder={selectedService && isAdditionalChargeService(selectedService) ? "e.g. Penalty" : "Service name"}
+                        placeholder="e.g. Penalty"
+                        value={editedName}
+                        onChangeText={setEditedName}
+                      />
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Type</Text>
+                      <View style={styles.roleRow}>
+                        {(["fixed", "incremental"] as const).map((t) => (
+                          <TouchableOpacity
+                            key={t}
+                            style={[styles.roleChip, editedAdditionalType === t && styles.roleChipActive]}
+                            onPress={() => setEditedAdditionalType(t)}
+                          >
+                            <Text style={[styles.roleChipText, editedAdditionalType === t && styles.roleChipTextActive]}>
+                              {t === "fixed" ? "Fixed" : "Incremental"}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Price * (₱)</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="0.00"
+                        value={editedTiers[0] ? editedTiers[0].price.toString() : ""}
+                        onChangeText={(text) => handleUpdatePrice(0, "price", text)}
+                        keyboardType="decimal-pad"
+                      />
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Description</Text>
+                      <TextInput
+                        style={[styles.input, { minHeight: 88, textAlignVertical: "top" }]}
+                        placeholder="Optional details"
+                        value={editedTiers[0]?.description ?? ""}
+                        onChangeText={(text) => handleUpdatePrice(0, "description", text)}
+                        multiline
+                      />
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.tierEditCard}>
+                    <Text style={styles.sectionTitle}>Details</Text>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Service name *</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Service name"
                         value={editedName}
                         onChangeText={setEditedName}
                       />
                     </View>
                     <View style={styles.inputGroup}>
                       <Text style={styles.inputLabel}>Category</Text>
-                      {selectedService && isAdditionalChargeService(selectedService) ? (
-                        <View style={styles.miscCategoryBadge}>
-                          <Text style={styles.miscCategoryBadgeText}>Misc</Text>
-                          <Text style={styles.miscCategoryHint}>Listed under Additional Charges</Text>
-                        </View>
-                      ) : (
-                      <View style={styles.categoryButtons}>
-                        <TouchableOpacity
-                          onPress={() => setEditedCategory("Wash & Fold")}
-                          style={[
-                            styles.categoryButton,
-                            editedCategory === "Wash & Fold" && styles.categoryButtonActive,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.categoryButtonText,
-                              editedCategory === "Wash & Fold" && styles.categoryButtonTextActive,
-                            ]}
+                    <TouchableOpacity
+                      style={styles.categoryPickerBtn}
+                      onPress={() => setIsEditCategoryPickerOpen((v) => !v)}
+                    >
+                      <Text style={styles.categoryPickerBtnText}>{editedCategory || "Select category"}</Text>
+                      <Ionicons name="chevron-down-outline" size={18} color="#475569" />
+                    </TouchableOpacity>
+                    {isEditCategoryPickerOpen ? (
+                      <View style={styles.categoryPickerMenu}>
+                        {categories.map((cat) => (
+                          <TouchableOpacity
+                            key={cat.id}
+                            style={styles.categoryPickerItem}
+                            onPress={() => {
+                              setEditedCategory(cat.name);
+                              setIsEditCategoryPickerOpen(false);
+                            }}
                           >
-                            Wash & Fold
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() => setEditedCategory("Dry Only")}
-                          style={[
-                            styles.categoryButton,
-                            editedCategory === "Dry Only" && styles.categoryButtonActive,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.categoryButtonText,
-                              editedCategory === "Dry Only" && styles.categoryButtonTextActive,
-                            ]}
-                          >
-                            Dry Only
-                          </Text>
-                        </TouchableOpacity>
+                            <Text style={styles.categoryPickerItemText}>{cat.name}</Text>
+                          </TouchableOpacity>
+                        ))}
                       </View>
-                      )}
+                    ) : null}
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Item unit</Text>
+                      <View style={styles.roleRow}>
+                        {(["kg", "per piece"] as const).map((u) => (
+                          <TouchableOpacity
+                            key={u}
+                            style={[styles.roleChip, editedUnit === u && styles.roleChipActive]}
+                            onPress={() => setEditedUnit(u)}
+                          >
+                            <Text style={[styles.roleChipText, editedUnit === u && styles.roleChipTextActive]}>
+                              {u}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
                     </View>
                     <Text style={[styles.inputLabel, { marginTop: 4 }]}>Photo</Text>
                     <View style={styles.imagePickRow}>
                       {editImageUri ? (
-                        <Image source={{ uri: editImageUri }} style={styles.editImagePreview} contentFit="cover" />
+                        <Image source={{ uri: editImageUri.uri }} style={styles.editImagePreview} contentFit="cover" />
                       ) : selectedService?.imageUrl && !editRemoveImage ? (
                         <Image
                           source={{ uri: selectedService.imageUrl }}
@@ -877,56 +1351,57 @@ const LaundryPriceManager = () => {
                   </View>
 
                   {editedTiers.map((tier, index) => (
-                  <View key={index} style={styles.tierEditCard}>
-                    <View style={styles.tierEditHeader}>
-                      <Text style={styles.tierEditTitle}>Tier {index + 1}</Text>
-                      {editedTiers.length > 1 && (
-                        <TouchableOpacity
-                          onPress={() => handleRemoveTier(index)}
-                          style={styles.deleteButton}
-                        >
-                          <Ionicons name="trash-outline" size={20} color="#000000ff" />
-                        </TouchableOpacity>
-                      )}
-                    </View>
+                    <View key={index} style={styles.tierEditCard}>
+                      <View style={styles.tierEditHeader}>
+                        <Text style={styles.tierEditTitle}>Tier {index + 1}</Text>
+                        {editedTiers.length > 1 && (
+                          <TouchableOpacity
+                            onPress={() => handleRemoveTier(index)}
+                            style={styles.deleteButton}
+                          >
+                            <Ionicons name="trash-outline" size={20} color="#000000ff" />
+                          </TouchableOpacity>
+                        )}
+                      </View>
 
-                    <View style={styles.inputGroup}>
-                      <Text style={styles.inputLabel}>Range (e.g., 1-6 kg)</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Enter range"
-                        value={tier.range}
-                        onChangeText={(text) => handleUpdatePrice(index, 'range', text)}
-                      />
-                    </View>
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>Range (e.g., 1-6 kg)</Text>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Enter range"
+                          value={tier.range}
+                          onChangeText={(text) => handleUpdatePrice(index, "range", text)}
+                        />
+                      </View>
 
-                    <View style={styles.inputGroup}>
-                      <Text style={styles.inputLabel}>Price (₱)</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Enter price"
-                        value={tier.price.toString()}
-                        onChangeText={(text) => handleUpdatePrice(index, 'price', text)}
-                        keyboardType="numeric"
-                      />
-                    </View>
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>Price (₱)</Text>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Enter price"
+                          value={tier.price.toString()}
+                          onChangeText={(text) => handleUpdatePrice(index, "price", text)}
+                          keyboardType="numeric"
+                        />
+                      </View>
 
-                    <View style={styles.inputGroup}>
-                      <Text style={styles.inputLabel}>Description</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Enter description"
-                        value={tier.description}
-                        onChangeText={(text) => handleUpdatePrice(index, 'description', text)}
-                      />
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>Description</Text>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Enter description"
+                          value={tier.description}
+                          onChangeText={(text) => handleUpdatePrice(index, "description", text)}
+                        />
+                      </View>
                     </View>
-                  </View>
                   ))}
 
                   <TouchableOpacity onPress={handleAddTier} style={styles.addTierButton}>
                     <Text style={styles.addTierButtonText}>+ Add Tier</Text>
                   </TouchableOpacity>
-              </>
+                </>
+              )}
             </ScrollView>
 
             {/* Modal Footer */}
@@ -937,6 +1412,7 @@ const LaundryPriceManager = () => {
                   setPendingEffectiveDate(null);
                   setEditImageUri(null);
                   setEditRemoveImage(false);
+                  setIsEditCategoryPickerOpen(false);
                   setIsEditModalOpen(false);
                 }}
                 style={[styles.footerButton, styles.cancelButton]}
@@ -974,6 +1450,8 @@ const LaundryPriceManager = () => {
                   setConfirmKind(null);
                   setCreateForAdditional(false);
                   setCreateImageUri(null);
+                  setAdditionalChargeDraft({ name: "", type: "fixed", price: "", description: "" });
+                  setIsCreateCategoryPickerOpen(false);
                   setIsCreateModalOpen(false);
                 }}
                 style={styles.closeButton}
@@ -990,147 +1468,210 @@ const LaundryPriceManager = () => {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator
             >
-              <View style={styles.tierEditCard}>
-                <Text style={styles.sectionTitle}>Photo (optional)</Text>
-                <View style={styles.imagePickRow}>
-                  {createImageUri ? (
-                    <Image source={{ uri: createImageUri }} style={styles.editImagePreview} contentFit="cover" />
-                  ) : (
-                    <View style={styles.editImagePlaceholder}>
-                      <Ionicons name="image-outline" size={36} color="#94a3b8" />
+              {createForAdditional ? (
+                <>
+                  <View style={styles.tierEditCard}>
+                    <Text style={styles.sectionTitle}>Details</Text>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Extra Charges Name *</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="e.g. Rush fee"
+                        value={additionalChargeDraft.name}
+                        onChangeText={(text) =>
+                          setAdditionalChargeDraft((d) => ({ ...d, name: text }))
+                        }
+                      />
                     </View>
-                  )}
-                  <View style={styles.imagePickActions}>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Type</Text>
+                      <View style={styles.roleRow}>
+                        {(["fixed", "incremental"] as const).map((t) => (
+                          <TouchableOpacity
+                            key={t}
+                            style={[styles.roleChip, additionalChargeDraft.type === t && styles.roleChipActive]}
+                            onPress={() => setAdditionalChargeDraft((d) => ({ ...d, type: t }))}
+                          >
+                            <Text style={[styles.roleChipText, additionalChargeDraft.type === t && styles.roleChipTextActive]}>
+                              {t === "fixed" ? "Fixed" : "Incremental"}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Price * (₱)</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="0.00"
+                        value={additionalChargeDraft.price}
+                        onChangeText={(text) =>
+                          setAdditionalChargeDraft((d) => ({ ...d, price: text }))
+                        }
+                        keyboardType="decimal-pad"
+                      />
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Description</Text>
+                      <TextInput
+                        style={[styles.input, { minHeight: 88, textAlignVertical: "top" }]}
+                        placeholder="Optional details"
+                        value={additionalChargeDraft.description}
+                        onChangeText={(text) =>
+                          setAdditionalChargeDraft((d) => ({ ...d, description: text }))
+                        }
+                        multiline
+                      />
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.tierEditCard}>
+                    <Text style={styles.sectionTitle}>Photo (optional)</Text>
+                    <View style={styles.imagePickRow}>
+                      {createImageUri ? (
+                        <Image source={{ uri: createImageUri.uri }} style={styles.editImagePreview} contentFit="cover" />
+                      ) : (
+                        <View style={styles.editImagePlaceholder}>
+                          <Ionicons name="image-outline" size={36} color="#94a3b8" />
+                        </View>
+                      )}
+                      <View style={styles.imagePickActions}>
+                        <TouchableOpacity
+                          style={styles.secondaryOutlineBtn}
+                          onPress={async () => {
+                            const uri = await pickServiceImage();
+                            if (uri) setCreateImageUri(uri);
+                          }}
+                        >
+                          <Text style={styles.secondaryOutlineBtnText}>
+                            {createImageUri ? "Change photo" : "Choose photo"}
+                          </Text>
+                        </TouchableOpacity>
+                        {createImageUri ? (
+                          <TouchableOpacity
+                            style={styles.secondaryOutlineBtnDanger}
+                            onPress={() => setCreateImageUri(null)}
+                          >
+                            <Text style={styles.secondaryOutlineBtnDangerText}>Remove</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Service name *</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Enter service name"
+                      value={newService.name}
+                      onChangeText={(text) => setNewService({ ...newService, name: text })}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Category</Text>
                     <TouchableOpacity
-                      style={styles.secondaryOutlineBtn}
-                      onPress={async () => {
-                        const uri = await pickServiceImage();
-                        if (uri) setCreateImageUri(uri);
-                      }}
+                      style={styles.categoryPickerBtn}
+                      onPress={() => setIsCreateCategoryPickerOpen((v) => !v)}
                     >
-                      <Text style={styles.secondaryOutlineBtnText}>
-                        {createImageUri ? "Change photo" : "Choose photo"}
-                      </Text>
+                      <Text style={styles.categoryPickerBtnText}>{newService.category || "Select category"}</Text>
+                      <Ionicons name="chevron-down-outline" size={18} color="#475569" />
                     </TouchableOpacity>
-                    {createImageUri ? (
-                      <TouchableOpacity
-                        style={styles.secondaryOutlineBtnDanger}
-                        onPress={() => setCreateImageUri(null)}
-                      >
-                        <Text style={styles.secondaryOutlineBtnDangerText}>Remove</Text>
-                      </TouchableOpacity>
+                    {isCreateCategoryPickerOpen ? (
+                      <View style={styles.categoryPickerMenu}>
+                        {categories.map((cat) => (
+                          <TouchableOpacity
+                            key={cat.id}
+                            style={styles.categoryPickerItem}
+                            onPress={() => {
+                              setNewService({ ...newService, category: cat.name });
+                              setIsCreateCategoryPickerOpen(false);
+                            }}
+                          >
+                            <Text style={styles.categoryPickerItemText}>{cat.name}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
                     ) : null}
                   </View>
-                </View>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{createForAdditional ? "Charge name *" : "Service name *"}</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder={createForAdditional ? "e.g. Rush fee" : "Enter service name"}
-                  value={newService.name}
-                  onChangeText={(text) => setNewService({ ...newService, name: text })}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Category</Text>
-                {createForAdditional ? (
-                  <View style={styles.miscCategoryBadge}>
-                    <Text style={styles.miscCategoryBadgeText}>Misc</Text>
-                    <Text style={styles.miscCategoryHint}>Shows under Additional Charges</Text>
-                  </View>
-                ) : (
-                <View style={styles.categoryButtons}>
-                  <TouchableOpacity
-                    onPress={() => setNewService({ ...newService, category: 'Wash & Fold' })}
-                    style={[
-                      styles.categoryButton,
-                      newService.category === 'Wash & Fold' && styles.categoryButtonActive
-                    ]}
-                  >
-                    <Text style={[
-                      styles.categoryButtonText,
-                      newService.category === 'Wash & Fold' && styles.categoryButtonTextActive
-                    ]}>
-                      Wash & Fold
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => setNewService({ ...newService, category: 'Dry Only' })}
-                    style={[
-                      styles.categoryButton,
-                      newService.category === 'Dry Only' && styles.categoryButtonActive
-                    ]}
-                  >
-                    <Text style={[
-                      styles.categoryButtonText,
-                      newService.category === 'Dry Only' && styles.categoryButtonTextActive
-                    ]}>
-                      Dry Only
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                )}
-              </View>
-
-              <Text style={styles.sectionTitle}>Price Tiers</Text>
-
-              {newService.tiers.map((tier, index) => (
-                <View key={index} style={styles.tierEditCard}>
-                  <View style={styles.tierEditHeader}>
-                    <Text style={styles.tierEditTitle}>Tier {index + 1}</Text>
-                    {newService.tiers.length > 1 && (
-                      <TouchableOpacity
-                     onPress={() => handleRemoveNewServiceTier(index)}
-                     style={styles.deleteButton}
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Item unit</Text>
+                    <View style={styles.roleRow}>
+                      {(["kg", "per piece"] as const).map((u) => (
+                        <TouchableOpacity
+                          key={u}
+                          style={[styles.roleChip, newService.unit === u && styles.roleChipActive]}
+                          onPress={() => setNewService({ ...newService, unit: u })}
                         >
-                    <Ionicons name="trash-outline" size={20} color="#000000ff" />
-                    </TouchableOpacity>
-                    )}
+                          <Text style={[styles.roleChipText, newService.unit === u && styles.roleChipTextActive]}>
+                            {u}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
                   </View>
 
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Range * (e.g., 1-6 kg)</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Enter range"
-                      value={tier.range}
-                      onChangeText={(text) => handleNewServiceTierUpdate(index, 'range', text)}
-                    />
-                  </View>
+                  <Text style={styles.sectionTitle}>Price Tiers</Text>
 
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Price * (₱)</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Enter price"
-                      value={tier.price.toString()}
-                      onChangeText={(text) => handleNewServiceTierUpdate(index, 'price', text)}
-                      keyboardType="numeric"
-                    />
-                  </View>
+                  {newService.tiers.map((tier, index) => (
+                    <View key={index} style={styles.tierEditCard}>
+                      <View style={styles.tierEditHeader}>
+                        <Text style={styles.tierEditTitle}>Tier {index + 1}</Text>
+                        {newService.tiers.length > 1 && (
+                          <TouchableOpacity
+                            onPress={() => handleRemoveNewServiceTier(index)}
+                            style={styles.deleteButton}
+                          >
+                            <Ionicons name="trash-outline" size={20} color="#000000ff" />
+                          </TouchableOpacity>
+                        )}
+                      </View>
 
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Description</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Enter description"
-                      value={tier.description}
-                      onChangeText={(text) => handleNewServiceTierUpdate(index, 'description', text)}
-                    />
-                  </View>
-                </View>
-              ))}
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>Range * (e.g., 1-6 kg)</Text>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Enter range"
+                          value={tier.range}
+                          onChangeText={(text) => handleNewServiceTierUpdate(index, "range", text)}
+                        />
+                      </View>
 
-              <TouchableOpacity
-                onPress={handleAddNewServiceTier}
-                style={[styles.addTierButton, styles.addTierButtonCreate]}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.addTierButtonText}>+ Add Tier</Text>
-              </TouchableOpacity>
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>Price * (₱)</Text>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Enter price"
+                          value={tier.price.toString()}
+                          onChangeText={(text) => handleNewServiceTierUpdate(index, "price", text)}
+                          keyboardType="numeric"
+                        />
+                      </View>
+
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>Description</Text>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Enter description"
+                          value={tier.description}
+                          onChangeText={(text) => handleNewServiceTierUpdate(index, "description", text)}
+                        />
+                      </View>
+                    </View>
+                  ))}
+
+                  <TouchableOpacity
+                    onPress={handleAddNewServiceTier}
+                    style={[styles.addTierButton, styles.addTierButtonCreate]}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.addTierButtonText}>+ Add Tier</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </ScrollView>
 
             {/* Modal Footer */}
@@ -1140,6 +1681,8 @@ const LaundryPriceManager = () => {
                   setConfirmKind(null);
                   setCreateForAdditional(false);
                   setCreateImageUri(null);
+                  setAdditionalChargeDraft({ name: "", type: "fixed", price: "", description: "" });
+                  setIsCreateCategoryPickerOpen(false);
                   setIsCreateModalOpen(false);
                 }}
                 style={[styles.footerButton, styles.cancelButton]}
@@ -1153,8 +1696,63 @@ const LaundryPriceManager = () => {
                 disabled={isMutating}
               >
                 <Text style={styles.saveButtonText}>
-                  {createForAdditional ? "Create charge" : "Create service"}
+                  {createForAdditional ? "Create Charge" : "Create service"}
                 </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Category create/edit modal */}
+      <Modal visible={isCategoryModalOpen} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {selectedCategory ? "Edit category" : "Create category"}
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setIsCategoryModalOpen(false);
+                  setSelectedCategory(null);
+                  setCategoryDraftName("");
+                }}
+                style={styles.closeButton}
+                disabled={isMutating}
+              >
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Category name *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter category name"
+                  value={categoryDraftName}
+                  onChangeText={setCategoryDraftName}
+                />
+              </View>
+            </View>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                onPress={() => {
+                  setIsCategoryModalOpen(false);
+                  setSelectedCategory(null);
+                  setCategoryDraftName("");
+                }}
+                style={[styles.footerButton, styles.cancelButton]}
+                disabled={isMutating}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={submitCategory}
+                style={[styles.footerButton, styles.saveButton, isMutating && styles.buttonDisabled]}
+                disabled={isMutating}
+              >
+                <Text style={styles.saveButtonText}>{selectedCategory ? "Save" : "Create"}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1188,7 +1786,10 @@ const LaundryPriceManager = () => {
             ) : null}
             {confirmKind === "create" ? (
               <Text style={styles.confirmMessage}>
-                {newService.name} · {newService.category} · {newService.tiers.length} tier(s).{"\n\n"}
+                {createForAdditional
+                  ? `${additionalChargeDraft.name.trim()} · ${additionalChargeDraft.type === "fixed" ? "Fixed" : "Incremental"} · ₱${(parseFloat(additionalChargeDraft.price) || 0).toFixed(2)}`
+                  : `${newService.name} · ${newService.category.trim() || "—"} · ${newService.tiers.length} tier(s).`}
+                {"\n\n"}
                 {createForAdditional
                   ? "Create this additional charge on the server?"
                   : "Create this service on the server?"}
@@ -1216,6 +1817,86 @@ const LaundryPriceManager = () => {
                   <ActivityIndicator color="#ffffff" />
                 ) : (
                   <Text style={styles.confirmBtnPrimaryText}>Confirm</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Confirm delete for service/additional charge */}
+      <Modal visible={pendingDeleteService !== null} animationType="fade" transparent>
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>
+              {pendingDeleteService && isAdditionalChargeService(pendingDeleteService)
+                ? "Delete additional charge"
+                : "Delete service"}
+            </Text>
+            <Text style={styles.confirmMessage}>
+              {pendingDeleteService
+                ? `Remove "${pendingDeleteService.name}" from the server? This cannot be undone.`
+                : ""}
+            </Text>
+            <View style={styles.confirmActions}>
+              <TouchableOpacity
+                style={[styles.confirmBtnSecondary, isMutating && styles.buttonDisabled]}
+                onPress={() => {
+                  if (!isMutating) setPendingDeleteService(null);
+                }}
+                disabled={isMutating}
+              >
+                <Text style={styles.confirmBtnSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmBtnDanger, isMutating && styles.buttonDisabled]}
+                onPress={() => {
+                  if (pendingDeleteService) void deleteService(pendingDeleteService);
+                }}
+                disabled={isMutating}
+              >
+                {isMutating ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={styles.confirmBtnPrimaryText}>Delete</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Confirm delete for category */}
+      <Modal visible={pendingDeleteCategory !== null} animationType="fade" transparent>
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>Delete category</Text>
+            <Text style={styles.confirmMessage}>
+              {pendingDeleteCategory
+                ? `Delete "${pendingDeleteCategory.name}"? This cannot be undone.`
+                : ""}
+            </Text>
+            <View style={styles.confirmActions}>
+              <TouchableOpacity
+                style={[styles.confirmBtnSecondary, isMutating && styles.buttonDisabled]}
+                onPress={() => {
+                  if (!isMutating) setPendingDeleteCategory(null);
+                }}
+                disabled={isMutating}
+              >
+                <Text style={styles.confirmBtnSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmBtnDanger, isMutating && styles.buttonDisabled]}
+                onPress={() => {
+                  if (pendingDeleteCategory) void deleteCategory(pendingDeleteCategory);
+                }}
+                disabled={isMutating}
+              >
+                {isMutating ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={styles.confirmBtnPrimaryText}>Delete</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -1730,6 +2411,41 @@ const styles = StyleSheet.create({
   categoryButtonTextActive: {
     color: '#3b82f6',
   },
+  categoryPickerBtn: {
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  categoryPickerBtnText: {
+    fontSize: 15,
+    color: "#0f172a",
+    fontWeight: "600",
+  },
+  categoryPickerMenu: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "#ffffff",
+  },
+  categoryPickerItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  categoryPickerItemText: {
+    fontSize: 14,
+    color: "#334155",
+    fontWeight: "600",
+  },
   imagePickRow: {
     flexDirection: "row",
     gap: 14,
@@ -1808,6 +2524,18 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 16,
   },
+  roleRow: { flexDirection: "row", gap: 10, marginBottom: 8 },
+  roleChip: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+  },
+  roleChipActive: { borderColor: "#3b82f6", backgroundColor: "#eff6ff" },
+  roleChipText: { fontWeight: "700", color: "#64748b", textTransform: "capitalize" },
+  roleChipTextActive: { color: "#1d4ed8" },
    header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1927,6 +2655,15 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     backgroundColor: "#22c55e",
+    alignItems: "center",
+    minHeight: 48,
+    justifyContent: "center",
+  },
+  confirmBtnDanger: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: "#dc2626",
     alignItems: "center",
     minHeight: 48,
     justifyContent: "center",

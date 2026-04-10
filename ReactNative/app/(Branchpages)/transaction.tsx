@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/contexts/AuthContext";
+import { useBranchPages } from "@/contexts/BranchPagesContext";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useFocusEffect } from "@react-navigation/native";
 import { API_URL } from "../../config/api";
@@ -35,6 +36,7 @@ const getInventoryColor = (status: string) =>
 
 export default function TransactionDeviceList() {
   const { token } = useAuth();
+  const { branchId } = useBranchPages();
   const [selected, setSelected] = useState<TransactionRow | null>(null);
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
@@ -62,7 +64,11 @@ export default function TransactionDeviceList() {
       if (!response.ok) return;
 
       const data = await response.json();
-      const mapped: TransactionRow[] = (Array.isArray(data) ? data : [])
+      const raw = Array.isArray(data) ? data : [];
+      const forBranch = branchId
+        ? raw.filter((txn: any) => String(txn.branch_id) === String(branchId))
+        : raw;
+      const mapped: TransactionRow[] = forBranch
         .map((txn: any) => ({
           id: Number(txn.id),
           receipt: String(txn.receipt || `REC-${txn.id}`),
@@ -83,7 +89,7 @@ export default function TransactionDeviceList() {
     } finally {
       setIsLoading(false);
     }
-  }, [token]);
+  }, [token, branchId]);
 
   useFocusEffect(
     useCallback(() => {
