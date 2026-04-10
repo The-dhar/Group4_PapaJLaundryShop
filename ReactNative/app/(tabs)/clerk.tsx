@@ -116,8 +116,15 @@ type FilterState = {
   dateFrom: string;
   dateTo: string;
   includeArchived: boolean;
+  /** Owner only: `null` = all branches. Ignored for non-owners (API scopes by login). */
+  branchId: number | null;
   payment: PaymentFilter;
   inventory: InventoryFilter;
+};
+
+type BranchOption = {
+  id: number;
+  name: string;
 };
 
 type ClerkLog = {
@@ -314,9 +321,12 @@ export default function ClerkLogsList() {
   const [filters, setFilters] = useState<FilterState>(() => ({
     ...defaultDateRange(),
     includeArchived: true,
+    branchId: null,
     payment: "all",
     inventory: "all",
   }));
+
+  const [branches, setBranches] = useState<BranchOption[]>([]);
 
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [draftFilters, setDraftFilters] = useState<FilterState>(filters);
@@ -363,7 +373,8 @@ export default function ClerkLogsList() {
   const pageData = filteredLogs.slice(startIndex, startIndex + rowsPerPage);
 
   const router = useRouter();
-  const { token, logout } = useAuth();
+  const { token, logout, user } = useAuth();
+  const isOwner = String(user?.role ?? "") === "owner";
   const [open, setOpen] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
@@ -388,6 +399,29 @@ export default function ClerkLogsList() {
     [filteredLogs]
   );
 
+  const loadBranches = useCallback(async () => {
+    try {
+      if (!token) return;
+      const res = await fetch(`${API_URL}/branches`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      setBranches(
+        list
+          .map((b: { id?: number; name?: string }) => ({
+            id: Number(b.id),
+            name: String(b.name ?? ""),
+          }))
+          .filter((b) => Number.isFinite(b.id) && b.name)
+          .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
+      );
+    } catch (e) {
+      console.log(e);
+    }
+  }, [token]);
+
   const loadClerkLogs = useCallback(async () => {
     try {
       if (!token) return;
@@ -396,6 +430,9 @@ export default function ClerkLogsList() {
       qs.set("include_archived", filters.includeArchived ? "1" : "0");
       if (filters.dateFrom.trim()) qs.set("date_from", filters.dateFrom.trim());
       if (filters.dateTo.trim()) qs.set("date_to", filters.dateTo.trim());
+      if (isOwner && filters.branchId != null) {
+        qs.set("branch_id", String(filters.branchId));
+      }
 
       const response = await fetch(`${API_URL}/transactions?${qs.toString()}`, {
         headers: {
@@ -430,12 +467,13 @@ export default function ClerkLogsList() {
     } catch (error) {
       console.log(error);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.includeArchived, token]);
+  }, [filters.dateFrom, filters.dateTo, filters.includeArchived, filters.branchId, isOwner, token]);
 
   useFocusEffect(
     useCallback(() => {
-      loadClerkLogs();
-    }, [loadClerkLogs])
+      void loadBranches();
+      void loadClerkLogs();
+    }, [loadBranches, loadClerkLogs])
   );
 
   useEffect(() => {
@@ -794,6 +832,27 @@ export default function ClerkLogsList() {
                 onValueChange={(v) => setDraftFilters((d) => ({ ...d, includeArchived: v }))}
               />
             </View>
+
+            {isOwner ? (
+              <>
+                <Text style={styles.filterSectionLabel}>Branch</Text>
+                <View style={styles.presetRow}>
+                  <Chip
+                    label="All"
+                    selected={draftFilters.branchId === null}
+                    onPress={() => setDraftFilters((d) => ({ ...d, branchId: null }))}
+                  />
+                  {branches.map((b) => (
+                    <Chip
+                      key={b.id}
+                      label={b.name.length > 22 ? `${b.name.slice(0, 21)}…` : b.name}
+                      selected={draftFilters.branchId === b.id}
+                      onPress={() => setDraftFilters((d) => ({ ...d, branchId: b.id }))}
+                    />
+                  ))}
+                </View>
+              </>
+            ) : null}
 
             <Text style={styles.filterSectionLabel}>Payment</Text>
             <View style={styles.presetRow}>

@@ -185,6 +185,7 @@ class TransactionController extends Controller
         $request->validate([
             'date_from' => 'nullable|date_format:Y-m-d',
             'date_to' => 'nullable|date_format:Y-m-d',
+            'branch_id' => 'nullable|integer|exists:branches,id',
         ]);
 
         $query = Transaction::with([
@@ -197,6 +198,8 @@ class TransactionController extends Controller
                 return response()->json([]);
             }
             $query->where('branch_id', $user->branch_id);
+        } elseif ($user->isOwner() && $request->filled('branch_id')) {
+            $query->where('branch_id', (int) $request->input('branch_id'));
         }
 
         if (! $includeArchived) {
