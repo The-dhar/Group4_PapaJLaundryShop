@@ -8,10 +8,11 @@ Features that are already fixed:
 - POS customer input fields no longer reset while staff is typing.
 - Mobile Create staff Step 2 now locks verified email, hides verification code entry after success, and supports Change email reset.
 - Mobile Branch and Employees tabs now show a centered loading spinner during initial data fetch, consistent with Employee Settings and Price loading behavior.
+- Web now has a dedicated Reports page (Issue Reports + Backjobs) and Receipt Management can create Issue Report or Backjob with employee assignment.
 
 ## Project Info
 - Created: 2026-04-11
-- Last Updated: 2026-04-11 (implementation + validation + mobile verification UX + loading consistency + reports schema and backend API)
+- Last Updated: 2026-04-11 (implementation + validation + mobile verification UX + loading consistency + reports schema/backend/web flow)
 
 ## Revision Process
 - Rule: Every new revision must be recorded in this file in the same day it is implemented.
@@ -76,6 +77,16 @@ Features that are already fixed:
 	- Target Date: 2026-04-14
 	- Priority: High
 	- Dependency: Backend access checks complete
+- [x] Add Reports page with Issue Reports and Backjobs tabs, including clerk/owner actions for status transitions.
+	- Status: Done
+	- Target Date: 2026-04-14
+	- Priority: High
+	- Dependency: Reports backend routes
+- [x] Add Report action in Receipt Management modal to create Issue Report or Backjob with assignee selection.
+	- Status: Done
+	- Target Date: 2026-04-14
+	- Priority: High
+	- Dependency: report-assignees endpoint
 
 ### Optional Frontend (ReactNative owner screens)
 - [x] Validate owner mobile screens still load transaction data correctly after backend changes.
@@ -167,4 +178,5 @@ Features that are already fixed:
 - [x] Mobile tabs loading UX aligned: Settings, Branches, Employees, and Price show loading states consistently on initial load (2026-04-11).
 - [x] Added new Laravel migrations for issue reports, backjobs, and report activity logs (2026-04-11).
 - [x] Added backend models, controller logic, and API routes for issue reports/backjobs including role-aware access and activity logging (2026-04-11).
+- [x] Added ReactJS Reports page, sidebar routing, and receipt report creation modal integrated with new reports APIs (2026-04-11).
 - [ ] End-to-end validation completed.

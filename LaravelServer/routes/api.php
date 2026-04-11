@@ -75,6 +75,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/staff-accounts/{id}', [StaffAccountController::class, 'update']);
 
     Route::get('/issue-reports', [ReportController::class, 'listIssueReports']);
+    Route::get('/report-assignees', [ReportController::class, 'listAssignableEmployees']);
     Route::post('/issue-reports', [ReportController::class, 'createIssueReport']);
     Route::put('/issue-reports/{id}/under-review', [ReportController::class, 'markIssueUnderReview']);
     Route::put('/issue-reports/{id}/resolve', [ReportController::class, 'resolveIssueReport']);

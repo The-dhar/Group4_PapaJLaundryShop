@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import DataTable from 'react-data-table-component';
-import { BsEye, BsPrinter, BsCheck } from 'react-icons/bs';
+import { BsEye, BsPrinter, BsCheck, BsFlag } from 'react-icons/bs';
 import DashboardLayout from '../components/dashboardlayout';
 import TransactionExtrasSummary from '../components/TransactionExtrasSummary';
 import { useTransactions } from '../context/transactionsContext';
+import { API_URL } from '../config/api';
 import '../styles/receiptstyle.css';
 import { jsPDF } from 'jspdf';
 import Swal from 'sweetalert2';
@@ -26,6 +27,15 @@ const Receiptmanagement = () => {
   const [filterInventory, setFilterInventory] = useState('All');
   const [selectedReceipt, setSelectedReceipt] = useState(null);
   const [viewMode, setViewMode] = useState('view'); // 'view' or 'edit'
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportType, setReportType] = useState('issue');
+  const [issueType, setIssueType] = useState('damaged');
+  const [issueNote, setIssueNote] = useState('');
+  const [backjobNote, setBackjobNote] = useState('');
+  const [assignedEmployeeId, setAssignedEmployeeId] = useState('');
+  const [assignableEmployees, setAssignableEmployees] = useState([]);
+  const [isLoadingAssignees, setIsLoadingAssignees] = useState(false);
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
   // Receipt Management: paid transactions only (unpaid belong in POS / collection flow)
   const readyReceipts = useMemo(
@@ -337,10 +347,151 @@ const Receiptmanagement = () => {
     });
   };
 
+  const resetReportForm = () => {
+    setReportType('issue');
+    setIssueType('damaged');
+    setIssueNote('');
+    setBackjobNote('');
+    setAssignedEmployeeId('');
+    setAssignableEmployees([]);
+  };
+
+  const parseApiError = (payload) => {
+    if (!payload || typeof payload !== 'object') return 'Request failed.';
+    if (typeof payload.message === 'string' && payload.message.trim()) return payload.message.trim();
+    if (payload.errors && typeof payload.errors === 'object') {
+      const values = Object.values(payload.errors);
+      for (const v of values) {
+        if (Array.isArray(v) && v.length > 0) return String(v[0]);
+        if (typeof v === 'string') return v;
+      }
+    }
+    return 'Request failed.';
+  };
+
+  const loadAssignableEmployees = async (transactionId) => {
+    const token = localStorage.getItem('token');
+    if (!token) throw new Error('Not authenticated.');
+
+    setIsLoadingAssignees(true);
+    try {
+      const res = await fetch(`${API_URL}/report-assignees?transaction_id=${encodeURIComponent(transactionId)}`, {
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(parseApiError(payload));
+      }
+
+      const rows = Array.isArray(payload) ? payload : [];
+      setAssignableEmployees(rows);
+      if (rows.length > 0) {
+        setAssignedEmployeeId(String(rows[0].id));
+      }
+    } finally {
+      setIsLoadingAssignees(false);
+    }
+  };
+
+  const openReportModal = async () => {
+    if (!selectedReceipt) return;
+
+    resetReportForm();
+    setShowReportModal(true);
+    try {
+      await loadAssignableEmployees(selectedReceipt.id);
+    } catch (e) {
+      await Swal.fire({
+        title: 'Cannot load assignees',
+        text: e.message || 'Failed to load assignee options.',
+        icon: 'error',
+      });
+      setShowReportModal(false);
+    }
+  };
+
+  const closeReportModal = () => {
+    setShowReportModal(false);
+    resetReportForm();
+  };
+
+  const handleSubmitReport = async () => {
+    if (!selectedReceipt) return;
+    if (isSubmittingReport) return;
+
+    if (!assignedEmployeeId) {
+      await Swal.fire({ title: 'Missing assignee', text: 'Please select an employee.', icon: 'warning' });
+      return;
+    }
+
+    if (reportType === 'issue' && issueType === 'other' && issueNote.trim() === '') {
+      await Swal.fire({ title: 'Missing details', text: 'Please provide issue details for type "other".', icon: 'warning' });
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+    if (!token) {
+      await Swal.fire({ title: 'Not authenticated', text: 'Please sign in again.', icon: 'error' });
+      return;
+    }
+
+    setIsSubmittingReport(true);
+    try {
+      const body = reportType === 'issue'
+        ? {
+            transaction_id: selectedReceipt.id,
+            issue_type: issueType,
+            issue_note: issueNote.trim() || null,
+            assigned_employee_user_id: Number(assignedEmployeeId),
+          }
+        : {
+            transaction_id: selectedReceipt.id,
+            reason_note: backjobNote.trim() || null,
+            assigned_employee_user_id: Number(assignedEmployeeId),
+          };
+
+      const endpoint = reportType === 'issue' ? '/issue-reports' : '/backjobs';
+      const res = await fetch(`${API_URL}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(parseApiError(payload));
+      }
+
+      await Swal.fire({
+        title: reportType === 'issue' ? 'Issue report created' : 'Backjob created',
+        icon: 'success',
+        timer: 1300,
+        showConfirmButton: false,
+      });
+
+      closeReportModal();
+    } catch (e) {
+      await Swal.fire({
+        title: 'Could not create report',
+        text: e.message || 'Request failed.',
+        icon: 'error',
+      });
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
   // compute paid / diff for selected receipt (safe defaults)
   const selectedPaid = selectedReceipt ? Number(selectedReceipt.paid_amount || 0) : 0;
   const selectedTotal = selectedReceipt ? Number(selectedReceipt.amount || 0) : 0;
-  const selectedDiff = selectedPaid - selectedTotal;
 
   return (
     <DashboardLayout>
@@ -383,7 +534,10 @@ const Receiptmanagement = () => {
           <div className="receipt-modal-content">
             <button
               className="receipt-close-x"
-              onClick={() => setSelectedReceipt(null)}
+              onClick={() => {
+                setSelectedReceipt(null);
+                setShowReportModal(false);
+              }}
             >
               ✕
             </button>
@@ -529,6 +683,13 @@ const Receiptmanagement = () => {
             <div className="receipt-modal-actions" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
               {viewMode === 'view' && (
                 <>
+                  <button
+                    onClick={openReportModal}
+                    className="receipt-btn-report"
+                    disabled={isSubmittingReport}
+                  >
+                    <BsFlag /> Report Issue / Backjob
+                  </button>
                   {selectedReceipt.inventory_status === 'in_shop' && selectedReceipt.payment_status === 'paid' && (
                     <button
                       onClick={handleMarkPickedUp}
@@ -568,6 +729,84 @@ const Receiptmanagement = () => {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReportModal && selectedReceipt && (
+        <div className="receipt-report-overlay" onClick={closeReportModal}>
+          <div className="receipt-report-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Create Report</h3>
+            <p className="receipt-report-sub">Receipt: <strong>{selectedReceipt.receipt}</strong> · Customer: <strong>{selectedReceipt.customer_name}</strong></p>
+
+            <label>Report type</label>
+            <select value={reportType} onChange={(e) => setReportType(e.target.value)}>
+              <option value="issue">Issue Report (Damaged / Lost / Other)</option>
+              <option value="backjob">Backjob (Free Redo)</option>
+            </select>
+
+            {reportType === 'issue' && (
+              <>
+                <label>Issue type</label>
+                <select value={issueType} onChange={(e) => setIssueType(e.target.value)}>
+                  <option value="damaged">Damaged</option>
+                  <option value="lost">Lost</option>
+                  <option value="other">Other</option>
+                </select>
+
+                <label>Issue note {issueType === 'other' ? '(required)' : '(optional)'}</label>
+                <textarea
+                  rows={3}
+                  placeholder="Write issue details"
+                  value={issueNote}
+                  onChange={(e) => setIssueNote(e.target.value)}
+                />
+              </>
+            )}
+
+            {reportType === 'backjob' && (
+              <>
+                <label>Backjob note (optional)</label>
+                <textarea
+                  rows={3}
+                  placeholder="Reason for free redo service"
+                  value={backjobNote}
+                  onChange={(e) => setBackjobNote(e.target.value)}
+                />
+              </>
+            )}
+
+            <label>Assign employee</label>
+            <select
+              value={assignedEmployeeId}
+              onChange={(e) => setAssignedEmployeeId(e.target.value)}
+              disabled={isLoadingAssignees}
+            >
+              {isLoadingAssignees ? (
+                <option value="">Loading employees...</option>
+              ) : assignableEmployees.length === 0 ? (
+                <option value="">No available employees</option>
+              ) : (
+                assignableEmployees.map((employee) => (
+                  <option key={employee.id} value={String(employee.id)}>
+                    {employee.name} ({employee.role})
+                  </option>
+                ))
+              )}
+            </select>
+
+            <div className="receipt-report-actions">
+              <button className="receipt-btn-cancel" onClick={closeReportModal} disabled={isSubmittingReport}>
+                Cancel
+              </button>
+              <button
+                className="receipt-btn-report-submit"
+                onClick={handleSubmitReport}
+                disabled={isSubmittingReport || isLoadingAssignees || assignableEmployees.length === 0}
+              >
+                {isSubmittingReport ? 'Submitting...' : 'Submit Report'}
+              </button>
             </div>
           </div>
         </div>

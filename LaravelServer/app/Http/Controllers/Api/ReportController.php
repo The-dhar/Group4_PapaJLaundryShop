@@ -22,6 +22,37 @@ class ReportController extends Controller
 
     private const BACKJOB_OPEN_STATUSES = ['pending', 'approved', 'in_progress'];
 
+    public function listAssignableEmployees(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (! $this->canCreateCase($user)) {
+            return response()->json(['message' => 'Only owner, clerk, or staff can create reports.'], 403);
+        }
+
+        $validated = $request->validate([
+            'transaction_id' => 'required|integer|exists:transactions,id',
+        ]);
+
+        $transaction = $this->reportableTransactionForUser($user, (int) $validated['transaction_id']);
+
+        $rows = User::query()
+            ->where('branch_id', $transaction->branch_id)
+            ->whereIn('role', ['clerk', 'staff'])
+            ->where('is_active', true)
+            ->orderBy('role')
+            ->orderBy('name')
+            ->get(['id', 'name', 'first_name', 'last_name', 'role', 'branch_id']);
+
+        return response()->json($rows->map(function (User $employee) {
+            return [
+                'id' => $employee->id,
+                'name' => $this->displayName($employee),
+                'role' => $employee->role,
+                'branch_id' => $employee->branch_id,
+            ];
+        })->values());
+    }
+
     public function listIssueReports(Request $request): JsonResponse
     {
         $user = $request->user();
