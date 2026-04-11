@@ -6,7 +6,7 @@ Features that are already fixed:
 
 ## Project Info
 - Created: 2026-04-11
-- Last Updated: 2026-04-11 (implementation pass)
+- Last Updated: 2026-04-11 (implementation pass + validation)
 
 ## Legend
 - [x] Done
@@ -78,12 +78,12 @@ Features that are already fixed:
 - [x] Notes: Updated mobile transaction screens to show Created By from API creator fields.
 
 ## Test Scenarios
-- [ ] Clerk in Branch A sees all Branch A transactions.
-	- Status: Not Started
+- [x] Clerk in Branch A sees all Branch A transactions.
+	- Status: Done
 	- Target Date: 2026-04-14
 	- Priority: High
-- [ ] Staff in Branch A sees staff-created transactions in Branch A and does not see clerk-created transactions.
-	- Status: Not Started
+- [x] Staff in Branch A sees staff-created transactions in Branch A and does not see clerk-created transactions.
+	- Status: Done
 	- Target Date: 2026-04-14
 	- Priority: High
 - [ ] Staff cannot access or modify clerk-created transactions via API endpoints.
@@ -94,8 +94,8 @@ Features that are already fixed:
 	- Status: Not Started
 	- Target Date: 2026-04-14
 	- Priority: High
-- [ ] Newly assigned staff account in a branch can view existing staff-created branch transactions.
-	- Status: Not Started
+- [x] Newly assigned staff account in a branch can view existing staff-created branch transactions.
+	- Status: Done
 	- Target Date: 2026-04-14
 	- Priority: High
 - [ ] Owner still sees expected transaction data by selected branch and date filters.
@@ -124,4 +124,7 @@ Features that are already fixed:
 - [x] Implementation started (2026-04-11).
 - [x] Backend revision completed (2026-04-11).
 - [x] Frontend revision completed for ReactNative creator labels (2026-04-11).
+- [x] Clerk live auto-fetch now shows new staff transactions without hard refresh (2026-04-11).
+- [x] POS input fields no longer reset while staff is typing (2026-04-11).
+- [x] Staff-to-staff branch transaction visibility confirmed (2026-04-11).
 - [ ] End-to-end validation completed.
