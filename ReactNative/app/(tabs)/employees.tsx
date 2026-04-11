@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   AppState,
   type AppStateStatus,
@@ -203,6 +204,7 @@ export default function EmployeesScreen() {
     }
     return list;
   }, [staffUsers, roleFilter, selectedBranchName]);
+  const isInitialLoading = isLoading && staffUsers.length === 0 && branches.length === 0 && hrEmployees.length === 0;
 
   /** Revenue share chart: one bar per staff login; peso amounts from POS totals when API provides them, else HR name match. */
   const clerkSharePercentChart = useMemo(() => {
@@ -577,116 +579,124 @@ export default function EmployeesScreen() {
           </View>
         </View>
 
-        <Text style={styles.sectionHeading}>Revenue share</Text>
-        <Text style={styles.sectionHint}>
-          One bar per web staff login (same filters as below). Percentages are shares of total paid POS revenue for
-          those staff (from the database). If the API does not expose totals yet, amounts fall back to HR when names
-          match.
-        </Text>
-
-        {filteredStaff.length > 0 ? (
-          <View style={styles.chartSection}>
-            <Text style={styles.chartSectionTitle}>Staff — revenue share</Text>
-            <Text style={styles.chartSectionSub}>Percent of total net revenue (not peso amounts).</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <BarChart
-                data={{
-                  labels: clerkSharePercentChart.labels,
-                  datasets: [{ data: clerkSharePercentChart.data }],
-                }}
-                width={clerkChartWidth}
-                height={220}
-                yAxisLabel=""
-                yAxisSuffix="%"
-                chartConfig={{
-                  backgroundColor: "#ffffff",
-                  backgroundGradientFrom: "#ffffff",
-                  backgroundGradientTo: "#ffffff",
-                  decimalPlaces: 1,
-                  color: () => "rgba(37, 99, 235, 1)",
-                  labelColor: () => "#334155",
-                  formatYLabel: (y: string) => String(y),
-                  propsForLabels: { fontSize: 11 },
-                  propsForBackgroundLines: { stroke: "#e2e8f0", strokeWidth: 1 },
-                }}
-                style={styles.barChart}
-                fromZero
-                showValuesOnTopOfBars
-                verticalLabelRotation={0}
-              />
-            </ScrollView>
+        {isInitialLoading ? (
+          <View style={styles.loadingState}>
+            <ActivityIndicator size="large" color="#3b82f6" />
           </View>
-        ) : !isLoading ? (
-          <Text style={styles.empty}>No staff accounts for this filter — nothing to chart.</Text>
-        ) : null}
-
-        <Text style={[styles.sectionHeading, { marginTop: 20 }]}>Staff logins (web)</Text>
-        <Text style={styles.sectionHint}>
-          Accounts that can sign in on the web POS. Assign a branch so they work in that location.
-        </Text>
-        {filteredStaff.length === 0 && !isLoading ? (
-          <Text style={styles.empty}>No staff accounts match this filter.</Text>
         ) : (
-          filteredStaff.map((s) => {
-            const linked = hrMatchForStaff(s);
-            const hasDbTotal = "total_revenue_php" in s && s.total_revenue_php != null && s.total_revenue_php !== "";
-            const net = hasDbTotal
-              ? Math.max(0, Number(s.total_revenue_php))
-              : linked
-                ? Number(linked.net_revenue_php || 0)
-                : 0;
-            const gain = linked ? linked.gain_percent || 0 : 0;
-            const loss = linked ? linked.loss_percent || 0 : 0;
-            const outcome = linked?.revenue_outcome || null;
-            const handle = s.email ? `@${String(s.email).split("@")[0]}` : "—";
-            return (
-              <View key={`staff-${s.id}`} style={styles.card}>
-                <View style={styles.cardTop}>
-                  <View style={styles.cardMain}>
-                    <Text style={styles.name}>{s.name}</Text>
-                    <Text style={styles.sub}>{handle}</Text>
-                    <Text
-                      style={[
-                        styles.sub,
-                        styles.presenceLabel,
-                        s.is_active === false
-                          ? styles.presenceDisabled
-                          : s.is_online
-                            ? styles.presenceActive
-                            : styles.presenceInactive,
-                      ]}
-                    >
-                      {s.is_active === false ? "Disabled" : s.is_online ? "Active" : "Inactive"}
-                    </Text>
-                    <Text style={styles.sub}>Branch: {s.branch?.name || "Unassigned"}</Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 2 }}>
-                      <Text style={styles.badge}>{(s.role || "staff").toUpperCase()}</Text>
-                      <Text
-                        style={[styles.sub, { color: outcome ? getOutcomeColor(outcome) : "#64748b" }]}
-                      >
-                        Outcome: {outcome || (linked ? "n/a" : "—")}
-                      </Text>
+          <>
+            <Text style={styles.sectionHeading}>Revenue share</Text>
+            <Text style={styles.sectionHint}>
+              One bar per web staff login (same filters as below). Percentages are shares of total paid POS revenue for
+              those staff (from the database). If the API does not expose totals yet, amounts fall back to HR when names
+              match.
+            </Text>
+
+            {filteredStaff.length > 0 ? (
+              <View style={styles.chartSection}>
+                <Text style={styles.chartSectionTitle}>Staff — revenue share</Text>
+                <Text style={styles.chartSectionSub}>Percent of total net revenue (not peso amounts).</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <BarChart
+                    data={{
+                      labels: clerkSharePercentChart.labels,
+                      datasets: [{ data: clerkSharePercentChart.data }],
+                    }}
+                    width={clerkChartWidth}
+                    height={220}
+                    yAxisLabel=""
+                    yAxisSuffix="%"
+                    chartConfig={{
+                      backgroundColor: "#ffffff",
+                      backgroundGradientFrom: "#ffffff",
+                      backgroundGradientTo: "#ffffff",
+                      decimalPlaces: 1,
+                      color: () => "rgba(37, 99, 235, 1)",
+                      labelColor: () => "#334155",
+                      formatYLabel: (y: string) => String(y),
+                      propsForLabels: { fontSize: 11 },
+                      propsForBackgroundLines: { stroke: "#e2e8f0", strokeWidth: 1 },
+                    }}
+                    style={styles.barChart}
+                    fromZero
+                    showValuesOnTopOfBars
+                    verticalLabelRotation={0}
+                  />
+                </ScrollView>
+              </View>
+            ) : !isLoading ? (
+              <Text style={styles.empty}>No staff accounts for this filter — nothing to chart.</Text>
+            ) : null}
+
+            <Text style={[styles.sectionHeading, { marginTop: 20 }]}>Staff logins (web)</Text>
+            <Text style={styles.sectionHint}>
+              Accounts that can sign in on the web POS. Assign a branch so they work in that location.
+            </Text>
+            {filteredStaff.length === 0 && !isLoading ? (
+              <Text style={styles.empty}>No staff accounts match this filter.</Text>
+            ) : (
+              filteredStaff.map((s) => {
+                const linked = hrMatchForStaff(s);
+                const hasDbTotal = "total_revenue_php" in s && s.total_revenue_php != null && s.total_revenue_php !== "";
+                const net = hasDbTotal
+                  ? Math.max(0, Number(s.total_revenue_php))
+                  : linked
+                    ? Number(linked.net_revenue_php || 0)
+                    : 0;
+                const gain = linked ? linked.gain_percent || 0 : 0;
+                const loss = linked ? linked.loss_percent || 0 : 0;
+                const outcome = linked?.revenue_outcome || null;
+                const handle = s.email ? `@${String(s.email).split("@")[0]}` : "—";
+                return (
+                  <View key={`staff-${s.id}`} style={styles.card}>
+                    <View style={styles.cardTop}>
+                      <View style={styles.cardMain}>
+                        <Text style={styles.name}>{s.name}</Text>
+                        <Text style={styles.sub}>{handle}</Text>
+                        <Text
+                          style={[
+                            styles.sub,
+                            styles.presenceLabel,
+                            s.is_active === false
+                              ? styles.presenceDisabled
+                              : s.is_online
+                                ? styles.presenceActive
+                                : styles.presenceInactive,
+                          ]}
+                        >
+                          {s.is_active === false ? "Disabled" : s.is_online ? "Active" : "Inactive"}
+                        </Text>
+                        <Text style={styles.sub}>Branch: {s.branch?.name || "Unassigned"}</Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 2 }}>
+                          <Text style={styles.badge}>{(s.role || "staff").toUpperCase()}</Text>
+                          <Text
+                            style={[styles.sub, { color: outcome ? getOutcomeColor(outcome) : "#64748b" }]}
+                          >
+                            Outcome: {outcome || (linked ? "n/a" : "—")}
+                          </Text>
+                        </View>
+                      </View>
+                      <TouchableOpacity style={styles.assignBtn} onPress={() => openStaffAssign(s)}>
+                        <Ionicons name="git-branch-outline" size={14} color="#fff" />
+                        <Text style={styles.assignBtnText}>Assign</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={[styles.sub, { marginTop: 4, fontSize: 11 }]}>{s.email}</Text>
+                    <View style={styles.metrics}>
+                      <View style={styles.metric}>
+                        <Text style={styles.metricLabel}>Net Revenue</Text>
+                        <Text style={styles.metricValue}>₱ {net.toFixed(2)}</Text>
+                      </View>
+                      <View style={styles.metric}>
+                        <Text style={styles.metricLabel}>Gain/Loss %</Text>
+                        <Text style={styles.metricValue}>{linked ? `${gain} / ${loss}` : "— / —"}</Text>
+                      </View>
                     </View>
                   </View>
-                  <TouchableOpacity style={styles.assignBtn} onPress={() => openStaffAssign(s)}>
-                    <Ionicons name="git-branch-outline" size={14} color="#fff" />
-                    <Text style={styles.assignBtnText}>Assign</Text>
-                  </TouchableOpacity>
-                </View>
-                <Text style={[styles.sub, { marginTop: 4, fontSize: 11 }]}>{s.email}</Text>
-                <View style={styles.metrics}>
-                  <View style={styles.metric}>
-                    <Text style={styles.metricLabel}>Net Revenue</Text>
-                    <Text style={styles.metricValue}>₱ {net.toFixed(2)}</Text>
-                  </View>
-                  <View style={styles.metric}>
-                    <Text style={styles.metricLabel}>Gain/Loss %</Text>
-                    <Text style={styles.metricValue}>{linked ? `${gain} / ${loss}` : "— / —"}</Text>
-                  </View>
-                </View>
-              </View>
-            );
-          })
+                );
+              })
+            )}
+          </>
         )}
       </ScrollView>
 
@@ -996,6 +1006,11 @@ const styles = StyleSheet.create({
   dropdownItemLast: { borderBottomWidth: 0 },
   dropdownText: { fontSize: 14, color: "#1e293b", fontWeight: "600" },
   content: { padding: 16, paddingBottom: 48 },
+  loadingState: {
+    minHeight: 240,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   toolbar: {
     backgroundColor: "#ffffff",
     borderRadius: 16,

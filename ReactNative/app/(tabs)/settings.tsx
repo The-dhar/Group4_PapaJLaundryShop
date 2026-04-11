@@ -157,6 +157,7 @@ const EmployeeSettingsScreen = () => {
   );
 
   const isOwner = currentUser?.role === "owner";
+  const isLoadingAccess = currentUser === null;
 
   const openEdit = (staff: StaffUser) => {
     setSelectedStaff(staff);
@@ -308,13 +309,11 @@ const EmployeeSettingsScreen = () => {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        {!isOwner ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>
-              Only the shop owner can view and edit employee login accounts.
-            </Text>
+        {isLoadingAccess ? (
+          <View style={styles.loadingState}>
+            <ActivityIndicator size="large" color="#3b82f6" />
           </View>
-        ) : (
+        ) : isOwner ? (
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Text style={styles.cardHeaderTitle}>Staff logins</Text>
@@ -365,7 +364,7 @@ const EmployeeSettingsScreen = () => {
               )}
             </View>
           </View>
-        )}
+        ) : null}
       </ScrollView>
 
       <Modal visible={modalVisible} transparent animationType="fade">
@@ -583,15 +582,12 @@ const styles = StyleSheet.create({
   dropdownItem: { paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: "#e2e8f0" },
   dropdownItemLast: { borderBottomWidth: 0 },
   dropdownText: { fontSize: 14, color: "#1e293b", fontWeight: "600" },
-  notice: {
-    backgroundColor: "#eff6ff",
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 8,
+  loadingState: {
+    flex: 1,
+    minHeight: 240,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  noticeText: { color: "#1e40af", fontWeight: "600", lineHeight: 20 },
   card: {
     backgroundColor: "#ffffff",
     borderRadius: 24,

@@ -7,10 +7,11 @@ Features that are already fixed:
 - Clerk web pages auto-refresh transaction lists without hard refresh.
 - POS customer input fields no longer reset while staff is typing.
 - Mobile Create staff Step 2 now locks verified email, hides verification code entry after success, and supports Change email reset.
+- Mobile Branch and Employees tabs now show a centered loading spinner during initial data fetch, consistent with Employee Settings and Price loading behavior.
 
 ## Project Info
 - Created: 2026-04-11
-- Last Updated: 2026-04-11 (implementation + validation + mobile verification UX)
+- Last Updated: 2026-04-11 (implementation + validation + mobile verification UX + loading consistency)
 
 ## Revision Process
 - Rule: Every new revision must be recorded in this file in the same day it is implemented.
@@ -96,6 +97,18 @@ Features that are already fixed:
 	- Priority: Medium
 	- Dependency: Verification send/check endpoints
 
+### Mobile (ReactNative loading UX consistency)
+- [x] Remove owner-only notice text in Employee Settings and show spinner while access state is loading.
+	- Status: Done
+	- Target Date: 2026-04-14
+	- Priority: Low
+	- Dependency: None
+- [x] Add initial centered loading spinner in Branch and Employees tabs while first payload is loading.
+	- Status: Done
+	- Target Date: 2026-04-14
+	- Priority: Low
+	- Dependency: None
+
 ## Test Scenarios
 - [x] Clerk in Branch A sees all Branch A transactions.
 	- Status: Done
@@ -151,4 +164,5 @@ Features that are already fixed:
 - [x] POS input fields no longer reset while staff is typing (2026-04-11).
 - [x] Staff-to-staff branch transaction visibility confirmed (2026-04-11).
 - [x] Mobile Create staff Step 2 now locks verified email and hides verification code flow after success (2026-04-11).
+- [x] Mobile tabs loading UX aligned: Settings, Branches, Employees, and Price show loading states consistently on initial load (2026-04-11).
 - [ ] End-to-end validation completed.
