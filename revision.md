@@ -11,7 +11,7 @@ Features that are already fixed:
 
 ## Project Info
 - Created: 2026-04-11
-- Last Updated: 2026-04-11 (implementation + validation + mobile verification UX + loading consistency + reports schema migration prep)
+- Last Updated: 2026-04-11 (implementation + validation + mobile verification UX + loading consistency + reports schema and backend API)
 
 ## Revision Process
 - Rule: Every new revision must be recorded in this file in the same day it is implemented.
@@ -166,4 +166,5 @@ Features that are already fixed:
 - [x] Mobile Create staff Step 2 now locks verified email and hides verification code flow after success (2026-04-11).
 - [x] Mobile tabs loading UX aligned: Settings, Branches, Employees, and Price show loading states consistently on initial load (2026-04-11).
 - [x] Added new Laravel migrations for issue reports, backjobs, and report activity logs (2026-04-11).
+- [x] Added backend models, controller logic, and API routes for issue reports/backjobs including role-aware access and activity logging (2026-04-11).
 - [ ] End-to-end validation completed.
