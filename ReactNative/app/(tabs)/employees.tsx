@@ -239,16 +239,20 @@ export default function EmployeesScreen() {
     [hrEmployees]
   );
 
+  const resetCreateEmailVerification = () => {
+    setCCodeSent(false);
+    setCEmailVerified(false);
+    setCVerifiedEmail("");
+    setCVerifyCode("");
+  };
+
   const resetCreate = () => {
     setCreateStep(1);
     setCFirst("");
     setCMiddle("");
     setCLast("");
     setCEmail("");
-    setCVerifyCode("");
-    setCCodeSent(false);
-    setCEmailVerified(false);
-    setCVerifiedEmail("");
+    resetCreateEmailVerification();
     setIsSendingCode(false);
     setIsCheckingCode(false);
     setCPassword("");
@@ -267,6 +271,9 @@ export default function EmployeesScreen() {
     }
     if (!EMAIL_REGEX.test(normalizedCreateEmail)) {
       Alert.alert("Invalid email", "Enter a valid email address before sending a code.");
+      return;
+    }
+    if (cEmailVerified && cVerifiedEmail === normalizedCreateEmail) {
       return;
     }
     try {
@@ -288,6 +295,7 @@ export default function EmployeesScreen() {
       setCCodeSent(true);
       setCEmailVerified(false);
       setCVerifiedEmail("");
+      setCVerifyCode("");
       Alert.alert("Code sent", `A verification code was sent to ${normalizedCreateEmail}.`);
     } catch (error) {
       console.log(error);
@@ -328,6 +336,7 @@ export default function EmployeesScreen() {
       }
       setCEmailVerified(true);
       setCVerifiedEmail(normalizedCreateEmail);
+      setCVerifyCode("");
       Alert.alert("Verified", "Email verified successfully.");
     } catch (error) {
       console.log(error);
@@ -716,42 +725,62 @@ export default function EmployeesScreen() {
               <>
                 <Text style={styles.stepHint}>Login credentials</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, cEmailVerified && styles.inputDisabled]}
                   placeholder="Email"
                   autoCapitalize="none"
                   keyboardType="email-address"
                   value={cEmail}
+                  editable={!cEmailVerified}
                   onChangeText={(text) => {
                     setCEmail(text);
-                    setCCodeSent(false);
-                    setCEmailVerified(false);
-                    setCVerifiedEmail("");
-                    setCVerifyCode("");
+                    resetCreateEmailVerification();
                   }}
                 />
                 <View style={styles.verifyRow}>
-                  <TouchableOpacity style={styles.secondaryBtn} onPress={sendEmailCode} disabled={isSendingCode}>
-                    <Text style={styles.secondaryBtnText}>{isSendingCode ? "Sending..." : "Send code"}</Text>
-                  </TouchableOpacity>
-                  <Text style={[styles.verifyStatus, cEmailVerified ? styles.verifyStatusOk : styles.verifyStatusPending]}>
-                    {cEmailVerified ? "Email verified" : cCodeSent ? "Code sent" : "Not verified"}
-                  </Text>
+                  {cEmailVerified ? (
+                    <>
+                      <Text style={[styles.verifyStatus, styles.verifyStatusOk]}>Email verified</Text>
+                      <TouchableOpacity
+                        style={styles.secondaryBtn}
+                        onPress={resetCreateEmailVerification}
+                      >
+                        <Text style={styles.secondaryBtnText}>Change email</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      <TouchableOpacity
+                        style={styles.secondaryBtn}
+                        onPress={sendEmailCode}
+                        disabled={isSendingCode || !EMAIL_REGEX.test(normalizedCreateEmail)}
+                      >
+                        <Text style={styles.secondaryBtnText}>{isSendingCode ? "Sending..." : "Send code"}</Text>
+                      </TouchableOpacity>
+                      <Text style={[styles.verifyStatus, styles.verifyStatusPending]}>
+                        {cCodeSent ? "Code sent" : "Not verified"}
+                      </Text>
+                    </>
+                  )}
                 </View>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Verification code (6 digits)"
-                  keyboardType="number-pad"
-                  value={cVerifyCode}
-                  onChangeText={setCVerifyCode}
-                  maxLength={6}
-                />
-                <TouchableOpacity
-                  style={[styles.secondaryBtn, { alignSelf: "flex-start" }]}
-                  onPress={verifyEmailCode}
-                  disabled={isCheckingCode}
-                >
-                  <Text style={styles.secondaryBtnText}>{isCheckingCode ? "Verifying..." : "Verify code"}</Text>
-                </TouchableOpacity>
+                {!cEmailVerified && (
+                  <>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Verification code (6 digits)"
+                      keyboardType="number-pad"
+                      value={cVerifyCode}
+                      onChangeText={setCVerifyCode}
+                      maxLength={6}
+                    />
+                    <TouchableOpacity
+                      style={[styles.secondaryBtn, { alignSelf: "flex-start" }]}
+                      onPress={verifyEmailCode}
+                      disabled={isCheckingCode || !cCodeSent || !/^\d{6}$/.test(cVerifyCode.trim())}
+                    >
+                      <Text style={styles.secondaryBtnText}>{isCheckingCode ? "Verifying..." : "Verify code"}</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
                 <TextInput
                   style={styles.input}
                   placeholder="Password (min 6)"
@@ -1107,6 +1136,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     color: "#0f172a",
     backgroundColor: "#fff",
+  },
+  inputDisabled: {
+    backgroundColor: "#f1f5f9",
+    color: "#64748b",
   },
   sectionLabel: { marginTop: 12, marginBottom: 8, color: "#334155", fontWeight: "700" },
   rolePickRow: { flexDirection: "row", gap: 10, marginTop: 8 },
