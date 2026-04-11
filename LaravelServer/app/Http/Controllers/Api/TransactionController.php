@@ -16,7 +16,7 @@ class TransactionController extends Controller
     /**
      * Applies branch employee visibility rules to a transaction query.
      * Clerk: all transactions in current branch.
-     * Staff: only own transactions in current branch.
+        * Staff: staff-created transactions in current branch.
      */
     protected function applyBranchEmployeeVisibility(User $user, $query, bool $failOnMissingBranch = false): void
     {
@@ -37,7 +37,14 @@ class TransactionController extends Controller
         $query->where('branch_id', $user->branch_id);
 
         if ($user->isStaff()) {
-            $query->where('created_by_user_id', $user->id);
+            $query->where(function ($staffScope) use ($user) {
+                $staffScope
+                    ->whereHas('creator', function ($creatorQuery) {
+                        $creatorQuery->where('role', 'staff');
+                    })
+                    // Fallback for edge cases where creator relation cannot be resolved.
+                    ->orWhere('created_by_user_id', $user->id);
+            });
         }
     }
 

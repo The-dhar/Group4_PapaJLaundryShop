@@ -1,7 +1,8 @@
 # Revision Checklist - Clerk and Staff Transaction Isolation
 
 Use this file to track what is done and what is pending.
-- Fixed: staff can now only view and act on their own branch transactions, while clerk keeps full branch transaction visibility.
+Features that are already fixed:
+- Fixed: staff can view and act on staff-created transactions in their assigned branch, while clerk keeps full branch transaction visibility.
 
 ## Project Info
 - Created: 2026-04-11
@@ -20,7 +21,7 @@ Use this file to track what is done and what is pending.
 
 ## Finalized Policy (Locked)
 - [x] Staff can do the same actions as clerk, but only on transactions they are allowed to access.
-- [x] Staff can only see transactions they created.
+- [x] Staff can only see staff-created transactions in their assigned branch (not clerk-created transactions).
 - [x] Clerk can see all transactions in their current assigned branch.
 - [x] Owner behavior stays unchanged.
 - [x] After reassignment, employee access is based on the current assigned branch only.
@@ -81,7 +82,7 @@ Use this file to track what is done and what is pending.
 	- Status: Not Started
 	- Target Date: 2026-04-14
 	- Priority: High
-- [ ] Staff in Branch A sees only transactions they created in Branch A.
+- [ ] Staff in Branch A sees staff-created transactions in Branch A and does not see clerk-created transactions.
 	- Status: Not Started
 	- Target Date: 2026-04-14
 	- Priority: High
@@ -90,6 +91,10 @@ Use this file to track what is done and what is pending.
 	- Target Date: 2026-04-14
 	- Priority: High
 - [ ] Reassigned employee sees transactions only from the newly assigned branch and based on role visibility.
+	- Status: Not Started
+	- Target Date: 2026-04-14
+	- Priority: High
+- [ ] Newly assigned staff account in a branch can view existing staff-created branch transactions.
 	- Status: Not Started
 	- Target Date: 2026-04-14
 	- Priority: High
