@@ -25,7 +25,7 @@ type TransactionRow = {
   amount: number;
   due_date: string;
   branch_name: string;
-  clerk_username: string;
+  created_by_name: string;
 };
 
 const getPaymentColor = (status: string) =>
@@ -78,7 +78,7 @@ export default function TransactionDeviceList() {
           amount: Number(txn.amount || 0),
           due_date: String(txn.due_date || "N/A"),
           branch_name: String(txn.branch_name || "Unknown branch"),
-          clerk_username: String(txn.clerk_username || "Unassigned"),
+          created_by_name: String(txn.created_by_name || "Unknown creator"),
         }))
         .sort((a, b) => b.id - a.id);
 
@@ -231,8 +231,8 @@ export default function TransactionDeviceList() {
                         <Text style={styles.modalValue}>{selected.branch_name}</Text>
                       </View>
                       <View style={styles.modalRow}>
-                        <Text style={styles.modalLabel}>Clerk:</Text>
-                        <Text style={styles.modalValue}>{selected.clerk_username}</Text>
+                        <Text style={styles.modalLabel}>Created By:</Text>
+                        <Text style={styles.modalValue}>{selected.created_by_name}</Text>
                       </View>
                       <View style={styles.modalRow}>
                         <Text style={styles.modalLabel}>Amount:</Text>

@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { API_URL } from "../config/api";
 
 const TransactionsContext = createContext(null);
+const LIVE_POLL_MS = 10000;
 
 const normalizeTransaction = (txn) => {
   const services = Array.isArray(txn.receipt_items)
@@ -57,6 +58,27 @@ export const TransactionsProvider = ({ children }) => {
 
   useEffect(() => {
     fetchTransactions();
+  }, [fetchTransactions]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      fetchTransactions();
+    }, LIVE_POLL_MS);
+
+    const handleVisible = () => {
+      if (document.visibilityState === "visible") {
+        fetchTransactions();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisible);
+    window.addEventListener("focus", handleVisible);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisible);
+      window.removeEventListener("focus", handleVisible);
+    };
   }, [fetchTransactions]);
 
   const createTransaction = async ({
