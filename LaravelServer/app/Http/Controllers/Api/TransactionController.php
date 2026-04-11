@@ -14,6 +14,34 @@ use Illuminate\Validation\ValidationException;
 class TransactionController extends Controller
 {
     /**
+     * Applies branch employee visibility rules to a transaction query.
+     * Clerk: all transactions in current branch.
+     * Staff: only own transactions in current branch.
+     */
+    protected function applyBranchEmployeeVisibility(User $user, $query, bool $failOnMissingBranch = false): void
+    {
+        if (! $user->isBranchEmployee()) {
+            return;
+        }
+
+        if (! $user->branch_id) {
+            if ($failOnMissingBranch) {
+                abort(404);
+            }
+
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->where('branch_id', $user->branch_id);
+
+        if ($user->isStaff()) {
+            $query->where('created_by_user_id', $user->id);
+        }
+    }
+
+    /**
      * branch_id references branches.id (not user ids).
      * Owner must send branch_id; clerk/staff use their assigned users.branch_id.
      */
@@ -44,12 +72,7 @@ class TransactionController extends Controller
     {
         $query = Transaction::where('id', $id);
 
-        if ($user->isBranchEmployee()) {
-            if (! $user->branch_id) {
-                abort(404);
-            }
-            $query->where('branch_id', $user->branch_id);
-        }
+        $this->applyBranchEmployeeVisibility($user, $query, true);
 
         return $query->firstOrFail();
     }
@@ -191,13 +214,11 @@ class TransactionController extends Controller
         $query = Transaction::with([
             'items',
             'branch:id,name,clerk_username',
+            'creator:id,name,first_name,last_name,role',
         ]);
 
         if ($user->isBranchEmployee()) {
-            if (! $user->branch_id) {
-                return response()->json([]);
-            }
-            $query->where('branch_id', $user->branch_id);
+            $this->applyBranchEmployeeVisibility($user, $query);
         } elseif ($user->isOwner() && $request->filled('branch_id')) {
             $query->where('branch_id', (int) $request->input('branch_id'));
         }
@@ -217,6 +238,19 @@ class TransactionController extends Controller
         $transactions = $query->get();
 
         return response()->json($transactions->map(function ($txn) {
+            $creator = $txn->creator;
+            $creatorName = null;
+
+            if ($creator) {
+                $first = trim((string) ($creator->first_name ?? ''));
+                $last = trim((string) ($creator->last_name ?? ''));
+                $full = trim($first.' '.$last);
+
+                $creatorName = $full !== ''
+                    ? $full
+                    : (trim((string) ($creator->name ?? '')) !== '' ? trim((string) $creator->name) : null);
+            }
+
             return [
                 'id' => $txn->id,
                 'receipt' => $txn->receipt_number,
@@ -236,6 +270,9 @@ class TransactionController extends Controller
                 'branch_id' => $txn->branch_id,
                 'branch_name' => optional($txn->branch)->name,
                 'clerk_username' => optional($txn->branch)->clerk_username,
+                'created_by_user_id' => $txn->created_by_user_id,
+                'created_by_name' => $creatorName,
+                'created_by_role' => $creator?->role,
                 'created_at' => $txn->created_at,
                 'receipt_items' => $txn->items->map(function ($item) {
                     return [
