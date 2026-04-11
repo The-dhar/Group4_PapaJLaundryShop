@@ -76,13 +76,16 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/issue-reports', [ReportController::class, 'listIssueReports']);
     Route::get('/report-assignees', [ReportController::class, 'listAssignableEmployees']);
+    Route::get('/report-escalation-clerks', [ReportController::class, 'listEscalationClerks']);
     Route::post('/issue-reports', [ReportController::class, 'createIssueReport']);
+    Route::put('/issue-reports/{id}/escalate', [ReportController::class, 'escalateIssueReport']);
     Route::put('/issue-reports/{id}/under-review', [ReportController::class, 'markIssueUnderReview']);
     Route::put('/issue-reports/{id}/resolve', [ReportController::class, 'resolveIssueReport']);
     Route::put('/issue-reports/{id}/reject', [ReportController::class, 'rejectIssueReport']);
 
     Route::get('/backjobs', [ReportController::class, 'listBackjobs']);
     Route::post('/backjobs', [ReportController::class, 'createBackjob']);
+    Route::put('/backjobs/{id}/escalate', [ReportController::class, 'escalateBackjob']);
     Route::put('/backjobs/{id}/approve', [ReportController::class, 'approveBackjob']);
     Route::put('/backjobs/{id}/start', [ReportController::class, 'startBackjob']);
     Route::put('/backjobs/{id}/complete', [ReportController::class, 'completeBackjob']);

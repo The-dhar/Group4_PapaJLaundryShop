@@ -19,6 +19,17 @@ function getRole() {
   }
 }
 
+function getUserId() {
+  try {
+    const raw = localStorage.getItem('user');
+    const u = raw ? JSON.parse(raw) : null;
+    const id = Number(u?.id);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 function statusClass(status) {
   const s = String(status || '').toLowerCase();
   return `reports-status reports-status-${s.replace(/[^a-z0-9_-]/g, '_')}`;
@@ -68,6 +79,8 @@ export default function ReportsPage() {
   const [backjobStatusFilter, setBackjobStatusFilter] = useState('all');
 
   const role = useMemo(() => getRole(), []);
+  const currentUserId = useMemo(() => getUserId(), []);
+  const isStaff = role === 'staff';
   const canResolve = role === 'owner' || role === 'clerk' || role === 'manager';
 
   const loadData = useCallback(async () => {
@@ -128,6 +141,48 @@ export default function ReportsPage() {
       return backjobStatusFilter === 'all' || String(row.status || '').toLowerCase() === backjobStatusFilter;
     });
   }, [backjobRows, backjobStatusFilter]);
+
+  const pickClerkForEscalation = async (transactionId) => {
+    const rows = await apiRequest(`/report-escalation-clerks?transaction_id=${encodeURIComponent(transactionId)}`);
+    const clerks = Array.isArray(rows) ? rows : [];
+
+    if (clerks.length === 0) {
+      throw new Error('No active clerk available in this branch for escalation.');
+    }
+
+    if (clerks.length === 1) {
+      const only = clerks[0];
+      const confirmation = await Swal.fire({
+        title: 'Escalate to clerk',
+        text: `Assign this case to ${only.name}?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Escalate',
+        cancelButtonText: 'Cancel',
+      });
+
+      if (!confirmation.isConfirmed) return null;
+      return Number(only.id);
+    }
+
+    const options = Object.fromEntries(
+      clerks.map((clerk) => [String(clerk.id), `${clerk.name} (${clerk.role})`])
+    );
+
+    const selection = await Swal.fire({
+      title: 'Escalate to clerk',
+      input: 'select',
+      inputOptions: options,
+      inputPlaceholder: 'Select clerk',
+      showCancelButton: true,
+      confirmButtonText: 'Escalate',
+      cancelButtonText: 'Cancel',
+      inputValidator: (value) => (!value ? 'Please select a clerk.' : undefined),
+    });
+
+    if (!selection.isConfirmed) return null;
+    return Number(selection.value);
+  };
 
   const updateIssue = async (row, action) => {
     if (!canResolve) return;
@@ -228,11 +283,81 @@ export default function ReportsPage() {
     }
   };
 
-  const renderIssueActions = (row) => {
-    if (!canResolve) return <span className="reports-muted">View only</span>;
+  const escalateIssue = async (row) => {
+    if (!isStaff) return;
 
-    const isMutating = mutatingId === `issue-${row.id}`;
+    const transactionId = Number(row.transaction_id || row.transaction?.id || 0);
+    if (!transactionId) {
+      await Swal.fire({ title: 'Escalation failed', text: 'Missing transaction reference.', icon: 'error' });
+      return;
+    }
+
+    try {
+      setMutatingId(`issue-${row.id}`);
+      const clerkId = await pickClerkForEscalation(transactionId);
+      if (!clerkId) return;
+
+      await apiRequest(`/issue-reports/${row.id}/escalate`, {
+        method: 'PUT',
+        body: JSON.stringify({ clerk_user_id: clerkId }),
+      });
+
+      await loadData();
+    } catch (e) {
+      await Swal.fire({ title: 'Escalation failed', text: e.message || 'Request failed.', icon: 'error' });
+    } finally {
+      setMutatingId(null);
+    }
+  };
+
+  const escalateBackjob = async (row) => {
+    if (!isStaff) return;
+
+    const transactionId = Number(row.transaction_id || row.transaction?.id || 0);
+    if (!transactionId) {
+      await Swal.fire({ title: 'Escalation failed', text: 'Missing transaction reference.', icon: 'error' });
+      return;
+    }
+
+    try {
+      setMutatingId(`backjob-${row.id}`);
+      const clerkId = await pickClerkForEscalation(transactionId);
+      if (!clerkId) return;
+
+      await apiRequest(`/backjobs/${row.id}/escalate`, {
+        method: 'PUT',
+        body: JSON.stringify({ clerk_user_id: clerkId }),
+      });
+
+      await loadData();
+    } catch (e) {
+      await Swal.fire({ title: 'Escalation failed', text: e.message || 'Request failed.', icon: 'error' });
+    } finally {
+      setMutatingId(null);
+    }
+  };
+
+  const renderIssueActions = (row) => {
     const status = String(row.status || '').toLowerCase();
+    const isMutating = mutatingId === `issue-${row.id}`;
+
+    if (!canResolve) {
+      if (
+        isStaff &&
+        currentUserId !== null &&
+        Number(row.assigned_employee_user_id) === currentUserId &&
+        (status === 'pending' || status === 'under_review')
+      ) {
+        return (
+          <div className="reports-actions">
+            <button disabled={isMutating} onClick={() => escalateIssue(row)}>Escalate to clerk</button>
+          </div>
+        );
+      }
+
+      return <span className="reports-muted">View only</span>;
+    }
+
 
     if (status === 'resolved' || status === 'rejected') {
       return <span className="reports-muted">Closed</span>;
@@ -251,10 +376,26 @@ export default function ReportsPage() {
   };
 
   const renderBackjobActions = (row) => {
-    if (!canResolve) return <span className="reports-muted">View only</span>;
-
-    const isMutating = mutatingId === `backjob-${row.id}`;
     const status = String(row.status || '').toLowerCase();
+    const isMutating = mutatingId === `backjob-${row.id}`;
+
+    if (!canResolve) {
+      if (
+        isStaff &&
+        currentUserId !== null &&
+        Number(row.assigned_employee_user_id) === currentUserId &&
+        (status === 'pending' || status === 'approved' || status === 'in_progress')
+      ) {
+        return (
+          <div className="reports-actions">
+            <button disabled={isMutating} onClick={() => escalateBackjob(row)}>Escalate to clerk</button>
+          </div>
+        );
+      }
+
+      return <span className="reports-muted">View only</span>;
+    }
+
 
     if (status === 'completed' || status === 'cancelled') {
       return <span className="reports-muted">Closed</span>;

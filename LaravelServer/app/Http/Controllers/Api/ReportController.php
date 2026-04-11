@@ -34,12 +34,43 @@ class ReportController extends Controller
         ]);
 
         $transaction = $this->reportableTransactionForUser($user, (int) $validated['transaction_id']);
+        $allowedRoles = $this->assignableRolesForCreator($user);
 
         $rows = User::query()
             ->where('branch_id', $transaction->branch_id)
-            ->whereIn('role', ['clerk', 'staff'])
+            ->whereIn('role', $allowedRoles)
             ->where('is_active', true)
             ->orderBy('role')
+            ->orderBy('name')
+            ->get(['id', 'name', 'first_name', 'last_name', 'role', 'branch_id']);
+
+        return response()->json($rows->map(function (User $employee) {
+            return [
+                'id' => $employee->id,
+                'name' => $this->displayName($employee),
+                'role' => $employee->role,
+                'branch_id' => $employee->branch_id,
+            ];
+        })->values());
+    }
+
+    public function listEscalationClerks(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user->isStaff()) {
+            return response()->json(['message' => 'Only staff can escalate reports to clerk.'], 403);
+        }
+
+        $validated = $request->validate([
+            'transaction_id' => 'required|integer|exists:transactions,id',
+        ]);
+
+        $transaction = $this->reportableTransactionForUser($user, (int) $validated['transaction_id']);
+
+        $rows = User::query()
+            ->where('branch_id', $transaction->branch_id)
+            ->where('role', 'clerk')
+            ->where('is_active', true)
             ->orderBy('name')
             ->get(['id', 'name', 'first_name', 'last_name', 'role', 'branch_id']);
 
@@ -110,7 +141,8 @@ class ReportController extends Controller
 
         $assignedEmployee = $this->branchEmployeeForTransaction(
             (int) $validated['assigned_employee_user_id'],
-            (int) $transaction->branch_id
+            (int) $transaction->branch_id,
+            $this->assignableRolesForCreator($user)
         );
 
         $report = IssueReport::create([
@@ -137,6 +169,58 @@ class ReportController extends Controller
         ]);
 
         return response()->json($this->serializeIssueReport($report), 201);
+    }
+
+    public function escalateIssueReport(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user->isStaff()) {
+            return response()->json(['message' => 'Only staff can escalate issue reports.'], 403);
+        }
+
+        $validated = $request->validate([
+            'clerk_user_id' => 'required|integer|exists:users,id',
+        ]);
+
+        $report = $this->issueReportForUser($user, $id, true);
+
+        if (! in_array($report->status, self::ISSUE_OPEN_STATUSES, true)) {
+            return response()->json(['message' => 'Only pending or under_review reports can be escalated.'], 422);
+        }
+
+        if ((int) $report->assigned_employee_user_id !== (int) $user->id) {
+            return response()->json(['message' => 'You can only escalate reports assigned to you.'], 403);
+        }
+
+        $clerk = $this->branchEmployeeForTransaction(
+            (int) $validated['clerk_user_id'],
+            (int) $report->branch_id,
+            ['clerk'],
+            'clerk_user_id'
+        );
+
+        if ((int) $report->assigned_employee_user_id === (int) $clerk->id) {
+            return response()->json(['message' => 'This report is already assigned to the selected clerk.'], 422);
+        }
+
+        $oldAssigneeId = (int) $report->assigned_employee_user_id;
+        $report->assigned_employee_user_id = $clerk->id;
+        $report->save();
+
+        $this->logActivity('issue_report', $report->id, 'escalated_to_clerk', $report->status, $report->status, $user->id, null, [
+            'from_assigned_employee_user_id' => $oldAssigneeId,
+            'to_assigned_employee_user_id' => $clerk->id,
+        ]);
+
+        $report->load([
+            'transaction:id,receipt_number,payment_status,customer_name,total_amount,branch_id',
+            'branch:id,name',
+            'reporter:id,name,first_name,last_name,role,branch_id',
+            'assignedEmployee:id,name,first_name,last_name,role,branch_id',
+            'resolver:id,name,first_name,last_name,role',
+        ]);
+
+        return response()->json($this->serializeIssueReport($report));
     }
 
     public function markIssueUnderReview(Request $request, int $id): JsonResponse
@@ -324,7 +408,8 @@ class ReportController extends Controller
 
         $assignedEmployee = $this->branchEmployeeForTransaction(
             (int) $validated['assigned_employee_user_id'],
-            (int) $transaction->branch_id
+            (int) $transaction->branch_id,
+            $this->assignableRolesForCreator($user)
         );
 
         $issueReportId = null;
@@ -365,6 +450,60 @@ class ReportController extends Controller
         ]);
 
         return response()->json($this->serializeBackjob($backjob), 201);
+    }
+
+    public function escalateBackjob(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user->isStaff()) {
+            return response()->json(['message' => 'Only staff can escalate backjobs.'], 403);
+        }
+
+        $validated = $request->validate([
+            'clerk_user_id' => 'required|integer|exists:users,id',
+        ]);
+
+        $backjob = $this->backjobForUser($user, $id, true);
+
+        if (! in_array($backjob->status, self::BACKJOB_OPEN_STATUSES, true)) {
+            return response()->json(['message' => 'Only open backjobs can be escalated.'], 422);
+        }
+
+        if ((int) $backjob->assigned_employee_user_id !== (int) $user->id) {
+            return response()->json(['message' => 'You can only escalate backjobs assigned to you.'], 403);
+        }
+
+        $clerk = $this->branchEmployeeForTransaction(
+            (int) $validated['clerk_user_id'],
+            (int) $backjob->branch_id,
+            ['clerk'],
+            'clerk_user_id'
+        );
+
+        if ((int) $backjob->assigned_employee_user_id === (int) $clerk->id) {
+            return response()->json(['message' => 'This backjob is already assigned to the selected clerk.'], 422);
+        }
+
+        $oldAssigneeId = (int) $backjob->assigned_employee_user_id;
+        $backjob->assigned_employee_user_id = $clerk->id;
+        $backjob->save();
+
+        $this->logActivity('backjob', $backjob->id, 'escalated_to_clerk', $backjob->status, $backjob->status, $user->id, null, [
+            'from_assigned_employee_user_id' => $oldAssigneeId,
+            'to_assigned_employee_user_id' => $clerk->id,
+        ]);
+
+        $backjob->load([
+            'transaction:id,receipt_number,payment_status,customer_name,total_amount,branch_id',
+            'issueReport:id,issue_type,status,transaction_id',
+            'branch:id,name',
+            'creator:id,name,first_name,last_name,role,branch_id',
+            'assignedEmployee:id,name,first_name,last_name,role,branch_id',
+            'approver:id,name,first_name,last_name,role',
+            'completer:id,name,first_name,last_name,role',
+        ]);
+
+        return response()->json($this->serializeBackjob($backjob));
     }
 
     public function approveBackjob(Request $request, int $id): JsonResponse
@@ -531,7 +670,8 @@ class ReportController extends Controller
                     ->whereHas('reporter', function (Builder $reporterQuery) {
                         $reporterQuery->where('role', 'staff');
                     })
-                    ->orWhere('reported_by_user_id', $user->id);
+                    ->orWhere('reported_by_user_id', $user->id)
+                    ->orWhere('assigned_employee_user_id', $user->id);
             });
         }
     }
@@ -563,7 +703,8 @@ class ReportController extends Controller
                     ->whereHas('creator', function (Builder $creatorQuery) {
                         $creatorQuery->where('role', 'staff');
                     })
-                    ->orWhere('created_by_user_id', $user->id);
+                    ->orWhere('created_by_user_id', $user->id)
+                    ->orWhere('assigned_employee_user_id', $user->id);
             });
         }
     }
@@ -608,23 +749,53 @@ class ReportController extends Controller
         }
     }
 
-    protected function branchEmployeeForTransaction(int $userId, int $branchId): User
+    protected function branchEmployeeForTransaction(
+        int $userId,
+        int $branchId,
+        array $allowedRoles,
+        string $validationField = 'assigned_employee_user_id'
+    ): User
     {
         $employee = User::query()->whereKey($userId)->firstOrFail();
+        $normalizedRoles = array_values(array_unique(array_map(
+            fn ($role) => strtolower(trim((string) $role)),
+            $allowedRoles
+        )));
 
-        if (! ($employee->isClerk() || $employee->isStaff())) {
+        if (empty($normalizedRoles)) {
             throw ValidationException::withMessages([
-                'assigned_employee_user_id' => ['Assigned user must be a clerk or staff account.'],
+                $validationField => ['No assignable roles are available for this request.'],
+            ]);
+        }
+
+        $roleLabels = implode(' or ', $normalizedRoles);
+
+        if (! in_array(strtolower((string) $employee->role), $normalizedRoles, true)) {
+            throw ValidationException::withMessages([
+                $validationField => ['Selected user must be a '.$roleLabels.' account.'],
             ]);
         }
 
         if ((int) ($employee->branch_id ?? 0) !== $branchId) {
             throw ValidationException::withMessages([
-                'assigned_employee_user_id' => ['Assigned employee must belong to the same branch as the transaction.'],
+                $validationField => ['Selected user must belong to the same branch as the transaction.'],
             ]);
         }
 
         return $employee;
+    }
+
+    protected function assignableRolesForCreator(User $user): array
+    {
+        if ($user->isStaff()) {
+            return ['staff'];
+        }
+
+        if ($user->isOwner() || $user->isManager() || $user->isClerk()) {
+            return ['clerk', 'staff'];
+        }
+
+        return [];
     }
 
     protected function assertPaidTransaction(Transaction $transaction): void

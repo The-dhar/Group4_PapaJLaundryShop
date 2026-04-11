@@ -13,7 +13,7 @@ Features that are already fixed:
 
 ## Project Info
 - Created: 2026-04-11
-- Last Updated: 2026-04-11 (implementation + validation + mobile verification UX + loading consistency + reports schema/backend/web flow + reports UX polish)
+- Last Updated: 2026-04-11 (implementation + validation + mobile verification UX + loading consistency + reports schema/backend/web flow + reports UX polish + QA pass results + local env/migration/test verification + assignment policy refinement)
 
 ## Revision Process
 - Rule: Every new revision must be recorded in this file in the same day it is implemented.
@@ -181,4 +181,12 @@ Features that are already fixed:
 - [x] Added backend models, controller logic, and API routes for issue reports/backjobs including role-aware access and activity logging (2026-04-11).
 - [x] Added ReactJS Reports page, sidebar routing, and receipt report creation modal integrated with new reports APIs (2026-04-11).
 - [x] Added Reports tab query routing, lightweight status/type filters, and post-submit "Go to Reports" navigation from Receipt Management (2026-04-11).
+- [x] QA: Verified report/backjob API route registration (issue-reports, backjobs, report-assignees) in backend route list (2026-04-11).
+- [x] QA: Verified ReactJS production build completes successfully; warnings are from pre-existing unrelated files (2026-04-11).
+- [x] QA: Resolved local test environment blockers by generating Laravel Vite build assets and creating local .env from .env.example (2026-04-11).
+- [x] QA: Backend test suite passes locally (41 passed, 132 assertions) after environment setup (2026-04-11).
+- [x] QA: Applied pending local migrations successfully, including issue reports/backjobs/report activity tables (2026-04-11).
+- [x] Policy update: Staff report creation assignment is now staff-only, while clerk/owner/manager can assign staff or clerk (same branch only) (2026-04-11).
+- [x] Workflow update: Added explicit staff-only "Escalate to clerk" action on Reports for open issue reports and backjobs assigned to the current staff user (2026-04-11).
+- [x] Visibility update: Staff can now view open issue reports/backjobs assigned to them, even when created by clerk/owner/manager (2026-04-11).
 - [ ] End-to-end validation completed.
