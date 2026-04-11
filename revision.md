@@ -13,7 +13,7 @@ Features that are already fixed:
 
 ## Project Info
 - Created: 2026-04-11
-- Last Updated: 2026-04-11 (implementation + validation + mobile verification UX + loading consistency + reports schema/backend/web flow + reports UX polish + QA pass results + local env/migration/test verification + assignment policy refinement)
+- Last Updated: 2026-04-11 (implementation + validation + mobile verification UX + loading consistency + reports schema/backend/web flow + reports UX polish + QA pass results + local env/migration/test verification + assignment policy refinement + overdue penalty persistence/enforcement)
 
 ## Revision Process
 - Rule: Every new revision must be recorded in this file in the same day it is implemented.
@@ -189,4 +189,9 @@ Features that are already fixed:
 - [x] Policy update: Staff report creation assignment is now staff-only, while clerk/owner/manager can assign staff or clerk (same branch only) (2026-04-11).
 - [x] Workflow update: Added explicit staff-only "Escalate to clerk" action on Reports for open issue reports and backjobs assigned to the current staff user (2026-04-11).
 - [x] Visibility update: Staff can now view open issue reports/backjobs assigned to them, even when created by clerk/owner/manager (2026-04-11).
+- [x] Policy update: Overdue penalty now uses warning tier for 3-29 days and suggested full-amount penalty for 30+ days while still in shop (2026-04-11).
+- [x] Backend update: Added transaction penalty persistence fields (`penalty_amount`, `penalty_suggested_amount`, `penalty_override_reason`) with API validation and mark-paid enforcement (2026-04-11).
+- [x] Frontend update: Inventory and Express payment modals now prefill suggested penalty at 30+ days, keep penalty editable, and require override reason when below suggested amount (2026-04-11).
+- [x] Validation: Ran Laravel migration for penalty columns and backend tests including new `TransactionPenaltyPolicyTest` (44 passed, 144 assertions) (2026-04-11).
+- [x] Validation: Ran ReactJS production build successfully after penalty UI updates (2026-04-11).
 - [ ] End-to-end validation completed.

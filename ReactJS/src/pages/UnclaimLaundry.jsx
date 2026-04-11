@@ -254,7 +254,7 @@ const UnclaimLaundry = () => {
               <p><strong>Total Amount:</strong> ₱{selectedTxn.amount.toFixed(2)}</p>
               <p><strong>Payment Method:</strong> {selectedTxn.payment_method || 'Cash'}</p>
               <p><strong>Paid Amount:</strong> ₱{(Number(selectedTxn.paid_amount) || 0).toFixed(2)}</p>
-              <p><strong>Penalty:</strong> ₱{(Number(selectedTxn.penalty) || 0).toFixed(2)}</p>
+              <p><strong>Penalty:</strong> ₱{(Number(selectedTxn.penalty_amount ?? selectedTxn.penalty) || 0).toFixed(2)}</p>
               <p><strong>Due Date:</strong> {selectedTxn.due_date}</p>
               <p><strong>Payment Status:</strong> {selectedTxn.payment_status}</p>
               <p><strong>Inventory Status:</strong> {formatInventoryStatus(selectedTxn.inventory_status)}</p>
@@ -264,7 +264,7 @@ const UnclaimLaundry = () => {
                   style={{
                     color:
                       selectedTxn.amount +
-                        (Number(selectedTxn.penalty) || 0) -
+                        (Number(selectedTxn.penalty_amount ?? selectedTxn.penalty) || 0) -
                         (Number(selectedTxn.paid_amount) || 0) >
                       0
                         ? 'red'
@@ -274,7 +274,7 @@ const UnclaimLaundry = () => {
                   ₱
                   {(
                     selectedTxn.amount +
-                    (Number(selectedTxn.penalty) || 0) -
+                    (Number(selectedTxn.penalty_amount ?? selectedTxn.penalty) || 0) -
                     (Number(selectedTxn.paid_amount) || 0)
                   ).toFixed(2)}
                 </span>
