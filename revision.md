@@ -2,11 +2,18 @@
 
 Use this file to track what is done and what is pending.
 Features that are already fixed:
-- Fixed: staff can view and act on staff-created transactions in their assigned branch, while clerk keeps full branch transaction visibility.
+- Staff can view and act on staff-created transactions in their assigned branch, while clerk keeps full branch transaction visibility.
+- Newly assigned staff accounts can see existing staff-created transactions in their assigned branch.
+- Clerk web pages auto-refresh transaction lists without hard refresh.
+- POS customer input fields no longer reset while staff is typing.
+- Mobile Create staff Step 2 now locks verified email, hides verification code entry after success, and supports Change email reset.
 
 ## Project Info
 - Created: 2026-04-11
-- Last Updated: 2026-04-11 (implementation pass + validation)
+- Last Updated: 2026-04-11 (implementation + validation + mobile verification UX)
+
+## Revision Process
+- Rule: Every new revision must be recorded in this file in the same day it is implemented.
 
 ## Legend
 - [x] Done
@@ -77,6 +84,18 @@ Features that are already fixed:
 	- Dependency: Backend access checks complete
 - [x] Notes: Updated mobile transaction screens to show Created By from API creator fields.
 
+### Mobile (ReactNative create staff verification)
+- [x] After email verification, lock email input and hide verification code field/actions.
+	- Status: Done
+	- Target Date: 2026-04-14
+	- Priority: Medium
+	- Dependency: Verification send/check endpoints
+- [x] Add Change email action that resets verification state safely.
+	- Status: Done
+	- Target Date: 2026-04-14
+	- Priority: Medium
+	- Dependency: Verification send/check endpoints
+
 ## Test Scenarios
 - [x] Clerk in Branch A sees all Branch A transactions.
 	- Status: Done
@@ -98,6 +117,10 @@ Features that are already fixed:
 	- Status: Done
 	- Target Date: 2026-04-14
 	- Priority: High
+- [x] In Create staff Step 2 on mobile, verified email locks and verification code input is removed until Change email is tapped.
+	- Status: Done
+	- Target Date: 2026-04-14
+	- Priority: Medium
 - [ ] Owner still sees expected transaction data by selected branch and date filters.
 	- Status: Not Started
 	- Target Date: 2026-04-14
@@ -127,4 +150,5 @@ Features that are already fixed:
 - [x] Clerk live auto-fetch now shows new staff transactions without hard refresh (2026-04-11).
 - [x] POS input fields no longer reset while staff is typing (2026-04-11).
 - [x] Staff-to-staff branch transaction visibility confirmed (2026-04-11).
+- [x] Mobile Create staff Step 2 now locks verified email and hides verification code flow after success (2026-04-11).
 - [ ] End-to-end validation completed.
