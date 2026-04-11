@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import DataTable from 'react-data-table-component';
 import { BsEye, BsPrinter, BsCheck, BsFlag } from 'react-icons/bs';
+import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../components/dashboardlayout';
 import TransactionExtrasSummary from '../components/TransactionExtrasSummary';
 import { useTransactions } from '../context/transactionsContext';
@@ -21,6 +22,7 @@ function formatInventoryStatus(status) {
 }
 
 const Receiptmanagement = () => {
+  const navigate = useNavigate();
   const { transactions, archiveTransaction, updateTransaction } = useTransactions();
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -470,14 +472,22 @@ const Receiptmanagement = () => {
         throw new Error(parseApiError(payload));
       }
 
-      await Swal.fire({
+      const destinationTab = reportType === 'issue' ? 'issues' : 'backjobs';
+      const nextResult = await Swal.fire({
         title: reportType === 'issue' ? 'Issue report created' : 'Backjob created',
+        text: 'Open the Reports page now?',
         icon: 'success',
-        timer: 1300,
-        showConfirmButton: false,
+        showCancelButton: true,
+        confirmButtonText: 'Go to Reports',
+        cancelButtonText: 'Stay here',
       });
 
       closeReportModal();
+
+      if (nextResult.isConfirmed) {
+        setSelectedReceipt(null);
+        navigate(`/Reports?tab=${destinationTab}`);
+      }
     } catch (e) {
       await Swal.fire({
         title: 'Could not create report',

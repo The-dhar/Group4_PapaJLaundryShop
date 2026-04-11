@@ -71,6 +71,31 @@
   padding: 10px 12px;
 }
 
+.reports-filterbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.reports-filterbar label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.reports-filterbar select {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-width: 160px;
+  background: #fff;
+  color: #1e293b;
+}
+
 .reports-loading,
 .reports-empty {
   text-align: center;

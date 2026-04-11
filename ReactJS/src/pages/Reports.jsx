@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import DashboardLayout from '../components/dashboardlayout';
 import { API_URL } from '../config/api';
@@ -47,12 +48,24 @@ async function apiRequest(path, options = {}) {
 }
 
 export default function ReportsPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const getTabFromQuery = useCallback(() => {
+    const params = new URLSearchParams(location.search || '');
+    const tab = String(params.get('tab') || '').toLowerCase();
+    return tab === 'backjobs' ? 'backjobs' : 'issues';
+  }, [location.search]);
+
   const [activeTab, setActiveTab] = useState('issues');
   const [issueRows, setIssueRows] = useState([]);
   const [backjobRows, setBackjobRows] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [mutatingId, setMutatingId] = useState(null);
+  const [issueStatusFilter, setIssueStatusFilter] = useState('all');
+  const [issueTypeFilter, setIssueTypeFilter] = useState('all');
+  const [backjobStatusFilter, setBackjobStatusFilter] = useState('all');
 
   const role = useMemo(() => getRole(), []);
   const canResolve = role === 'owner' || role === 'clerk' || role === 'manager';
@@ -77,6 +90,44 @@ export default function ReportsPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    setActiveTab(getTabFromQuery());
+  }, [getTabFromQuery]);
+
+  const switchTab = (nextTab) => {
+    setActiveTab(nextTab);
+    navigate(`/Reports?tab=${nextTab}`, { replace: true });
+  };
+
+  const issueStatusOptions = useMemo(() => {
+    const values = new Set(issueRows.map((row) => String(row.status || '').toLowerCase()).filter(Boolean));
+    return ['all', ...Array.from(values).sort()];
+  }, [issueRows]);
+
+  const issueTypeOptions = useMemo(() => {
+    const values = new Set(issueRows.map((row) => String(row.issue_type || '').toLowerCase()).filter(Boolean));
+    return ['all', ...Array.from(values).sort()];
+  }, [issueRows]);
+
+  const backjobStatusOptions = useMemo(() => {
+    const values = new Set(backjobRows.map((row) => String(row.status || '').toLowerCase()).filter(Boolean));
+    return ['all', ...Array.from(values).sort()];
+  }, [backjobRows]);
+
+  const filteredIssueRows = useMemo(() => {
+    return issueRows.filter((row) => {
+      const byStatus = issueStatusFilter === 'all' || String(row.status || '').toLowerCase() === issueStatusFilter;
+      const byType = issueTypeFilter === 'all' || String(row.issue_type || '').toLowerCase() === issueTypeFilter;
+      return byStatus && byType;
+    });
+  }, [issueRows, issueStatusFilter, issueTypeFilter]);
+
+  const filteredBackjobRows = useMemo(() => {
+    return backjobRows.filter((row) => {
+      return backjobStatusFilter === 'all' || String(row.status || '').toLowerCase() === backjobStatusFilter;
+    });
+  }, [backjobRows, backjobStatusFilter]);
 
   const updateIssue = async (row, action) => {
     if (!canResolve) return;
@@ -241,16 +292,48 @@ export default function ReportsPage() {
         <div className="reports-tabs">
           <button
             className={activeTab === 'issues' ? 'active' : ''}
-            onClick={() => setActiveTab('issues')}
+            onClick={() => switchTab('issues')}
           >
             Issue Reports
           </button>
           <button
             className={activeTab === 'backjobs' ? 'active' : ''}
-            onClick={() => setActiveTab('backjobs')}
+            onClick={() => switchTab('backjobs')}
           >
             Backjobs
           </button>
+        </div>
+
+        <div className="reports-filterbar">
+          {activeTab === 'issues' ? (
+            <>
+              <label>
+                Status
+                <select value={issueStatusFilter} onChange={(e) => setIssueStatusFilter(e.target.value)}>
+                  {issueStatusOptions.map((v) => (
+                    <option key={`issue-status-${v}`} value={v}>{v === 'all' ? 'All' : v}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Type
+                <select value={issueTypeFilter} onChange={(e) => setIssueTypeFilter(e.target.value)}>
+                  {issueTypeOptions.map((v) => (
+                    <option key={`issue-type-${v}`} value={v}>{v === 'all' ? 'All' : v}</option>
+                  ))}
+                </select>
+              </label>
+            </>
+          ) : (
+            <label>
+              Status
+              <select value={backjobStatusFilter} onChange={(e) => setBackjobStatusFilter(e.target.value)}>
+                {backjobStatusOptions.map((v) => (
+                  <option key={`backjob-status-${v}`} value={v}>{v === 'all' ? 'All' : v}</option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
 
         {error ? <div className="reports-error">{error}</div> : null}
@@ -272,9 +355,9 @@ export default function ReportsPage() {
                 </tr>
               </thead>
               <tbody>
-                {issueRows.length === 0 ? (
+                {filteredIssueRows.length === 0 ? (
                   <tr><td colSpan={7} className="reports-empty">No issue reports yet.</td></tr>
-                ) : issueRows.map((row) => (
+                ) : filteredIssueRows.map((row) => (
                   <tr key={`issue-${row.id}`}>
                     <td>{row.transaction?.receipt || '—'}</td>
                     <td>{row.transaction?.customer_name || '—'}</td>
@@ -311,9 +394,9 @@ export default function ReportsPage() {
                 </tr>
               </thead>
               <tbody>
-                {backjobRows.length === 0 ? (
+                {filteredBackjobRows.length === 0 ? (
                   <tr><td colSpan={7} className="reports-empty">No backjobs yet.</td></tr>
-                ) : backjobRows.map((row) => (
+                ) : filteredBackjobRows.map((row) => (
                   <tr key={`backjob-${row.id}`}>
                     <td>{row.transaction?.receipt || '—'}</td>
                     <td>{row.transaction?.customer_name || '—'}</td>
