@@ -491,10 +491,11 @@ export default function ClerkLogsList() {
 
       const mapped: ClerkLog[] = (Array.isArray(data) ? data : []).map((txn: any) => {
         const invRaw = String(txn.inventory_status || "").toLowerCase();
+        const creatorName = String(txn.created_by_name || "").trim();
         return {
           id: Number(txn.id),
           receipt_id: txn.receipt || `REC-${txn.id}`,
-          clerk_name: txn.clerk_username || "Unassigned",
+          clerk_name: creatorName || "Unknown creator",
           branch: txn.branch_name || "Unknown branch",
           customer_name: txn.customer_name || "Unknown customer",
           amount: Number(txn.amount || 0),
@@ -689,7 +690,7 @@ export default function ClerkLogsList() {
             <View style={{ width: TABLE_MIN_WIDTH, alignSelf: "flex-start" }}>
               <View style={styles.tableHeader}>
                 <Text style={[styles.thCell, { width: COL.receipt }]}>Receipt ID</Text>
-                <Text style={[styles.thCell, { width: COL.clerk }]}>Clerk</Text>
+                <Text style={[styles.thCell, { width: COL.clerk }]}>Created By</Text>
                 <Text style={[styles.thCell, { width: COL.branch }]}>Branch</Text>
                 <Text style={[styles.thCell, { width: COL.customer }]}>Customer</Text>
                 <Text style={[styles.thCell, { width: COL.amount }]}>Amount</Text>
@@ -1102,7 +1103,7 @@ export default function ClerkLogsList() {
                     <Text style={styles.modalValue}>{selectedLog.receipt_id}</Text>
                   </View>
                   <View style={styles.modalRow}>
-                    <Text style={styles.modalLabel}>Clerk Name:</Text>
+                    <Text style={styles.modalLabel}>Created By:</Text>
                     <Text style={styles.modalValue}>{selectedLog.clerk_name}</Text>
                   </View>
                   <View style={styles.modalRow}>
