@@ -4,6 +4,13 @@ import { API_URL } from "../config/api";
 const TransactionsContext = createContext(null);
 const LIVE_POLL_MS = 10000;
 
+function shouldPollTransactions() {
+  if (typeof window === "undefined") return true;
+  const path = String(window.location.pathname || "").toLowerCase();
+  // Polling while encoding a POS transaction can cause disruptive re-renders.
+  return !path.startsWith("/pos");
+}
+
 const normalizeTransaction = (txn) => {
   const services = Array.isArray(txn.receipt_items)
     ? txn.receipt_items.map((item) => ({
@@ -42,15 +49,27 @@ export const TransactionsProvider = ({ children }) => {
 
       const res = await fetch(`${API_URL}/transactions?include_archived=1`, {
         headers: {
-          "Content-Type": "application/json",
+          Accept: "application/json",
           Authorization: `Bearer ${token}`,
         },
       });
 
-      if (!res.ok) throw new Error("Failed to fetch transactions");
+      if (res.status === 401 || res.status === 403) {
+        setTransactions([]);
+        return;
+      }
+
+      if (!res.ok) {
+        return;
+      }
+
+      const contentType = String(res.headers.get("content-type") || "").toLowerCase();
+      if (!contentType.includes("application/json")) {
+        return;
+      }
 
       const data = await res.json();
-      setTransactions(data.map(normalizeTransaction));
+      setTransactions(Array.isArray(data) ? data.map(normalizeTransaction) : []);
     } catch (error) {
       console.error("Error fetching transactions:", error);
     }
@@ -62,11 +81,13 @@ export const TransactionsProvider = ({ children }) => {
 
   useEffect(() => {
     const intervalId = setInterval(() => {
-      fetchTransactions();
+      if (shouldPollTransactions()) {
+        fetchTransactions();
+      }
     }, LIVE_POLL_MS);
 
     const handleVisible = () => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === "visible" && shouldPollTransactions()) {
         fetchTransactions();
       }
     };
