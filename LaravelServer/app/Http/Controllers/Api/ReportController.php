@@ -127,7 +127,7 @@ class ReportController extends Controller
             'transaction_id' => 'required|integer|exists:transactions,id',
             'issue_type' => 'required|string|in:damaged,lost,other',
             'issue_note' => 'nullable|string|max:2000',
-            'assigned_employee_user_id' => 'required|integer|exists:users,id',
+            'assigned_employee_user_id' => 'nullable|integer|exists:users,id',
         ]);
 
         if ($validated['issue_type'] === 'other' && trim((string) ($validated['issue_note'] ?? '')) === '') {
@@ -139,11 +139,15 @@ class ReportController extends Controller
         $transaction = $this->reportableTransactionForUser($user, (int) $validated['transaction_id']);
         $this->assertPaidTransaction($transaction);
 
-        $assignedEmployee = $this->branchEmployeeForTransaction(
-            (int) $validated['assigned_employee_user_id'],
-            (int) $transaction->branch_id,
-            $this->assignableRolesForCreator($user)
-        );
+        if (! empty($validated['assigned_employee_user_id'])) {
+            $assignedEmployee = $this->branchEmployeeForTransaction(
+                (int) $validated['assigned_employee_user_id'],
+                (int) $transaction->branch_id,
+                $this->assignableRolesForCreator($user)
+            );
+        } else {
+            $assignedEmployee = $this->defaultAssignedEmployeeForTransaction($user, $transaction);
+        }
 
         $report = IssueReport::create([
             'transaction_id' => $transaction->id,
@@ -398,7 +402,7 @@ class ReportController extends Controller
         $validated = $request->validate([
             'transaction_id' => 'required|integer|exists:transactions,id',
             'issue_report_id' => 'nullable|integer|exists:issue_reports,id',
-            'assigned_employee_user_id' => 'required|integer|exists:users,id',
+            'assigned_employee_user_id' => 'nullable|integer|exists:users,id',
             'reason_note' => 'nullable|string|max:2000',
         ]);
 
@@ -406,11 +410,15 @@ class ReportController extends Controller
         $this->assertPaidTransaction($transaction);
         $this->assertNoOpenBackjob((int) $transaction->id);
 
-        $assignedEmployee = $this->branchEmployeeForTransaction(
-            (int) $validated['assigned_employee_user_id'],
-            (int) $transaction->branch_id,
-            $this->assignableRolesForCreator($user)
-        );
+        if (! empty($validated['assigned_employee_user_id'])) {
+            $assignedEmployee = $this->branchEmployeeForTransaction(
+                (int) $validated['assigned_employee_user_id'],
+                (int) $transaction->branch_id,
+                $this->assignableRolesForCreator($user)
+            );
+        } else {
+            $assignedEmployee = $this->defaultAssignedEmployeeForTransaction($user, $transaction);
+        }
 
         $issueReportId = null;
         if (! empty($validated['issue_report_id'])) {
@@ -747,6 +755,30 @@ class ReportController extends Controller
                     ->orWhere('created_by_user_id', $user->id);
             });
         }
+    }
+
+    /**
+     * First active branch employee matching assignable roles (same ordering as listAssignableEmployees).
+     * Used when the client omits assigned_employee_user_id.
+     */
+    protected function defaultAssignedEmployeeForTransaction(User $creator, Transaction $transaction): User
+    {
+        $allowedRoles = $this->assignableRolesForCreator($creator);
+        $employee = User::query()
+            ->where('branch_id', $transaction->branch_id)
+            ->whereIn('role', $allowedRoles)
+            ->where('is_active', true)
+            ->orderBy('role')
+            ->orderBy('name')
+            ->first();
+
+        if (! $employee) {
+            throw ValidationException::withMessages([
+                'assigned_employee_user_id' => ['No active clerk or staff is available for this branch to assign.'],
+            ]);
+        }
+
+        return $employee;
     }
 
     protected function branchEmployeeForTransaction(

@@ -34,9 +34,6 @@ const Receiptmanagement = () => {
   const [issueType, setIssueType] = useState('damaged');
   const [issueNote, setIssueNote] = useState('');
   const [backjobNote, setBackjobNote] = useState('');
-  const [assignedEmployeeId, setAssignedEmployeeId] = useState('');
-  const [assignableEmployees, setAssignableEmployees] = useState([]);
-  const [isLoadingAssignees, setIsLoadingAssignees] = useState(false);
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
   // Receipt Management: paid transactions only (unpaid belong in POS / collection flow)
@@ -354,8 +351,6 @@ const Receiptmanagement = () => {
     setIssueType('damaged');
     setIssueNote('');
     setBackjobNote('');
-    setAssignedEmployeeId('');
-    setAssignableEmployees([]);
   };
 
   const parseApiError = (payload) => {
@@ -371,49 +366,11 @@ const Receiptmanagement = () => {
     return 'Request failed.';
   };
 
-  const loadAssignableEmployees = async (transactionId) => {
-    const token = localStorage.getItem('token');
-    if (!token) throw new Error('Not authenticated.');
-
-    setIsLoadingAssignees(true);
-    try {
-      const res = await fetch(`${API_URL}/report-assignees?transaction_id=${encodeURIComponent(transactionId)}`, {
-        headers: {
-          Accept: 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(parseApiError(payload));
-      }
-
-      const rows = Array.isArray(payload) ? payload : [];
-      setAssignableEmployees(rows);
-      if (rows.length > 0) {
-        setAssignedEmployeeId(String(rows[0].id));
-      }
-    } finally {
-      setIsLoadingAssignees(false);
-    }
-  };
-
-  const openReportModal = async () => {
+  const openReportModal = () => {
     if (!selectedReceipt) return;
 
     resetReportForm();
     setShowReportModal(true);
-    try {
-      await loadAssignableEmployees(selectedReceipt.id);
-    } catch (e) {
-      await Swal.fire({
-        title: 'Cannot load assignees',
-        text: e.message || 'Failed to load assignee options.',
-        icon: 'error',
-      });
-      setShowReportModal(false);
-    }
   };
 
   const closeReportModal = () => {
@@ -424,11 +381,6 @@ const Receiptmanagement = () => {
   const handleSubmitReport = async () => {
     if (!selectedReceipt) return;
     if (isSubmittingReport) return;
-
-    if (!assignedEmployeeId) {
-      await Swal.fire({ title: 'Missing assignee', text: 'Please select an employee.', icon: 'warning' });
-      return;
-    }
 
     if (reportType === 'issue' && issueType === 'other' && issueNote.trim() === '') {
       await Swal.fire({ title: 'Missing details', text: 'Please provide issue details for type "other".', icon: 'warning' });
@@ -448,12 +400,10 @@ const Receiptmanagement = () => {
             transaction_id: selectedReceipt.id,
             issue_type: issueType,
             issue_note: issueNote.trim() || null,
-            assigned_employee_user_id: Number(assignedEmployeeId),
           }
         : {
             transaction_id: selectedReceipt.id,
             reason_note: backjobNote.trim() || null,
-            assigned_employee_user_id: Number(assignedEmployeeId),
           };
 
       const endpoint = reportType === 'issue' ? '/issue-reports' : '/backjobs';
@@ -787,25 +737,6 @@ const Receiptmanagement = () => {
               </>
             )}
 
-            <label>Assign employee</label>
-            <select
-              value={assignedEmployeeId}
-              onChange={(e) => setAssignedEmployeeId(e.target.value)}
-              disabled={isLoadingAssignees}
-            >
-              {isLoadingAssignees ? (
-                <option value="">Loading employees...</option>
-              ) : assignableEmployees.length === 0 ? (
-                <option value="">No available employees</option>
-              ) : (
-                assignableEmployees.map((employee) => (
-                  <option key={employee.id} value={String(employee.id)}>
-                    {employee.name} ({employee.role})
-                  </option>
-                ))
-              )}
-            </select>
-
             <div className="receipt-report-actions">
               <button className="receipt-btn-cancel" onClick={closeReportModal} disabled={isSubmittingReport}>
                 Cancel
@@ -813,7 +744,7 @@ const Receiptmanagement = () => {
               <button
                 className="receipt-btn-report-submit"
                 onClick={handleSubmitReport}
-                disabled={isSubmittingReport || isLoadingAssignees || assignableEmployees.length === 0}
+                disabled={isSubmittingReport}
               >
                 {isSubmittingReport ? 'Submitting...' : 'Submit Report'}
               </button>

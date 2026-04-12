@@ -252,6 +252,11 @@ class StaffAccountController extends Controller
                 'createdTransactions as total_revenue_php' => function ($q) {
                     $q->where('payment_status', 'paid')->where('archived', false);
                 },
+                'createdTransactions as today_revenue_php' => function ($q) {
+                    $q->where('payment_status', 'paid')
+                        ->where('archived', false)
+                        ->whereBetween('created_at', [now()->startOfDay(), now()->endOfDay()]);
+                },
             ], 'total_amount')
             ->orderBy('name');
     }
