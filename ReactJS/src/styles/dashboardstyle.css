@@ -379,19 +379,31 @@ tr:hover {
     }
 }
 
-/* Refund charts: global `.card-content { height: 50% }` breaks Recharts layout */
-.dashboard-refunds-section .custom-card .card-content {
-    height: auto;
+/* Refund cards: `.custom-card { height: 50% }` clips charts — expand and allow overflow */
+.dashboard-refunds-section .custom-card {
+    height: auto !important;
+    max-height: none !important;
     min-height: 0;
+    overflow: visible;
+    flex-shrink: 0;
+}
+
+.dashboard-refunds-section .custom-card .card-content {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0;
+    overflow: visible;
 }
 
 .refund-chart-wrap {
     width: 100%;
     min-height: 228px;
     margin: 0;
-    padding-bottom: 4px;
+    padding-bottom: 2px;
 }
 
-.refund-chart-wrap .recharts-responsive-container {
+.refund-chart-inner {
+    width: 100%;
     min-height: 228px;
+    overflow: visible;
 }

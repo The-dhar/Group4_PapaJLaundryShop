@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BsBoxSeam, BsExclamationTriangle, BsCreditCard } from 'react-icons/bs';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import Card from '../components/card';
@@ -8,6 +8,8 @@ import { API_URL } from '../config/api';
 import '../styles/dashboardstyle.css';
 
 const POLL_MS = 45_000;
+
+const formatPeso = (value) => `₱${Number(value).toLocaleString()}`;
 
 /** Same calendar windows as revenue charts (transaction dates). Refunds use `resolved_at` with the same windows. */
 function getViewDateBounds(viewType) {
@@ -136,6 +138,79 @@ function buildRefundSeries(viewType, refunds) {
   return rows;
 }
 
+const REFUND_CHART_H = 228;
+
+/** Fixed-size LineChart driven by container width — avoids ResponsiveContainer delay/clipping with percentage-height cards. */
+const RefundLineChart = memo(function RefundLineChart({ data }) {
+  const wrapRef = useRef(null);
+  const [width, setWidth] = useState(0);
+
+  useLayoutEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return undefined;
+
+    const measure = () => {
+      const w = Math.floor(el.getBoundingClientRect().width);
+      if (w > 0) setWidth((prev) => (prev === w ? prev : w));
+    };
+
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  return (
+    <div ref={wrapRef} className="refund-chart-inner">
+      {width > 0 ? (
+        <LineChart
+          width={width}
+          height={REFUND_CHART_H}
+          data={data}
+          margin={{ top: 12, right: 12, left: 2, bottom: 28 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+          <XAxis
+            dataKey="name"
+            tick={{ fill: '#64748b', fontSize: 12 }}
+            tickLine={false}
+            axisLine={{ stroke: '#cbd5e1' }}
+            tickMargin={12}
+            padding={{ left: 12, right: 12 }}
+            height={44}
+          />
+          <YAxis
+            width={54}
+            tick={{ fill: '#64748b', fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(value) => `₱${value}`}
+            domain={[0, 'auto']}
+          />
+          <Tooltip
+            formatter={(value) => formatPeso(value)}
+            contentStyle={{
+              borderRadius: 8,
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
+            }}
+          />
+          <Line
+            type="monotone"
+            dataKey="refunds"
+            name="Refunds"
+            stroke="#0d9488"
+            strokeWidth={2}
+            dot={{ r: 3, strokeWidth: 2, fill: '#fff' }}
+            activeDot={{ r: 5 }}
+            isAnimationActive={false}
+          />
+        </LineChart>
+      ) : null}
+    </div>
+  );
+});
+
 const Dashboard = () => {
   const { transactions, fetchTransactions } = useTransactions();
   const [viewType, setViewType] = useState('week');
@@ -198,9 +273,6 @@ const Dashboard = () => {
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [fetchTransactions, fetchBranchesAndReports]);
-
-  // Helper to format amount with peso sign
-  const formatPeso = (value) => `₱${value.toLocaleString()}`;
 
   const activeTransactions = useMemo(
     () => transactions.filter((t) => !t.archived),
@@ -518,49 +590,7 @@ const Dashboard = () => {
                     </div>
                   </div>
                   <div className="refund-chart-wrap">
-                    <ResponsiveContainer width="100%" height={228}>
-                      <LineChart
-                        data={stats.chart}
-                        margin={{ top: 12, right: 12, left: 2, bottom: 28 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                        <XAxis
-                          dataKey="name"
-                          tick={{ fill: '#64748b', fontSize: 12 }}
-                          tickLine={false}
-                          axisLine={{ stroke: '#cbd5e1' }}
-                          tickMargin={12}
-                          padding={{ left: 12, right: 12 }}
-                          height={44}
-                        />
-                        <YAxis
-                          width={54}
-                          tick={{ fill: '#64748b', fontSize: 11 }}
-                          tickLine={false}
-                          axisLine={false}
-                          tickFormatter={(value) => `₱${value}`}
-                          domain={[0, 'auto']}
-                        />
-                        <Tooltip
-                          formatter={(value) => formatPeso(value)}
-                          contentStyle={{
-                            borderRadius: 8,
-                            border: '1px solid #e2e8f0',
-                            boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
-                          }}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="refunds"
-                          name="Refunds"
-                          stroke="#0d9488"
-                          strokeWidth={2}
-                          dot={{ r: 3, strokeWidth: 2, fill: '#fff' }}
-                          activeDot={{ r: 5 }}
-                          isAnimationActive={false}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
+                    <RefundLineChart data={stats.chart} />
                   </div>
                 </Card>
               );
