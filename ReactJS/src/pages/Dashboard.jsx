@@ -496,10 +496,6 @@ const Dashboard = () => {
         </Card>
 
         <div className="dashboard-refunds-section">
-          <h2 className="dashboard-refunds-heading">Refunds by branch</h2>
-          <p className="dashboard-refunds-sub">
-            Resolved issue cases with refund resolution. Amounts use the linked receipt total. Use the same period as the revenue chart above.
-          </p>
           {sortedBranches.length === 0 ? (
             <p className="dashboard-refunds-empty">No branches loaded.</p>
           ) : (
@@ -521,30 +517,51 @@ const Dashboard = () => {
                       <span className="refund-kpi-value">{stats.count}</span>
                     </div>
                   </div>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={stats.chart} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <Legend
-                        verticalAlign="top"
-                        align="center"
-                        iconType="circle"
-                        iconSize={10}
-                        wrapperStyle={{ paddingBottom: 8 }}
-                        formatter={(value) => <span style={{ color: '#334155', fontSize: 13 }}>{value}</span>}
-                      />
-                      <XAxis dataKey="name" />
-                      <YAxis tickFormatter={(value) => `₱${value}`} />
-                      <Tooltip formatter={(value) => formatPeso(value)} />
-                      <Line
-                        type="monotone"
-                        dataKey="refunds"
-                        name="Refunds"
-                        stroke="#0d9488"
-                        strokeWidth={3}
-                        dot={{ r: 4 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <div className="refund-chart-wrap">
+                    <ResponsiveContainer width="100%" height={228}>
+                      <LineChart
+                        data={stats.chart}
+                        margin={{ top: 12, right: 12, left: 2, bottom: 28 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                        <XAxis
+                          dataKey="name"
+                          tick={{ fill: '#64748b', fontSize: 12 }}
+                          tickLine={false}
+                          axisLine={{ stroke: '#cbd5e1' }}
+                          tickMargin={12}
+                          padding={{ left: 12, right: 12 }}
+                          height={44}
+                        />
+                        <YAxis
+                          width={54}
+                          tick={{ fill: '#64748b', fontSize: 11 }}
+                          tickLine={false}
+                          axisLine={false}
+                          tickFormatter={(value) => `₱${value}`}
+                          domain={[0, 'auto']}
+                        />
+                        <Tooltip
+                          formatter={(value) => formatPeso(value)}
+                          contentStyle={{
+                            borderRadius: 8,
+                            border: '1px solid #e2e8f0',
+                            boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
+                          }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="refunds"
+                          name="Refunds"
+                          stroke="#0d9488"
+                          strokeWidth={2}
+                          dot={{ r: 3, strokeWidth: 2, fill: '#fff' }}
+                          activeDot={{ r: 5 }}
+                          isAnimationActive={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
                 </Card>
               );
             })

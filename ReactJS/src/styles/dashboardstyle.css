@@ -335,22 +335,6 @@ tr:hover {
     order: 2;
 }
 
-.dashboard-refunds-heading {
-    font-size: 18px;
-    font-weight: 700;
-    color: #0f172a;
-    margin: 4px 0 0;
-    font-family: "Segoe UI", Roboto, sans-serif;
-}
-
-.dashboard-refunds-sub {
-    font-size: 13px;
-    color: #64748b;
-    margin: 0 0 8px;
-    line-height: 1.45;
-    max-width: 720px;
-}
-
 .dashboard-refunds-empty {
     color: #64748b;
     font-size: 14px;
@@ -393,4 +377,21 @@ tr:hover {
     .refund-branch-kpis {
         grid-template-columns: 1fr;
     }
+}
+
+/* Refund charts: global `.card-content { height: 50% }` breaks Recharts layout */
+.dashboard-refunds-section .custom-card .card-content {
+    height: auto;
+    min-height: 0;
+}
+
+.refund-chart-wrap {
+    width: 100%;
+    min-height: 228px;
+    margin: 0;
+    padding-bottom: 4px;
+}
+
+.refund-chart-wrap .recharts-responsive-container {
+    min-height: 228px;
 }
