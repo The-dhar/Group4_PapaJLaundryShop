@@ -40,9 +40,34 @@ type StaffUser = {
   total_revenue_php?: number | string | null;
   /** Sum of paid POS transactions created today (app timezone), from API. */
   today_revenue_php?: number | string | null;
+  /** Sum of paid POS in current calendar week (Carbon week), from API. */
+  week_revenue_php?: number | string | null;
+  /** Sum of paid POS in current calendar month, from API. */
+  month_revenue_php?: number | string | null;
 };
 
 type RoleFilter = "all" | "clerk" | "staff";
+
+type ProfitPeriod = "today" | "week" | "month";
+
+const PROFIT_PERIOD_LABEL: Record<ProfitPeriod, string> = {
+  today: "Profit (today)",
+  week: "Profit (this week)",
+  month: "Profit (this month)",
+};
+
+function profitAmountForPeriod(s: StaffUser, period: ProfitPeriod): number | null {
+  const key =
+    period === "today"
+      ? "today_revenue_php"
+      : period === "week"
+        ? "week_revenue_php"
+        : "month_revenue_php";
+  const row = s as Record<string, unknown>;
+  if (!Object.prototype.hasOwnProperty.call(row, key)) return null;
+  const raw = Number(row[key] ?? 0);
+  return Math.max(0, Number.isFinite(raw) ? raw : 0);
+}
 
 /** HR / clerk record from `/employees` (revenue metrics for chart). */
 type HrEmployee = {
@@ -121,6 +146,7 @@ export default function EmployeesScreen() {
   const [hrEmployees, setHrEmployees] = useState<HrEmployee[]>([]);
   const [selectedBranchName, setSelectedBranchName] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
+  const [profitPeriod, setProfitPeriod] = useState<ProfitPeriod>("today");
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createStep, setCreateStep] = useState(1);
@@ -563,6 +589,28 @@ export default function EmployeesScreen() {
             })}
           </ScrollView>
 
+          <Text style={[styles.toolbarLabel, { marginTop: 10 }]}>Profit period</Text>
+          <View style={styles.segmentRow}>
+            {(
+              [
+                ["today", "Today"],
+                ["week", "This week"],
+                ["month", "This month"],
+              ] as const
+            ).map(([key, label]) => {
+              const active = profitPeriod === key;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  style={[styles.segmentChip, active && styles.segmentChipActive]}
+                  onPress={() => setProfitPeriod(key)}
+                >
+                  <Text style={[styles.segmentChipText, active && styles.segmentChipTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
           <View style={styles.toolbarActions}>
             <TouchableOpacity style={styles.secondaryBtn} onPress={loadData}>
               <Ionicons name="refresh-outline" size={14} color="#1e293b" />
@@ -646,12 +694,7 @@ export default function EmployeesScreen() {
                     ? Number(linked.net_revenue_php || 0)
                     : 0;
                 const outcome = linked?.revenue_outcome || null;
-                /** API may send 0, or null when SUM has no rows — both are "no profit today" → show ₱ 0.00. */
-                const hasTodayField = "today_revenue_php" in s;
-                const rawToday = hasTodayField ? Number(s.today_revenue_php ?? 0) : NaN;
-                const profitToday = hasTodayField
-                  ? Math.max(0, Number.isFinite(rawToday) ? rawToday : 0)
-                  : null;
+                const profitValue = profitAmountForPeriod(s, profitPeriod);
                 const handle = s.email ? `@${String(s.email).split("@")[0]}` : "—";
                 return (
                   <View key={`staff-${s.id}`} style={styles.card}>
@@ -694,9 +737,9 @@ export default function EmployeesScreen() {
                         <Text style={styles.metricValue}>₱ {net.toFixed(2)}</Text>
                       </View>
                       <View style={styles.metric}>
-                        <Text style={styles.metricLabel}>Profit (today)</Text>
+                        <Text style={styles.metricLabel}>{PROFIT_PERIOD_LABEL[profitPeriod]}</Text>
                         <Text style={styles.metricValue}>
-                          {profitToday !== null ? `₱ ${profitToday.toFixed(2)}` : "—"}
+                          {profitValue !== null ? `₱ ${profitValue.toFixed(2)}` : "—"}
                         </Text>
                       </View>
                     </View>
