@@ -326,3 +326,71 @@ tr:hover {
         min-width: 100%;
     }
 }
+
+.dashboard-refunds-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+    order: 2;
+}
+
+.dashboard-refunds-heading {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 4px 0 0;
+    font-family: "Segoe UI", Roboto, sans-serif;
+}
+
+.dashboard-refunds-sub {
+    font-size: 13px;
+    color: #64748b;
+    margin: 0 0 8px;
+    line-height: 1.45;
+    max-width: 720px;
+}
+
+.dashboard-refunds-empty {
+    color: #64748b;
+    font-size: 14px;
+    margin: 0;
+}
+
+.refund-branch-kpis {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.refund-kpi {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.refund-kpi-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.refund-kpi-value {
+    font-size: 22px;
+    font-weight: 800;
+    color: #0f172a;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 520px) {
+    .refund-branch-kpis {
+        grid-template-columns: 1fr;
+    }
+}

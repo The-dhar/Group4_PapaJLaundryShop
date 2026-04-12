@@ -138,10 +138,6 @@ export default function EmployeesScreen() {
   const [cBranchId, setCBranchId] = useState<number | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  const [assignStaffOpen, setAssignStaffOpen] = useState(false);
-  const [assignStaffUser, setAssignStaffUser] = useState<StaffUser | null>(null);
-  const [assignStaffBranchId, setAssignStaffBranchId] = useState<number | null>(null);
-
   const loadData = useCallback(async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
     try {
@@ -395,47 +391,6 @@ export default function EmployeesScreen() {
     }
   };
 
-  const openStaffAssign = (staff: StaffUser) => {
-    setAssignStaffUser(staff);
-    setAssignStaffBranchId(staff.branch?.id ?? null);
-    setAssignStaffOpen(true);
-  };
-
-  const assignStaffBranch = async () => {
-    if (!assignStaffUser) return;
-    try {
-      setIsSaving(true);
-      if (!token) throw new Error("Not authenticated");
-      const headers = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      };
-      const response = await fetch(`${API_URL}/staff-accounts/${assignStaffUser.id}`, {
-        method: "PUT",
-        headers,
-        body: JSON.stringify({
-          branch_id: assignStaffBranchId,
-        }),
-      });
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        Alert.alert("Assign failed", formatLaravelApiError(err, response.status));
-        return;
-      }
-      setAssignStaffOpen(false);
-      setAssignStaffUser(null);
-      setAssignStaffBranchId(null);
-      await loadData();
-      Alert.alert("Updated", "Branch assignment saved for this web login.");
-    } catch (error) {
-      console.log(error);
-      Alert.alert("Assign failed", "Unable to assign branch.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleProfile = () => {
     setOpen(false);
     router.push("/profile");
@@ -630,7 +585,7 @@ export default function EmployeesScreen() {
 
             <Text style={[styles.sectionHeading, { marginTop: 20 }]}>Staff logins (web)</Text>
             <Text style={styles.sectionHint}>
-              Accounts that can sign in on the web POS. Assign a branch so they work in that location.
+              Accounts that can sign in on the web POS. Assign a branch in Emp. Settings.
             </Text>
             {filteredStaff.length === 0 && !isLoading ? (
               <Text style={styles.empty}>No staff accounts match this filter.</Text>
@@ -649,37 +604,31 @@ export default function EmployeesScreen() {
                 const handle = s.email ? `@${String(s.email).split("@")[0]}` : "—";
                 return (
                   <View key={`staff-${s.id}`} style={styles.card}>
-                    <View style={styles.cardTop}>
-                      <View style={styles.cardMain}>
-                        <Text style={styles.name}>{s.name}</Text>
-                        <Text style={styles.sub}>{handle}</Text>
+                    <View style={styles.cardMain}>
+                      <Text style={styles.name}>{s.name}</Text>
+                      <Text style={styles.sub}>{handle}</Text>
+                      <Text
+                        style={[
+                          styles.sub,
+                          styles.presenceLabel,
+                          s.is_active === false
+                            ? styles.presenceDisabled
+                            : s.is_online
+                              ? styles.presenceActive
+                              : styles.presenceInactive,
+                        ]}
+                      >
+                        {s.is_active === false ? "Disabled" : s.is_online ? "Active" : "Inactive"}
+                      </Text>
+                      <Text style={styles.sub}>Branch: {s.branch?.name || "Unassigned"}</Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 2 }}>
+                        <Text style={styles.badge}>{(s.role || "staff").toUpperCase()}</Text>
                         <Text
-                          style={[
-                            styles.sub,
-                            styles.presenceLabel,
-                            s.is_active === false
-                              ? styles.presenceDisabled
-                              : s.is_online
-                                ? styles.presenceActive
-                                : styles.presenceInactive,
-                          ]}
+                          style={[styles.sub, { color: outcome ? getOutcomeColor(outcome) : "#64748b" }]}
                         >
-                          {s.is_active === false ? "Disabled" : s.is_online ? "Active" : "Inactive"}
+                          Outcome: {outcome || (linked ? "n/a" : "—")}
                         </Text>
-                        <Text style={styles.sub}>Branch: {s.branch?.name || "Unassigned"}</Text>
-                        <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 2 }}>
-                          <Text style={styles.badge}>{(s.role || "staff").toUpperCase()}</Text>
-                          <Text
-                            style={[styles.sub, { color: outcome ? getOutcomeColor(outcome) : "#64748b" }]}
-                          >
-                            Outcome: {outcome || (linked ? "n/a" : "—")}
-                          </Text>
-                        </View>
                       </View>
-                      <TouchableOpacity style={styles.assignBtn} onPress={() => openStaffAssign(s)}>
-                        <Ionicons name="git-branch-outline" size={14} color="#fff" />
-                        <Text style={styles.assignBtnText}>Assign</Text>
-                      </TouchableOpacity>
                     </View>
                     <Text style={[styles.sub, { marginTop: 4, fontSize: 11 }]}>{s.email}</Text>
                     <View style={styles.metrics}>
@@ -901,62 +850,6 @@ export default function EmployeesScreen() {
         </View>
       </Modal>
 
-      <Modal visible={assignStaffOpen} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Assign branch (web login)</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setAssignStaffOpen(false);
-                  setAssignStaffUser(null);
-                }}
-              >
-                <Text style={styles.modalCloseText}>X</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.sectionLabel}>{assignStaffUser?.name}</Text>
-            <Text style={[styles.sub, { marginBottom: 8 }]}>{assignStaffUser?.email}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <TouchableOpacity
-                style={[styles.chip, assignStaffBranchId === null && styles.chipActive]}
-                onPress={() => setAssignStaffBranchId(null)}
-              >
-                <Text style={[styles.chipText, assignStaffBranchId === null && styles.chipTextActive]}>Unassigned</Text>
-              </TouchableOpacity>
-              {branches.map((branch) => {
-                const active = assignStaffBranchId === branch.id;
-                return (
-                  <TouchableOpacity
-                    key={branch.id}
-                    style={[styles.chip, active && styles.chipActive]}
-                    onPress={() => setAssignStaffBranchId(branch.id)}
-                  >
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{branch.name}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.secondaryBtn}
-                onPress={() => {
-                  setAssignStaffOpen(false);
-                  setAssignStaffUser(null);
-                }}
-              >
-                <Text style={styles.secondaryBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryBtn} onPress={assignStaffBranch} disabled={isSaving}>
-                <Text style={styles.primaryBtnText}>{isSaving ? "Saving..." : "Save"}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
     </SafeAreaView>
   );
 }
@@ -1076,25 +969,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
   },
-  cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
-  cardMain: { flex: 1, minWidth: 0 },
+  cardMain: { minWidth: 0 },
   name: { fontSize: 16, fontWeight: "800", color: "#0f172a" },
   sub: { fontSize: 12, color: "#64748b", marginTop: 2 },
   presenceLabel: { fontWeight: "700" },
   presenceActive: { color: "#16a34a" },
   presenceInactive: { color: "#dc2626" },
   presenceDisabled: { color: "#94a3b8" },
-  assignBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#2563eb",
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    flexShrink: 0,
-  },
-  assignBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
   metrics: { flexDirection: "row", marginTop: 12, gap: 10, alignItems: "stretch" },
   metric: {
     flex: 1,
