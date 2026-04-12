@@ -209,7 +209,7 @@ const RefundLineChart = memo(function RefundLineChart({ data }) {
       ) : null}
     </div>
   );
-});
+}, (prev, next) => prev.data === next.data);
 
 const Dashboard = () => {
   const { transactions, fetchTransactions } = useTransactions();
@@ -279,23 +279,26 @@ const Dashboard = () => {
     [transactions]
   );
 
+  /** One range object per view — avoids calling getViewDateBounds twice per render. */
+  const viewBounds = useMemo(() => getViewDateBounds(viewType), [viewType]);
+
   const filteredTransactions = useMemo(() => {
-    const { start, end } = getViewDateBounds(viewType);
+    const { start, end } = viewBounds;
     return activeTransactions.filter((t) => {
       const dt = new Date(t.created_at || t.updated_at || Date.now());
       return dt >= start && dt <= end;
     });
-  }, [activeTransactions, viewType]);
+  }, [activeTransactions, viewBounds]);
 
   const refundsInView = useMemo(() => {
-    const { start, end } = getViewDateBounds(viewType);
+    const { start, end } = viewBounds;
     return issueReports.filter((r) => {
       if (String(r.status || '').toLowerCase() !== 'resolved') return false;
       if (String(r.resolution_type || '').toLowerCase() !== 'refund') return false;
       const dt = new Date(r.resolved_at || r.updated_at || 0);
       return dt >= start && dt <= end;
     });
-  }, [issueReports, viewType]);
+  }, [issueReports, viewBounds]);
 
   const sortedBranches = useMemo(
     () => [...branches].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
@@ -446,14 +449,22 @@ const Dashboard = () => {
     return rows;
   }, [filteredTransactions]);
 
-  const chartData =
-    viewType === 'today'
-      ? todayData
-      : viewType === 'week'
-        ? weekData
-        : viewType === 'month'
-          ? monthData
-          : yearData;
+  const chartData = useMemo(() => {
+    if (viewType === 'today') return todayData;
+    if (viewType === 'week') return weekData;
+    if (viewType === 'month') return monthData;
+    return yearData;
+  }, [viewType, todayData, weekData, monthData, yearData]);
+
+  /** Stable empty series for refund fallback (avoid buildRefundSeries in render). */
+  const emptyRefundChart = useMemo(() => buildRefundSeries(viewType, []), [viewType]);
+
+  const revenueTooltipFormatter = useCallback((value) => formatPeso(value), []);
+  const revenueYAxisTick = useCallback((value) => `₱${value}`, []);
+  const revenueLegendFormatter = useCallback(
+    (value) => <span style={{ color: '#334155', fontSize: 13 }}>{value}</span>,
+    []
+  );
 
   const recentTransactions = useMemo(
     () =>
@@ -462,6 +473,11 @@ const Dashboard = () => {
         .slice(0, 8),
     [filteredTransactions]
   );
+
+  const setViewToday = useCallback(() => setViewType('today'), []);
+  const setViewWeek = useCallback(() => setViewType('week'), []);
+  const setViewMonth = useCallback(() => setViewType('month'), []);
+  const setViewYear = useCallback(() => setViewType('year'), []);
 
   return (
     <DashboardLayout>
@@ -509,25 +525,25 @@ const Dashboard = () => {
           <div className="chart-controls">
             <button
               className={`chart-toggle-btn ${viewType === 'today' ? 'active' : ''}`}
-              onClick={() => setViewType('today')}
+              onClick={setViewToday}
             >
               Today
             </button>
             <button 
               className={`chart-toggle-btn ${viewType === 'week' ? 'active' : ''}`}
-              onClick={() => setViewType('week')}
+              onClick={setViewWeek}
             >
               Weekly
             </button>
             <button 
               className={`chart-toggle-btn ${viewType === 'month' ? 'active' : ''}`}
-              onClick={() => setViewType('month')}
+              onClick={setViewMonth}
             >
               Monthly
             </button>
             <button
               className={`chart-toggle-btn ${viewType === 'year' ? 'active' : ''}`}
-              onClick={() => setViewType('year')}
+              onClick={setViewYear}
             >
               Yearly
             </button>
@@ -542,11 +558,11 @@ const Dashboard = () => {
       iconType="circle"
       iconSize={10}
       wrapperStyle={{ paddingBottom: 8 }}
-      formatter={(value) => <span style={{ color: '#334155', fontSize: 13 }}>{value}</span>}
+      formatter={revenueLegendFormatter}
     />
     <XAxis dataKey="name" />
-    <YAxis tickFormatter={(value) => `₱${value}`} />
-    <Tooltip formatter={(value) => formatPeso(value)} />
+    <YAxis tickFormatter={revenueYAxisTick} />
+    <Tooltip formatter={revenueTooltipFormatter} />
     <Line
       type="monotone"
       dataKey="revenue"
@@ -575,7 +591,7 @@ const Dashboard = () => {
               const stats = refundStatsByBranch.get(Number(branch.id)) || {
                 count: 0,
                 total: 0,
-                chart: buildRefundSeries(viewType, []),
+                chart: emptyRefundChart,
               };
               return (
                 <Card key={`refunds-branch-${branch.id}`} title={`Refunds — ${branch.name || `Branch ${branch.id}`}`}>

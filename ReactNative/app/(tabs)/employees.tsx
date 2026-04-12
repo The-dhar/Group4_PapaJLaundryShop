@@ -646,9 +646,12 @@ export default function EmployeesScreen() {
                     ? Number(linked.net_revenue_php || 0)
                     : 0;
                 const outcome = linked?.revenue_outcome || null;
-                const hasToday =
-                  "today_revenue_php" in s && s.today_revenue_php != null && s.today_revenue_php !== "";
-                const profitToday = hasToday ? Math.max(0, Number(s.today_revenue_php)) : null;
+                /** API may send 0, or null when SUM has no rows — both are "no profit today" → show ₱ 0.00. */
+                const hasTodayField = "today_revenue_php" in s;
+                const rawToday = hasTodayField ? Number(s.today_revenue_php ?? 0) : NaN;
+                const profitToday = hasTodayField
+                  ? Math.max(0, Number.isFinite(rawToday) ? rawToday : 0)
+                  : null;
                 const handle = s.email ? `@${String(s.email).split("@")[0]}` : "—";
                 return (
                   <View key={`staff-${s.id}`} style={styles.card}>
