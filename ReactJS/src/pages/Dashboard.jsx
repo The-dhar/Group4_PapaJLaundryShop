@@ -9,6 +9,27 @@ import '../styles/dashboardstyle.css';
 
 const POLL_MS = 45_000;
 
+const BRANCHES_SESSION_KEY = 'dashboard_refunds_branches_v1';
+
+function readBranchesCache() {
+  try {
+    const raw = sessionStorage.getItem(BRANCHES_SESSION_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeBranchesCache(rows) {
+  try {
+    sessionStorage.setItem(BRANCHES_SESSION_KEY, JSON.stringify(rows));
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
 const formatPeso = (value) => `₱${Number(value).toLocaleString()}`;
 
 /** Same calendar windows as revenue charts (transaction dates). Refunds use `resolved_at` with the same windows. */
@@ -214,8 +235,11 @@ const RefundLineChart = memo(function RefundLineChart({ data }) {
 const Dashboard = () => {
   const { transactions, fetchTransactions } = useTransactions();
   const [viewType, setViewType] = useState('week');
-  const [branches, setBranches] = useState([]);
+  /** Restored from session on mount so navigating away/back does not flash empty. */
+  const [branches, setBranches] = useState(() => readBranchesCache());
   const [issueReports, setIssueReports] = useState([]);
+  /** False until the first /branches + /issue-reports attempt finishes (success or fail). */
+  const [branchListFetchDone, setBranchListFetchDone] = useState(false);
 
   const fetchBranchesAndReports = useCallback(async () => {
     try {
@@ -236,7 +260,9 @@ const Dashboard = () => {
         const ct = String(brRes.headers.get('content-type') || '').toLowerCase();
         if (ct.includes('application/json')) {
           const data = await brRes.json();
-          setBranches(Array.isArray(data) ? data : []);
+          const rows = Array.isArray(data) ? data : [];
+          setBranches(rows);
+          writeBranchesCache(rows);
         }
       }
 
@@ -251,6 +277,8 @@ const Dashboard = () => {
       }
     } catch (e) {
       console.error('Dashboard refund data:', e);
+    } finally {
+      setBranchListFetchDone(true);
     }
   }, []);
 
@@ -300,21 +328,38 @@ const Dashboard = () => {
     });
   }, [issueReports, viewBounds]);
 
-  const sortedBranches = useMemo(
+  const sortedBranchesFromApi = useMemo(
     () => [...branches].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
     [branches]
   );
 
+  /**
+   * Prefer GET /branches. If that list is empty (e.g. still loading, or some roles get 403),
+   * derive branch rows from issue reports so refund-by-branch still works.
+   */
+  const branchesForRefunds = useMemo(() => {
+    if (sortedBranchesFromApi.length > 0) return sortedBranchesFromApi;
+    const map = new Map();
+    issueReports.forEach((r) => {
+      const id = Number(r.branch_id);
+      if (!Number.isFinite(id) || id <= 0) return;
+      if (!map.has(id)) {
+        map.set(id, { id, name: String(r.branch_name || `Branch ${id}`) });
+      }
+    });
+    return [...map.values()].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  }, [sortedBranchesFromApi, issueReports]);
+
   const refundStatsByBranch = useMemo(() => {
     const map = new Map();
-    sortedBranches.forEach((b) => {
+    branchesForRefunds.forEach((b) => {
       const id = Number(b.id);
       const list = refundsInView.filter((r) => Number(r.branch_id) === id);
       const total = list.reduce((sum, r) => sum + refundAmountFromReport(r), 0);
       map.set(id, { count: list.length, total, chart: buildRefundSeries(viewType, list) });
     });
     return map;
-  }, [sortedBranches, refundsInView, viewType]);
+  }, [branchesForRefunds, refundsInView, viewType]);
 
   const paidTotal = useMemo(
     () =>
@@ -584,10 +629,12 @@ const Dashboard = () => {
         </Card>
 
         <div className="dashboard-refunds-section">
-          {sortedBranches.length === 0 ? (
-            <p className="dashboard-refunds-empty">No branches loaded.</p>
+          {!branchListFetchDone && branchesForRefunds.length === 0 ? (
+            <p className="dashboard-refunds-empty">Loading branch data…</p>
+          ) : branchesForRefunds.length === 0 ? (
+            <p className="dashboard-refunds-empty">No branches available for your account.</p>
           ) : (
-            sortedBranches.map((branch) => {
+            branchesForRefunds.map((branch) => {
               const stats = refundStatsByBranch.get(Number(branch.id)) || {
                 count: 0,
                 total: 0,
