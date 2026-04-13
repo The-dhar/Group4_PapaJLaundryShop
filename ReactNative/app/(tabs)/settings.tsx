@@ -317,7 +317,6 @@ const EmployeeSettingsScreen = () => {
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Text style={styles.cardHeaderTitle}>Staff logins</Text>
-              <Text style={styles.headerEdit}>Edit</Text>
             </View>
 
             <View style={styles.listContainer}>
