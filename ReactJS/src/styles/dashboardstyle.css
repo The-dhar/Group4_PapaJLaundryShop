@@ -326,3 +326,84 @@ tr:hover {
         min-width: 100%;
     }
 }
+
+.dashboard-refunds-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+    order: 2;
+}
+
+.dashboard-refunds-empty {
+    color: #64748b;
+    font-size: 14px;
+    margin: 0;
+}
+
+.refund-branch-kpis {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.refund-kpi {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.refund-kpi-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.refund-kpi-value {
+    font-size: 22px;
+    font-weight: 800;
+    color: #0f172a;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 520px) {
+    .refund-branch-kpis {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Refund cards: `.custom-card { height: 50% }` clips charts — expand and allow overflow */
+.dashboard-refunds-section .custom-card {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0;
+    overflow: visible;
+    flex-shrink: 0;
+}
+
+.dashboard-refunds-section .custom-card .card-content {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0;
+    overflow: visible;
+}
+
+.refund-chart-wrap {
+    width: 100%;
+    min-height: 228px;
+    margin: 0;
+    padding-bottom: 2px;
+}
+
+.refund-chart-inner {
+    width: 100%;
+    min-height: 228px;
+    overflow: visible;
+}

@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import DataTable from 'react-data-table-component';
-import { BsEye, BsPrinter, BsCheck } from 'react-icons/bs';
+import { BsEye, BsPrinter, BsCheck, BsFlag } from 'react-icons/bs';
+import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../components/dashboardlayout';
 import TransactionExtrasSummary from '../components/TransactionExtrasSummary';
 import { useTransactions } from '../context/transactionsContext';
+import { API_URL } from '../config/api';
 import '../styles/receiptstyle.css';
 import { jsPDF } from 'jspdf';
 import Swal from 'sweetalert2';
@@ -20,12 +22,19 @@ function formatInventoryStatus(status) {
 }
 
 const Receiptmanagement = () => {
+  const navigate = useNavigate();
   const { transactions, archiveTransaction, updateTransaction } = useTransactions();
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterInventory, setFilterInventory] = useState('All');
   const [selectedReceipt, setSelectedReceipt] = useState(null);
   const [viewMode, setViewMode] = useState('view'); // 'view' or 'edit'
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportType, setReportType] = useState('issue');
+  const [issueType, setIssueType] = useState('damaged');
+  const [issueNote, setIssueNote] = useState('');
+  const [backjobNote, setBackjobNote] = useState('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
   // Receipt Management: paid transactions only (unpaid belong in POS / collection flow)
   const readyReceipts = useMemo(
@@ -337,10 +346,112 @@ const Receiptmanagement = () => {
     });
   };
 
+  const resetReportForm = () => {
+    setReportType('issue');
+    setIssueType('damaged');
+    setIssueNote('');
+    setBackjobNote('');
+  };
+
+  const parseApiError = (payload) => {
+    if (!payload || typeof payload !== 'object') return 'Request failed.';
+    if (typeof payload.message === 'string' && payload.message.trim()) return payload.message.trim();
+    if (payload.errors && typeof payload.errors === 'object') {
+      const values = Object.values(payload.errors);
+      for (const v of values) {
+        if (Array.isArray(v) && v.length > 0) return String(v[0]);
+        if (typeof v === 'string') return v;
+      }
+    }
+    return 'Request failed.';
+  };
+
+  const openReportModal = () => {
+    if (!selectedReceipt) return;
+
+    resetReportForm();
+    setShowReportModal(true);
+  };
+
+  const closeReportModal = () => {
+    setShowReportModal(false);
+    resetReportForm();
+  };
+
+  const handleSubmitReport = async () => {
+    if (!selectedReceipt) return;
+    if (isSubmittingReport) return;
+
+    if (reportType === 'issue' && issueType === 'other' && issueNote.trim() === '') {
+      await Swal.fire({ title: 'Missing details', text: 'Please provide issue details for type "other".', icon: 'warning' });
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+    if (!token) {
+      await Swal.fire({ title: 'Not authenticated', text: 'Please sign in again.', icon: 'error' });
+      return;
+    }
+
+    setIsSubmittingReport(true);
+    try {
+      const body = reportType === 'issue'
+        ? {
+            transaction_id: selectedReceipt.id,
+            issue_type: issueType,
+            issue_note: issueNote.trim() || null,
+          }
+        : {
+            transaction_id: selectedReceipt.id,
+            reason_note: backjobNote.trim() || null,
+          };
+
+      const endpoint = reportType === 'issue' ? '/issue-reports' : '/backjobs';
+      const res = await fetch(`${API_URL}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(parseApiError(payload));
+      }
+
+      const destinationTab = reportType === 'issue' ? 'issues' : 'backjobs';
+      const nextResult = await Swal.fire({
+        title: reportType === 'issue' ? 'Issue report created' : 'Backjob created',
+        text: 'Open the Reports page now?',
+        icon: 'success',
+        showCancelButton: true,
+        confirmButtonText: 'Go to Reports',
+        cancelButtonText: 'Stay here',
+      });
+
+      closeReportModal();
+
+      if (nextResult.isConfirmed) {
+        setSelectedReceipt(null);
+        navigate(`/Reports?tab=${destinationTab}`);
+      }
+    } catch (e) {
+      await Swal.fire({
+        title: 'Could not create report',
+        text: e.message || 'Request failed.',
+        icon: 'error',
+      });
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
   // compute paid / diff for selected receipt (safe defaults)
   const selectedPaid = selectedReceipt ? Number(selectedReceipt.paid_amount || 0) : 0;
   const selectedTotal = selectedReceipt ? Number(selectedReceipt.amount || 0) : 0;
-  const selectedDiff = selectedPaid - selectedTotal;
 
   return (
     <DashboardLayout>
@@ -383,7 +494,10 @@ const Receiptmanagement = () => {
           <div className="receipt-modal-content">
             <button
               className="receipt-close-x"
-              onClick={() => setSelectedReceipt(null)}
+              onClick={() => {
+                setSelectedReceipt(null);
+                setShowReportModal(false);
+              }}
             >
               ✕
             </button>
@@ -529,6 +643,13 @@ const Receiptmanagement = () => {
             <div className="receipt-modal-actions" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
               {viewMode === 'view' && (
                 <>
+                  <button
+                    onClick={openReportModal}
+                    className="receipt-btn-report"
+                    disabled={isSubmittingReport}
+                  >
+                    <BsFlag /> Report Issue / Backjob
+                  </button>
                   {selectedReceipt.inventory_status === 'in_shop' && selectedReceipt.payment_status === 'paid' && (
                     <button
                       onClick={handleMarkPickedUp}
@@ -568,6 +689,65 @@ const Receiptmanagement = () => {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReportModal && selectedReceipt && (
+        <div className="receipt-report-overlay" onClick={closeReportModal}>
+          <div className="receipt-report-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Create Report</h3>
+            <p className="receipt-report-sub">Receipt: <strong>{selectedReceipt.receipt}</strong> · Customer: <strong>{selectedReceipt.customer_name}</strong></p>
+
+            <label>Report type</label>
+            <select value={reportType} onChange={(e) => setReportType(e.target.value)}>
+              <option value="issue">Issue Report (Damaged / Lost / Other)</option>
+              <option value="backjob">Backjob (Free Redo)</option>
+            </select>
+
+            {reportType === 'issue' && (
+              <>
+                <label>Issue type</label>
+                <select value={issueType} onChange={(e) => setIssueType(e.target.value)}>
+                  <option value="damaged">Damaged</option>
+                  <option value="lost">Lost</option>
+                  <option value="other">Other</option>
+                </select>
+
+                <label>Issue note {issueType === 'other' ? '(required)' : '(optional)'}</label>
+                <textarea
+                  rows={3}
+                  placeholder="Write issue details"
+                  value={issueNote}
+                  onChange={(e) => setIssueNote(e.target.value)}
+                />
+              </>
+            )}
+
+            {reportType === 'backjob' && (
+              <>
+                <label>Backjob note (optional)</label>
+                <textarea
+                  rows={3}
+                  placeholder="Reason for free redo service"
+                  value={backjobNote}
+                  onChange={(e) => setBackjobNote(e.target.value)}
+                />
+              </>
+            )}
+
+            <div className="receipt-report-actions">
+              <button className="receipt-btn-cancel" onClick={closeReportModal} disabled={isSubmittingReport}>
+                Cancel
+              </button>
+              <button
+                className="receipt-btn-report-submit"
+                onClick={handleSubmitReport}
+                disabled={isSubmittingReport}
+              >
+                {isSubmittingReport ? 'Submitting...' : 'Submit Report'}
+              </button>
             </div>
           </div>
         </div>

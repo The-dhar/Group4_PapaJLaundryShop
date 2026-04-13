@@ -32,6 +32,7 @@ const BranchAccountManager = () => {
   const [open, setOpen] = useState(false);
 
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [isLoadingBranches, setIsLoadingBranches] = useState(true);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [branchName, setBranchName] = useState('');
@@ -50,8 +51,12 @@ const BranchAccountManager = () => {
 
   const loadBranches = useCallback(async () => {
     try {
-      if (!token) return;
+      if (!token) {
+        setIsLoadingBranches(false);
+        return;
+      }
 
+      setIsLoadingBranches(true);
       const response = await fetch(`${API_URL}/branches`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -65,6 +70,8 @@ const BranchAccountManager = () => {
       setBranches(Array.isArray(data) ? data : []);
     } catch (error) {
       console.log(error);
+    } finally {
+      setIsLoadingBranches(false);
     }
   }, [token]);
 
@@ -212,45 +219,52 @@ const BranchAccountManager = () => {
 
           <View style={styles.tableContent}>
 
-            {branchesSorted.map((branch, index) => (
+            {isLoadingBranches && branchesSorted.length === 0 ? (
+              <View style={styles.loadingState}>
+                <ActivityIndicator size="large" color="#3b82f6" />
+              </View>
+            ) : (
 
-              <View key={branch.id} style={styles.branchRowWrapper}>
+              branchesSorted.map((branch, index) => (
 
-                <View style={styles.branchRow}>
+                <View key={branch.id} style={styles.branchRowWrapper}>
 
-                  <View style={styles.branchLeft}>
+                  <View style={styles.branchRow}>
 
-                    <View style={styles.branchIconContainer}>
-                      <Ionicons name="business" size={20} color="#3b82f6" />
+                    <View style={styles.branchLeft}>
+
+                      <View style={styles.branchIconContainer}>
+                        <Ionicons name="business" size={20} color="#3b82f6" />
+                      </View>
+
+                      <View style={styles.branchInfo}>
+                        <Text style={styles.branchName}>{branch.name}</Text>
+                        <Text style={styles.branchUsername} numberOfLines={1}>
+                          {branch.is_active === false ? 'Inactive · ' : ''}
+                          Clerk label: {branch.clerk_username?.trim() ? `@${branch.clerk_username}` : '—'}
+                        </Text>
+                      </View>
+
                     </View>
 
-                    <View style={styles.branchInfo}>
-                      <Text style={styles.branchName}>{branch.name}</Text>
-                      <Text style={styles.branchUsername} numberOfLines={1}>
-                        {branch.is_active === false ? 'Inactive · ' : ''}
-                        Clerk label: {branch.clerk_username?.trim() ? `@${branch.clerk_username}` : '—'}
-                      </Text>
-                    </View>
+                    <TouchableOpacity
+                      onPress={() => handleViewBranch(branch)}
+                      style={styles.viewButton}
+                    >
+                      <Ionicons name="eye" size={16} color="#fff" />
+                      <Text style={styles.viewButtonText}>View</Text>
+                    </TouchableOpacity>
 
                   </View>
 
-                  <TouchableOpacity
-                    onPress={() => handleViewBranch(branch)}
-                    style={styles.viewButton}
-                  >
-                    <Ionicons name="eye" size={16} color="#fff" />
-                    <Text style={styles.viewButtonText}>View</Text>
-                  </TouchableOpacity>
+                  {index < branchesSorted.length - 1 && (
+                    <View style={styles.rowDivider} />
+                  )}
 
                 </View>
 
-                {index < branchesSorted.length - 1 && (
-                  <View style={styles.rowDivider} />
-                )}
-
-              </View>
-
-            ))}
+              ))
+            )}
 
           </View>
 
@@ -422,6 +436,11 @@ const styles = StyleSheet.create({
   },
   tableContent: {
     paddingVertical: 8,
+  },
+  loadingState: {
+    minHeight: 220,
+    alignItems: "center",
+    justifyContent: "center",
   },
   branchRowWrapper: {
     marginHorizontal: 4,

@@ -12,6 +12,7 @@ import { TransactionsProvider } from './context/transactionsContext';
 import Unclaimed from './pages/UnclaimLaundry';
 import Express from './pages/Express'; 
 import Archive from './pages/Archive'; 
+import Reports from './pages/Reports';
 function App() {
   return (
     <TransactionsProvider>
@@ -64,6 +65,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Receipt />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/Reports"
+            element={
+              <ProtectedRoute>
+                <Reports />
               </ProtectedRoute>
             }
           />

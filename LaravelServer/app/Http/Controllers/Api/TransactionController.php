@@ -7,6 +7,7 @@ use App\Models\Customer;
 use App\Models\Transaction;
 use App\Models\TransactionItem;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -82,6 +83,27 @@ class TransactionController extends Controller
         $this->applyBranchEmployeeVisibility($user, $query, true);
 
         return $query->firstOrFail();
+    }
+
+    protected function suggestedPenaltyAmount(Transaction $transaction): float
+    {
+        if (strtolower((string) $transaction->inventory_status) !== 'in_shop') {
+            return 0.0;
+        }
+
+        if (! $transaction->due_date) {
+            return 0.0;
+        }
+
+        $dueDate = Carbon::parse($transaction->due_date)->startOfDay();
+        $today = now()->startOfDay();
+        $daysPastDue = $dueDate->diffInDays($today, false);
+
+        if ($daysPastDue < 30) {
+            return 0.0;
+        }
+
+        return round((float) $transaction->total_amount, 2);
     }
 
     public function store(Request $request)
@@ -189,6 +211,9 @@ class TransactionController extends Controller
                 'services' => $request->services,
                 'amount' => $transaction->total_amount,
                 'paid_amount' => $transaction->paid_amount,
+                'penalty_amount' => (float) ($transaction->penalty_amount ?? 0),
+                'penalty_suggested_amount' => (float) ($transaction->penalty_suggested_amount ?? 0),
+                'penalty_override_reason' => $transaction->penalty_override_reason,
                 'payment_method' => $transaction->payment_method,
                 'inventory_status' => $transaction->inventory_status,
                 'due_date' => $transaction->due_date,
@@ -270,7 +295,13 @@ class TransactionController extends Controller
                 'total_weight' => $txn->total_weight,
                 'is_rush' => (bool) $txn->is_rush,
                 'paid_amount' => $txn->paid_amount,
+                'penalty_amount' => (float) ($txn->penalty_amount ?? 0),
+                'penalty_suggested_amount' => (float) ($txn->penalty_suggested_amount ?? 0),
+                'penalty_override_reason' => $txn->penalty_override_reason,
+                // Legacy alias kept for existing web pages that still read `penalty`.
+                'penalty' => (float) ($txn->penalty_amount ?? 0),
                 'payment_status' => $txn->payment_status,
+                'payment_method' => $txn->payment_method,
                 'inventory_status' => $txn->inventory_status,
                 'due_date' => $txn->due_date,
                 'archived' => (bool) $txn->archived,
@@ -299,7 +330,26 @@ class TransactionController extends Controller
     {
         $transaction = $this->transactionForUser($request->user(), (int) $id);
 
+        $suggestedPenalty = $this->suggestedPenaltyAmount($transaction);
+        $appliedPenalty = round((float) ($transaction->penalty_amount ?? 0), 2);
+        $overrideReason = trim((string) ($transaction->penalty_override_reason ?? ''));
+
+        if ($appliedPenalty + 0.001 < $suggestedPenalty && $overrideReason === '') {
+            throw ValidationException::withMessages([
+                'penalty_override_reason' => ['A reason is required when the penalty is below the suggested amount.'],
+            ]);
+        }
+
+        $requiredTotal = round((float) $transaction->total_amount + $appliedPenalty, 2);
+
+        if ((float) $transaction->paid_amount + 0.001 < $requiredTotal) {
+            throw ValidationException::withMessages([
+                'paid_amount' => ["Paid amount must be at least {$requiredTotal} before marking this transaction as paid."],
+            ]);
+        }
+
         $transaction->payment_status = 'paid';
+        $transaction->penalty_suggested_amount = $suggestedPenalty;
 
         $transaction->save();
 
@@ -312,13 +362,49 @@ class TransactionController extends Controller
     {
         $transaction = $this->transactionForUser($request->user(), (int) $id);
 
-        $transaction->paid_amount = $request->paid_amount;
-        $transaction->payment_method = $request->payment_method;
+        $validated = $request->validate([
+            'paid_amount' => 'required|numeric|min:0',
+            'payment_method' => 'nullable|string|max:50',
+            'penalty_amount' => 'nullable|numeric|min:0',
+            // Backward compatible with existing clients still sending `penalty`.
+            'penalty' => 'nullable|numeric|min:0',
+            'penalty_override_reason' => 'nullable|string|max:500',
+        ]);
+
+        $paidAmount = round((float) $validated['paid_amount'], 2);
+        $incomingPenalty = $validated['penalty_amount']
+            ?? $validated['penalty']
+            ?? $transaction->penalty_amount
+            ?? 0;
+        $appliedPenalty = round((float) $incomingPenalty, 2);
+        $suggestedPenalty = $this->suggestedPenaltyAmount($transaction);
+        $overrideReason = trim((string) ($validated['penalty_override_reason'] ?? ''));
+
+        if ($appliedPenalty + 0.001 < $suggestedPenalty && $overrideReason === '') {
+            throw ValidationException::withMessages([
+                'penalty_override_reason' => ['A reason is required when the penalty is below the suggested amount.'],
+            ]);
+        }
+
+        $transaction->paid_amount = $paidAmount;
+        $transaction->payment_method = $validated['payment_method'] ?? $transaction->payment_method;
+        $transaction->penalty_amount = $appliedPenalty;
+        $transaction->penalty_suggested_amount = $suggestedPenalty;
+        $transaction->penalty_override_reason = $appliedPenalty + 0.001 < $suggestedPenalty
+            ? $overrideReason
+            : null;
 
         $transaction->save();
 
         return response()->json([
             'message' => 'Payment updated',
+            'transaction' => [
+                'id' => $transaction->id,
+                'paid_amount' => (float) $transaction->paid_amount,
+                'penalty_amount' => (float) $transaction->penalty_amount,
+                'penalty_suggested_amount' => (float) ($transaction->penalty_suggested_amount ?? 0),
+                'penalty_override_reason' => $transaction->penalty_override_reason,
+            ],
         ]);
     }
 

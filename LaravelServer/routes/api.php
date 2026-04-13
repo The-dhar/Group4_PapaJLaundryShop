@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BranchController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\EmployeeController;
+use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ServiceCategoryController;
 use App\Http\Controllers\Api\ServicePriceController;
 use App\Http\Controllers\Api\StaffAccountController;
@@ -72,5 +73,22 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/staff-accounts/verification/send', [StaffAccountController::class, 'sendVerificationCode']);
     Route::post('/staff-accounts/verification/check', [StaffAccountController::class, 'verifyCode']);
     Route::put('/staff-accounts/{id}', [StaffAccountController::class, 'update']);
+
+    Route::get('/issue-reports', [ReportController::class, 'listIssueReports']);
+    Route::get('/report-assignees', [ReportController::class, 'listAssignableEmployees']);
+    Route::get('/report-escalation-clerks', [ReportController::class, 'listEscalationClerks']);
+    Route::post('/issue-reports', [ReportController::class, 'createIssueReport']);
+    Route::put('/issue-reports/{id}/escalate', [ReportController::class, 'escalateIssueReport']);
+    Route::put('/issue-reports/{id}/under-review', [ReportController::class, 'markIssueUnderReview']);
+    Route::put('/issue-reports/{id}/resolve', [ReportController::class, 'resolveIssueReport']);
+    Route::put('/issue-reports/{id}/reject', [ReportController::class, 'rejectIssueReport']);
+
+    Route::get('/backjobs', [ReportController::class, 'listBackjobs']);
+    Route::post('/backjobs', [ReportController::class, 'createBackjob']);
+    Route::put('/backjobs/{id}/escalate', [ReportController::class, 'escalateBackjob']);
+    Route::put('/backjobs/{id}/approve', [ReportController::class, 'approveBackjob']);
+    Route::put('/backjobs/{id}/start', [ReportController::class, 'startBackjob']);
+    Route::put('/backjobs/{id}/complete', [ReportController::class, 'completeBackjob']);
+    Route::put('/backjobs/{id}/cancel', [ReportController::class, 'cancelBackjob']);
 
 });

@@ -5,6 +5,7 @@ import TransactionExtrasSummary from '../components/TransactionExtrasSummary';
 import { BsEye, BsCashStack } from 'react-icons/bs';
 import { useTransactions } from '../context/transactionsContext';
 import {
+  getDaysPastDue,
   isThreeOrMoreDaysPastDueDate,
   isThirtyOrMoreDaysPastDueDate,
 } from '../utils/unclaimedDue';
@@ -36,11 +37,12 @@ const Inventorymanagement = () => {
   const [viewMode, setViewMode] = useState('view');
   const [paidAmountInput, setPaidAmountInput] = useState('');
   const [penaltyInput, setPenaltyInput] = useState('');
+  const [penaltyOverrideReason, setPenaltyOverrideReason] = useState('');
 
-  /** Penalty 5% applies only for urgent tier: still In Shop and 30+ calendar days past due (same as red Unclaimed). */
-  const calculatePenalty = (amount, dueDate, inventoryStatus) => {
+  /** Suggested policy: warning for 3-29 days, full-amount penalty for 30+ days while still in shop. */
+  const calculateSuggestedPenalty = (amount, dueDate, inventoryStatus) => {
     if (String(inventoryStatus || '').toLowerCase() !== 'in_shop') return 0;
-    return isThirtyOrMoreDaysPastDueDate(dueDate) ? amount * 0.05 : 0;
+    return isThirtyOrMoreDaysPastDueDate(dueDate) ? Number(amount || 0) : 0;
   };
 
   /** Transaction Log: none | warning (3–29d) | urgent (30+d) — only when still In Shop. */
@@ -51,24 +53,42 @@ const Inventorymanagement = () => {
     return 'none';
   }
 
-  /** Parses amount field; null = walang valid number na na-enter pa */
-  const parseAmountInput = (str) => {
+  const parseMoneyInput = (str) => {
     if (str == null || String(str).trim() === '') return null;
     const n = Number(String(str).trim());
     return Number.isFinite(n) ? n : null;
   };
 
-  const requiredPaymentTotal = selectedTxn
-    ? Number(selectedTxn.amount) + Number(penaltyInput || 0)
+  const selectedTxnPenalty = selectedTxn
+    ? Number(selectedTxn.penalty_amount ?? selectedTxn.penalty ?? 0)
     : 0;
-  const paidParsed = parseAmountInput(paidAmountInput);
+  const selectedSuggestedPenalty = selectedTxn
+    ? Number(
+        selectedTxn.penalty_suggested_amount ??
+          calculateSuggestedPenalty(
+            selectedTxn.amount,
+            selectedTxn.due_date,
+            selectedTxn.inventory_status
+          )
+      )
+    : 0;
+  const penaltyParsed = parseMoneyInput(penaltyInput);
+  const penaltyEntered = penaltyParsed !== null ? penaltyParsed : 0;
+  const requiredPaymentTotal = selectedTxn
+    ? Number(selectedTxn.amount) + penaltyEntered
+    : 0;
+  const paidParsed = parseMoneyInput(paidAmountInput);
   const paidEntered = paidParsed !== null ? paidParsed : 0;
-  /** May na-type nang halaga sa Amount Paid at mas mababa ito sa kabuuang dapat bayarin */
   const showInsufficientPayment =
     viewMode === 'edit' &&
     selectedTxn &&
     paidParsed !== null &&
     paidParsed + 0.001 < requiredPaymentTotal;
+  const showPenaltyOverrideReasonError =
+    viewMode === 'edit' &&
+    selectedTxn &&
+    penaltyEntered + 0.001 < selectedSuggestedPenalty &&
+    !String(penaltyOverrideReason || '').trim();
 
   const filteredData = useMemo(() => {
     const rows = transactions.filter((row) => {
@@ -93,29 +113,34 @@ const Inventorymanagement = () => {
   }, [transactions, filterPayment, filterInventory, searchTerm]);
 
   // Mark paid logic with fixed payment_method = Cash
-  const handleMarkPaid = () => {
-  if (!selectedTxn) return;
-  const paidAmount = parseAmountInput(paidAmountInput);
-  if (paidAmount === null) return;
-  const penalty = Number(penaltyInput) || 0;
-  const required = Number(selectedTxn.amount) + penalty;
-  if (paidAmount + 0.001 < required) return;
+  const handleMarkPaid = async () => {
+    if (!selectedTxn) return;
 
-  updateTransactionPaidAmount(
-    selectedTxn.id,
-    paidAmount,
-    penalty,
-    "Cash" 
-  );
+    const paidAmount = parseMoneyInput(paidAmountInput);
+    if (paidAmount === null) return;
 
-  markTransactionPaid(selectedTxn.id);
-  
-  // CLEAR OR REFRESH: This ensures the next time you open it, 
-  // it pulls the fresh data from the transactions array.
-  setSelectedTxn(null); 
-  setPaidAmountInput('');
-  setPenaltyInput('');
-};
+    const penalty = penaltyEntered;
+    const required = Number(selectedTxn.amount) + penalty;
+    if (paidAmount + 0.001 < required) return;
+    if (showPenaltyOverrideReasonError) return;
+
+    await updateTransactionPaidAmount(
+      selectedTxn.id,
+      paidAmount,
+      penalty,
+      'Cash',
+      penalty + 0.001 < selectedSuggestedPenalty ? penaltyOverrideReason : ''
+    );
+
+    if (selectedTxn.payment_status !== 'paid') {
+      await markTransactionPaid(selectedTxn.id);
+    }
+
+    setSelectedTxn(null);
+    setPaidAmountInput('');
+    setPenaltyInput('');
+    setPenaltyOverrideReason('');
+  };
 
   const columns = [
     { name: 'Receipt ID', selector: (row) => row.receipt, sortable: true },
@@ -188,6 +213,7 @@ const Inventorymanagement = () => {
               });
               setPaidAmountInput('');
               setPenaltyInput('');
+              setPenaltyOverrideReason('');
             }}
           >
             <BsEye />
@@ -203,8 +229,16 @@ const Inventorymanagement = () => {
                 payment_method: "Cash" // force cash on edit
               });
               setPaidAmountInput(row.paid_amount && row.paid_amount !== 0 ? String(row.paid_amount) : '');
-              const pen = calculatePenalty(row.amount, row.due_date, row.inventory_status);
-              setPenaltyInput(pen > 0 ? String(pen) : '');
+              const existingPenalty = Number(row.penalty_amount ?? row.penalty ?? 0) || 0;
+              const suggestedPenalty =
+                Number(row.penalty_suggested_amount) ||
+                calculateSuggestedPenalty(row.amount, row.due_date, row.inventory_status);
+              const nextPenalty =
+                existingPenalty > 0 || row.payment_status === 'paid'
+                  ? existingPenalty
+                  : suggestedPenalty;
+              setPenaltyInput(nextPenalty > 0 ? String(nextPenalty) : '');
+              setPenaltyOverrideReason(String(row.penalty_override_reason || ''));
             }}
           >
            <BsCashStack/> 
@@ -285,14 +319,17 @@ const Inventorymanagement = () => {
             <p><strong>Payment Method:</strong> Cash</p>
 
             <p><strong>Paid Amount:</strong> ₱{(Number(selectedTxn.paid_amount) || 0).toFixed(2)}</p>
-            <p><strong>Penalty:</strong> ₱{(Number(selectedTxn.penalty) || 0).toFixed(2)}</p>
+            <p><strong>Penalty:</strong> ₱{selectedTxnPenalty.toFixed(2)}</p>
+            <p><strong>Suggested Penalty:</strong> ₱{selectedSuggestedPenalty.toFixed(2)}</p>
+            {selectedTxn.penalty_override_reason && (
+              <p><strong>Penalty Override Reason:</strong> {selectedTxn.penalty_override_reason}</p>
+            )}
             <p><strong>Payment Status:</strong> {selectedTxn.payment_status}</p>
             <p><strong>Inventory Status:</strong> {formatInventoryStatus(selectedTxn.inventory_status)}</p>
-            {/* Add this after your Paid Amount and Penalty <p> tags */}
             <p>
               <strong>Remaining Balance:</strong> 
-              <span style={{ color: (selectedTxn.amount + (Number(selectedTxn.penalty) || 0) - (Number(selectedTxn.paid_amount) || 0)) > 0 ? 'red' : 'green' }}>
-                ₱{(selectedTxn.amount + (Number(selectedTxn.penalty) || 0) - (Number(selectedTxn.paid_amount) || 0)).toFixed(2)}
+              <span style={{ color: (selectedTxn.amount + selectedTxnPenalty - (Number(selectedTxn.paid_amount) || 0)) > 0 ? 'red' : 'green' }}>
+                ₱{(selectedTxn.amount + selectedTxnPenalty - (Number(selectedTxn.paid_amount) || 0)).toFixed(2)}
               </span>
             </p>
             {/* EDIT MODE */}
@@ -303,7 +340,6 @@ const Inventorymanagement = () => {
                 className="paid-amount-input"
                 placeholder="Enter amount paid"
                 value={paidAmountInput}
-                /* LOCKS if the mode is 'view' OR if the transaction is already 'paid' */
                 disabled={viewMode === 'view' || selectedTxn?.payment_status === 'paid'} 
                 onChange={(e) => setPaidAmountInput(e.target.value)}
                 min={0}
@@ -328,12 +364,45 @@ const Inventorymanagement = () => {
                 className="penalty-input"
                 placeholder="Enter penalty amount"
                 value={penaltyInput}
-                /* ONLY LOCKS if we are in 'view' mode. Stays editable in 'edit' mode even if paid. */
                 disabled={viewMode === 'view'} 
                 onChange={(e) => setPenaltyInput(e.target.value)}
+                min={0}
+                step="0.01"
               />
+
+              {viewMode === 'edit' && (
+                <p style={{ margin: '6px 0 0', fontSize: '0.9rem', color: '#475569' }}>
+                  Suggested penalty: ₱{selectedSuggestedPenalty.toFixed(2)}
+                  {selectedSuggestedPenalty > 0
+                    ? ' (30+ days past due)'
+                    : getDaysPastDue(selectedTxn?.due_date) >= 3
+                      ? ' (3-29 days past due warning only)'
+                      : ''}
+                </p>
+              )}
+
+              <label><strong>Penalty Override Reason:</strong></label>
+              <textarea
+                className="penalty-input"
+                placeholder="Required when penalty is below suggested amount"
+                value={penaltyOverrideReason}
+                disabled={viewMode === 'view'}
+                onChange={(e) => setPenaltyOverrideReason(e.target.value)}
+                rows={3}
+              />
+
+              {showPenaltyOverrideReasonError && (
+                <div className="modal-payment-error" role="alert">
+                  <span className="modal-payment-error-icon" aria-hidden="true">
+                    !
+                  </span>
+                  <p className="modal-payment-error-text">
+                    <strong>Reason required.</strong> Provide a reason before saving a penalty below{' '}
+                    <strong>₱{selectedSuggestedPenalty.toFixed(2)}</strong>.
+                  </p>
+                </div>
+              )}
               
-              {/* Display Change/Balance logic remains the same below */}
               {viewMode === 'edit' && paidParsed !== null && (
                 <p className="change-balance">
                   {paidEntered >= requiredPaymentTotal ? (
@@ -373,10 +442,11 @@ const Inventorymanagement = () => {
          - If status is PAID: Keep enabled so penalty can be updated.
       */
       disabled={
+        showPenaltyOverrideReasonError ||
         showInsufficientPayment ||
         (selectedTxn.payment_status !== 'paid' &&
           (!String(paidAmountInput || '').trim() ||
-            parseAmountInput(paidAmountInput) === null))
+            parseMoneyInput(paidAmountInput) === null))
       }
       className="modal-btn primary"
     >

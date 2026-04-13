@@ -4,6 +4,13 @@ import { API_URL } from "../config/api";
 const TransactionsContext = createContext(null);
 const LIVE_POLL_MS = 10000;
 
+function shouldPollTransactions() {
+  if (typeof window === "undefined") return true;
+  const path = String(window.location.pathname || "").toLowerCase();
+  // Polling while encoding a POS transaction can cause disruptive re-renders.
+  return !path.startsWith("/pos");
+}
+
 const normalizeTransaction = (txn) => {
   const services = Array.isArray(txn.receipt_items)
     ? txn.receipt_items.map((item) => ({
@@ -16,12 +23,19 @@ const normalizeTransaction = (txn) => {
       }))
     : [];
 
+  const penaltyAmount = Number(txn.penalty_amount ?? txn.penalty ?? 0) || 0;
+  const penaltySuggestedAmount = Number(txn.penalty_suggested_amount) || 0;
+
   return {
     ...txn,
     amount: Number(txn.amount) || 0,
     subtotal: Number(txn.subtotal) || 0,
     extras: Number(txn.extras) || 0,
     paid_amount: Number(txn.paid_amount) || 0,
+    penalty_amount: penaltyAmount,
+    penalty: penaltyAmount,
+    penalty_suggested_amount: penaltySuggestedAmount,
+    penalty_override_reason: txn.penalty_override_reason || "",
     weight: txn.total_weight ?? txn.weight ?? 0,
     services,
   };
@@ -42,15 +56,27 @@ export const TransactionsProvider = ({ children }) => {
 
       const res = await fetch(`${API_URL}/transactions?include_archived=1`, {
         headers: {
-          "Content-Type": "application/json",
+          Accept: "application/json",
           Authorization: `Bearer ${token}`,
         },
       });
 
-      if (!res.ok) throw new Error("Failed to fetch transactions");
+      if (res.status === 401 || res.status === 403) {
+        setTransactions([]);
+        return;
+      }
+
+      if (!res.ok) {
+        return;
+      }
+
+      const contentType = String(res.headers.get("content-type") || "").toLowerCase();
+      if (!contentType.includes("application/json")) {
+        return;
+      }
 
       const data = await res.json();
-      setTransactions(data.map(normalizeTransaction));
+      setTransactions(Array.isArray(data) ? data.map(normalizeTransaction) : []);
     } catch (error) {
       console.error("Error fetching transactions:", error);
     }
@@ -62,11 +88,13 @@ export const TransactionsProvider = ({ children }) => {
 
   useEffect(() => {
     const intervalId = setInterval(() => {
-      fetchTransactions();
+      if (shouldPollTransactions()) {
+        fetchTransactions();
+      }
     }, LIVE_POLL_MS);
 
     const handleVisible = () => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === "visible" && shouldPollTransactions()) {
         fetchTransactions();
       }
     };
@@ -190,6 +218,9 @@ export const TransactionsProvider = ({ children }) => {
         amount: Number(result.amount ?? amount) || 0,
         total_weight: Number(result.total_weight ?? weight) || 0,
         paid_amount: Number(result.paid_amount ?? paid_amount) || 0,
+        penalty_amount: Number(result.penalty_amount ?? 0) || 0,
+        penalty_suggested_amount: Number(result.penalty_suggested_amount ?? 0) || 0,
+        penalty_override_reason: result.penalty_override_reason || "",
         payment_status: result.payment_status ?? payment_status ?? "unpaid",
         payment_method: result.payment_method ?? payment_method ?? "",
         inventory_status: result.inventory_status ?? "in_shop",
@@ -255,9 +286,16 @@ export const TransactionsProvider = ({ children }) => {
     }
   };
 
-  const updateTransactionPaidAmount = async (id, paidAmount, penalty, paymentMethod) => {
+  const updateTransactionPaidAmount = async (
+    id,
+    paidAmount,
+    penaltyAmount,
+    paymentMethod,
+    penaltyOverrideReason = ""
+  ) => {
     try {
       const token = localStorage.getItem("token");
+      const trimmedReason = String(penaltyOverrideReason || "").trim();
       const res = await fetch(`${API_URL}/transactions/${id}/update-payment`, {
         method: "PUT",
         headers: {
@@ -266,14 +304,21 @@ export const TransactionsProvider = ({ children }) => {
         },
         body: JSON.stringify({
           paid_amount: paidAmount,
-          penalty,
+          penalty_amount: penaltyAmount,
           payment_method: paymentMethod,
+          ...(trimmedReason ? { penalty_override_reason: trimmedReason } : {}),
         }),
       });
-      if (!res.ok) throw new Error("Failed to update payment");
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Failed to update payment");
+      }
+
       await fetchTransactions();
     } catch (error) {
       console.error("Error updating payment:", error);
+      throw error;
     }
   };
 

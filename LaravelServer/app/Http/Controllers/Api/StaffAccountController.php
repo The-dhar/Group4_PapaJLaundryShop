@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -245,14 +246,53 @@ class StaffAccountController extends Controller
      */
     protected function staffAccountsWithRevenue()
     {
+        /** Chain one withSum per alias — a single withSum([...]) with multiple `createdTransactions as …` can omit later aggregates in some Laravel versions. */
         return User::query()
             ->whereIn('role', ['clerk', 'staff'])
             ->with(['branch:id,name,clerk_username,is_active'])
-            ->withSum([
-                'createdTransactions as total_revenue_php' => function ($q) {
-                    $q->where('payment_status', 'paid')->where('archived', false);
-                },
-            ], 'total_amount')
+            ->withSum(
+                [
+                    'createdTransactions as total_revenue_php' => function ($q) {
+                        $q->where('payment_status', 'paid')->where('archived', false);
+                    },
+                ],
+                'total_amount'
+            )
+            ->withSum(
+                [
+                    'createdTransactions as today_revenue_php' => function ($q) {
+                        $q->where('payment_status', 'paid')
+                            ->where('archived', false)
+                            ->whereBetween('created_at', [now()->copy()->startOfDay(), now()->copy()->endOfDay()]);
+                    },
+                ],
+                'total_amount'
+            )
+            ->withSum(
+                [
+                    'createdTransactions as week_revenue_php' => function ($q) {
+                        $weekStart = now()->copy()->startOfWeek(Carbon::MONDAY)->startOfDay();
+                        $weekEnd = $weekStart->copy()->endOfWeek(Carbon::SUNDAY)->endOfDay();
+                        $q->where('payment_status', 'paid')
+                            ->where('archived', false)
+                            ->whereBetween('created_at', [$weekStart, $weekEnd]);
+                    },
+                ],
+                'total_amount'
+            )
+            ->withSum(
+                [
+                    'createdTransactions as month_revenue_php' => function ($q) {
+                        $q->where('payment_status', 'paid')
+                            ->where('archived', false)
+                            ->whereBetween('created_at', [
+                                now()->copy()->startOfMonth()->startOfDay(),
+                                now()->copy()->endOfMonth()->endOfDay(),
+                            ]);
+                    },
+                ],
+                'total_amount'
+            )
             ->orderBy('name');
     }
 

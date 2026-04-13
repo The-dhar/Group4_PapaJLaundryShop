@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   AppState,
   type AppStateStatus,
@@ -37,9 +38,36 @@ type StaffUser = {
   branch?: { id: number; name: string } | null;
   /** Sum of paid POS transactions this login created (from API). */
   total_revenue_php?: number | string | null;
+  /** Sum of paid POS transactions created today (app timezone), from API. */
+  today_revenue_php?: number | string | null;
+  /** Sum of paid POS in current calendar week (Carbon week), from API. */
+  week_revenue_php?: number | string | null;
+  /** Sum of paid POS in current calendar month, from API. */
+  month_revenue_php?: number | string | null;
 };
 
 type RoleFilter = "all" | "clerk" | "staff";
+
+type ProfitPeriod = "today" | "week" | "month";
+
+const PROFIT_PERIOD_LABEL: Record<ProfitPeriod, string> = {
+  today: "Profit (today)",
+  week: "Profit (this week)",
+  month: "Profit (this month)",
+};
+
+function profitAmountForPeriod(s: StaffUser, period: ProfitPeriod): number | null {
+  const key =
+    period === "today"
+      ? "today_revenue_php"
+      : period === "week"
+        ? "week_revenue_php"
+        : "month_revenue_php";
+  const row = s as Record<string, unknown>;
+  if (!Object.prototype.hasOwnProperty.call(row, key)) return null;
+  const raw = Number(row[key] ?? 0);
+  return Math.max(0, Number.isFinite(raw) ? raw : 0);
+}
 
 /** HR / clerk record from `/employees` (revenue metrics for chart). */
 type HrEmployee = {
@@ -118,6 +146,7 @@ export default function EmployeesScreen() {
   const [hrEmployees, setHrEmployees] = useState<HrEmployee[]>([]);
   const [selectedBranchName, setSelectedBranchName] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
+  const [profitPeriod, setProfitPeriod] = useState<ProfitPeriod>("today");
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createStep, setCreateStep] = useState(1);
@@ -203,6 +232,7 @@ export default function EmployeesScreen() {
     }
     return list;
   }, [staffUsers, roleFilter, selectedBranchName]);
+  const isInitialLoading = isLoading && staffUsers.length === 0 && branches.length === 0 && hrEmployees.length === 0;
 
   /** Revenue share chart: one bar per staff login; peso amounts from POS totals when API provides them, else HR name match. */
   const clerkSharePercentChart = useMemo(() => {
@@ -239,16 +269,20 @@ export default function EmployeesScreen() {
     [hrEmployees]
   );
 
+  const resetCreateEmailVerification = () => {
+    setCCodeSent(false);
+    setCEmailVerified(false);
+    setCVerifiedEmail("");
+    setCVerifyCode("");
+  };
+
   const resetCreate = () => {
     setCreateStep(1);
     setCFirst("");
     setCMiddle("");
     setCLast("");
     setCEmail("");
-    setCVerifyCode("");
-    setCCodeSent(false);
-    setCEmailVerified(false);
-    setCVerifiedEmail("");
+    resetCreateEmailVerification();
     setIsSendingCode(false);
     setIsCheckingCode(false);
     setCPassword("");
@@ -267,6 +301,9 @@ export default function EmployeesScreen() {
     }
     if (!EMAIL_REGEX.test(normalizedCreateEmail)) {
       Alert.alert("Invalid email", "Enter a valid email address before sending a code.");
+      return;
+    }
+    if (cEmailVerified && cVerifiedEmail === normalizedCreateEmail) {
       return;
     }
     try {
@@ -288,6 +325,7 @@ export default function EmployeesScreen() {
       setCCodeSent(true);
       setCEmailVerified(false);
       setCVerifiedEmail("");
+      setCVerifyCode("");
       Alert.alert("Code sent", `A verification code was sent to ${normalizedCreateEmail}.`);
     } catch (error) {
       console.log(error);
@@ -328,6 +366,7 @@ export default function EmployeesScreen() {
       }
       setCEmailVerified(true);
       setCVerifiedEmail(normalizedCreateEmail);
+      setCVerifyCode("");
       Alert.alert("Verified", "Email verified successfully.");
     } catch (error) {
       console.log(error);
@@ -550,6 +589,28 @@ export default function EmployeesScreen() {
             })}
           </ScrollView>
 
+          <Text style={[styles.toolbarLabel, { marginTop: 10 }]}>Profit period</Text>
+          <View style={styles.segmentRow}>
+            {(
+              [
+                ["today", "Today"],
+                ["week", "This week"],
+                ["month", "This month"],
+              ] as const
+            ).map(([key, label]) => {
+              const active = profitPeriod === key;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  style={[styles.segmentChip, active && styles.segmentChipActive]}
+                  onPress={() => setProfitPeriod(key)}
+                >
+                  <Text style={[styles.segmentChipText, active && styles.segmentChipTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
           <View style={styles.toolbarActions}>
             <TouchableOpacity style={styles.secondaryBtn} onPress={loadData}>
               <Ionicons name="refresh-outline" size={14} color="#1e293b" />
@@ -568,116 +629,125 @@ export default function EmployeesScreen() {
           </View>
         </View>
 
-        <Text style={styles.sectionHeading}>Revenue share</Text>
-        <Text style={styles.sectionHint}>
-          One bar per web staff login (same filters as below). Percentages are shares of total paid POS revenue for
-          those staff (from the database). If the API does not expose totals yet, amounts fall back to HR when names
-          match.
-        </Text>
-
-        {filteredStaff.length > 0 ? (
-          <View style={styles.chartSection}>
-            <Text style={styles.chartSectionTitle}>Staff — revenue share</Text>
-            <Text style={styles.chartSectionSub}>Percent of total net revenue (not peso amounts).</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <BarChart
-                data={{
-                  labels: clerkSharePercentChart.labels,
-                  datasets: [{ data: clerkSharePercentChart.data }],
-                }}
-                width={clerkChartWidth}
-                height={220}
-                yAxisLabel=""
-                yAxisSuffix="%"
-                chartConfig={{
-                  backgroundColor: "#ffffff",
-                  backgroundGradientFrom: "#ffffff",
-                  backgroundGradientTo: "#ffffff",
-                  decimalPlaces: 1,
-                  color: () => "rgba(37, 99, 235, 1)",
-                  labelColor: () => "#334155",
-                  formatYLabel: (y: string) => String(y),
-                  propsForLabels: { fontSize: 11 },
-                  propsForBackgroundLines: { stroke: "#e2e8f0", strokeWidth: 1 },
-                }}
-                style={styles.barChart}
-                fromZero
-                showValuesOnTopOfBars
-                verticalLabelRotation={0}
-              />
-            </ScrollView>
+        {isInitialLoading ? (
+          <View style={styles.loadingState}>
+            <ActivityIndicator size="large" color="#3b82f6" />
           </View>
-        ) : !isLoading ? (
-          <Text style={styles.empty}>No staff accounts for this filter — nothing to chart.</Text>
-        ) : null}
-
-        <Text style={[styles.sectionHeading, { marginTop: 20 }]}>Staff logins (web)</Text>
-        <Text style={styles.sectionHint}>
-          Accounts that can sign in on the web POS. Assign a branch so they work in that location.
-        </Text>
-        {filteredStaff.length === 0 && !isLoading ? (
-          <Text style={styles.empty}>No staff accounts match this filter.</Text>
         ) : (
-          filteredStaff.map((s) => {
-            const linked = hrMatchForStaff(s);
-            const hasDbTotal = "total_revenue_php" in s && s.total_revenue_php != null && s.total_revenue_php !== "";
-            const net = hasDbTotal
-              ? Math.max(0, Number(s.total_revenue_php))
-              : linked
-                ? Number(linked.net_revenue_php || 0)
-                : 0;
-            const gain = linked ? linked.gain_percent || 0 : 0;
-            const loss = linked ? linked.loss_percent || 0 : 0;
-            const outcome = linked?.revenue_outcome || null;
-            const handle = s.email ? `@${String(s.email).split("@")[0]}` : "—";
-            return (
-              <View key={`staff-${s.id}`} style={styles.card}>
-                <View style={styles.cardTop}>
-                  <View style={styles.cardMain}>
-                    <Text style={styles.name}>{s.name}</Text>
-                    <Text style={styles.sub}>{handle}</Text>
-                    <Text
-                      style={[
-                        styles.sub,
-                        styles.presenceLabel,
-                        s.is_active === false
-                          ? styles.presenceDisabled
-                          : s.is_online
-                            ? styles.presenceActive
-                            : styles.presenceInactive,
-                      ]}
-                    >
-                      {s.is_active === false ? "Disabled" : s.is_online ? "Active" : "Inactive"}
-                    </Text>
-                    <Text style={styles.sub}>Branch: {s.branch?.name || "Unassigned"}</Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 2 }}>
-                      <Text style={styles.badge}>{(s.role || "staff").toUpperCase()}</Text>
-                      <Text
-                        style={[styles.sub, { color: outcome ? getOutcomeColor(outcome) : "#64748b" }]}
-                      >
-                        Outcome: {outcome || (linked ? "n/a" : "—")}
-                      </Text>
+          <>
+            <Text style={styles.sectionHeading}>Revenue share</Text>
+            <Text style={styles.sectionHint}>
+              One bar per web staff login (same filters as below). Percentages are shares of total paid POS revenue for
+              those staff (from the database). If the API does not expose totals yet, amounts fall back to HR when names
+              match.
+            </Text>
+
+            {filteredStaff.length > 0 ? (
+              <View style={styles.chartSection}>
+                <Text style={styles.chartSectionTitle}>Staff — revenue share</Text>
+                <Text style={styles.chartSectionSub}>Percent of total net revenue (not peso amounts).</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <BarChart
+                    data={{
+                      labels: clerkSharePercentChart.labels,
+                      datasets: [{ data: clerkSharePercentChart.data }],
+                    }}
+                    width={clerkChartWidth}
+                    height={220}
+                    yAxisLabel=""
+                    yAxisSuffix="%"
+                    chartConfig={{
+                      backgroundColor: "#ffffff",
+                      backgroundGradientFrom: "#ffffff",
+                      backgroundGradientTo: "#ffffff",
+                      decimalPlaces: 1,
+                      color: () => "rgba(37, 99, 235, 1)",
+                      labelColor: () => "#334155",
+                      formatYLabel: (y: string) => String(y),
+                      propsForLabels: { fontSize: 11 },
+                      propsForBackgroundLines: { stroke: "#e2e8f0", strokeWidth: 1 },
+                    }}
+                    style={styles.barChart}
+                    fromZero
+                    showValuesOnTopOfBars
+                    verticalLabelRotation={0}
+                  />
+                </ScrollView>
+              </View>
+            ) : !isLoading ? (
+              <Text style={styles.empty}>No staff accounts for this filter — nothing to chart.</Text>
+            ) : null}
+
+            <Text style={[styles.sectionHeading, { marginTop: 20 }]}>Staff logins (web)</Text>
+            <Text style={styles.sectionHint}>
+              Accounts that can sign in on the web POS. Tap Assign on a card or use Emp. Settings.
+            </Text>
+            {filteredStaff.length === 0 && !isLoading ? (
+              <Text style={styles.empty}>No staff accounts match this filter.</Text>
+            ) : (
+              filteredStaff.map((s) => {
+                const linked = hrMatchForStaff(s);
+                const hasDbTotal = "total_revenue_php" in s && s.total_revenue_php != null && s.total_revenue_php !== "";
+                const net = hasDbTotal
+                  ? Math.max(0, Number(s.total_revenue_php))
+                  : linked
+                    ? Number(linked.net_revenue_php || 0)
+                    : 0;
+                const outcome = linked?.revenue_outcome || null;
+                const profitValue = profitAmountForPeriod(s, profitPeriod);
+                const handle = s.email ? `@${String(s.email).split("@")[0]}` : "—";
+                return (
+                  <View key={`staff-${s.id}`} style={styles.card}>
+                    <View style={styles.cardTop}>
+                      <View style={styles.cardMain}>
+                        <Text style={styles.name}>{s.name}</Text>
+                        <Text style={styles.sub}>{handle}</Text>
+                        <Text
+                          style={[
+                            styles.sub,
+                            styles.presenceLabel,
+                            s.is_active === false
+                              ? styles.presenceDisabled
+                              : s.is_online
+                                ? styles.presenceActive
+                                : styles.presenceInactive,
+                          ]}
+                        >
+                          {s.is_active === false ? "Disabled" : s.is_online ? "Active" : "Inactive"}
+                        </Text>
+                        <Text style={styles.sub}>Branch: {s.branch?.name || "Unassigned"}</Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 2 }}>
+                          <Text style={styles.badge}>{(s.role || "staff").toUpperCase()}</Text>
+                          <Text
+                            style={[styles.sub, { color: outcome ? getOutcomeColor(outcome) : "#64748b" }]}
+                          >
+                            Outcome: {outcome || (linked ? "n/a" : "—")}
+                          </Text>
+                        </View>
+                      </View>
+                      <TouchableOpacity style={styles.assignBtn} onPress={() => openStaffAssign(s)}>
+                        <Ionicons name="git-branch-outline" size={14} color="#fff" />
+                        <Text style={styles.assignBtnText}>Assign</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={[styles.sub, { marginTop: 4, fontSize: 11 }]}>{s.email}</Text>
+                    <View style={styles.metrics}>
+                      <View style={styles.metric}>
+                        <Text style={styles.metricLabel}>Net Revenue</Text>
+                        <Text style={styles.metricValue}>₱ {net.toFixed(2)}</Text>
+                      </View>
+                      <View style={styles.metric}>
+                        <Text style={styles.metricLabel}>{PROFIT_PERIOD_LABEL[profitPeriod]}</Text>
+                        <Text style={styles.metricValue}>
+                          {profitValue !== null ? `₱ ${profitValue.toFixed(2)}` : "—"}
+                        </Text>
+                      </View>
                     </View>
                   </View>
-                  <TouchableOpacity style={styles.assignBtn} onPress={() => openStaffAssign(s)}>
-                    <Ionicons name="git-branch-outline" size={14} color="#fff" />
-                    <Text style={styles.assignBtnText}>Assign</Text>
-                  </TouchableOpacity>
-                </View>
-                <Text style={[styles.sub, { marginTop: 4, fontSize: 11 }]}>{s.email}</Text>
-                <View style={styles.metrics}>
-                  <View style={styles.metric}>
-                    <Text style={styles.metricLabel}>Net Revenue</Text>
-                    <Text style={styles.metricValue}>₱ {net.toFixed(2)}</Text>
-                  </View>
-                  <View style={styles.metric}>
-                    <Text style={styles.metricLabel}>Gain/Loss %</Text>
-                    <Text style={styles.metricValue}>{linked ? `${gain} / ${loss}` : "— / —"}</Text>
-                  </View>
-                </View>
-              </View>
-            );
-          })
+                );
+              })
+            )}
+          </>
         )}
       </ScrollView>
 
@@ -716,42 +786,62 @@ export default function EmployeesScreen() {
               <>
                 <Text style={styles.stepHint}>Login credentials</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, cEmailVerified && styles.inputDisabled]}
                   placeholder="Email"
                   autoCapitalize="none"
                   keyboardType="email-address"
                   value={cEmail}
+                  editable={!cEmailVerified}
                   onChangeText={(text) => {
                     setCEmail(text);
-                    setCCodeSent(false);
-                    setCEmailVerified(false);
-                    setCVerifiedEmail("");
-                    setCVerifyCode("");
+                    resetCreateEmailVerification();
                   }}
                 />
                 <View style={styles.verifyRow}>
-                  <TouchableOpacity style={styles.secondaryBtn} onPress={sendEmailCode} disabled={isSendingCode}>
-                    <Text style={styles.secondaryBtnText}>{isSendingCode ? "Sending..." : "Send code"}</Text>
-                  </TouchableOpacity>
-                  <Text style={[styles.verifyStatus, cEmailVerified ? styles.verifyStatusOk : styles.verifyStatusPending]}>
-                    {cEmailVerified ? "Email verified" : cCodeSent ? "Code sent" : "Not verified"}
-                  </Text>
+                  {cEmailVerified ? (
+                    <>
+                      <Text style={[styles.verifyStatus, styles.verifyStatusOk]}>Email verified</Text>
+                      <TouchableOpacity
+                        style={styles.secondaryBtn}
+                        onPress={resetCreateEmailVerification}
+                      >
+                        <Text style={styles.secondaryBtnText}>Change email</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      <TouchableOpacity
+                        style={styles.secondaryBtn}
+                        onPress={sendEmailCode}
+                        disabled={isSendingCode || !EMAIL_REGEX.test(normalizedCreateEmail)}
+                      >
+                        <Text style={styles.secondaryBtnText}>{isSendingCode ? "Sending..." : "Send code"}</Text>
+                      </TouchableOpacity>
+                      <Text style={[styles.verifyStatus, styles.verifyStatusPending]}>
+                        {cCodeSent ? "Code sent" : "Not verified"}
+                      </Text>
+                    </>
+                  )}
                 </View>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Verification code (6 digits)"
-                  keyboardType="number-pad"
-                  value={cVerifyCode}
-                  onChangeText={setCVerifyCode}
-                  maxLength={6}
-                />
-                <TouchableOpacity
-                  style={[styles.secondaryBtn, { alignSelf: "flex-start" }]}
-                  onPress={verifyEmailCode}
-                  disabled={isCheckingCode}
-                >
-                  <Text style={styles.secondaryBtnText}>{isCheckingCode ? "Verifying..." : "Verify code"}</Text>
-                </TouchableOpacity>
+                {!cEmailVerified && (
+                  <>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Verification code (6 digits)"
+                      keyboardType="number-pad"
+                      value={cVerifyCode}
+                      onChangeText={setCVerifyCode}
+                      maxLength={6}
+                    />
+                    <TouchableOpacity
+                      style={[styles.secondaryBtn, { alignSelf: "flex-start" }]}
+                      onPress={verifyEmailCode}
+                      disabled={isCheckingCode || !cCodeSent || !/^\d{6}$/.test(cVerifyCode.trim())}
+                    >
+                      <Text style={styles.secondaryBtnText}>{isCheckingCode ? "Verifying..." : "Verify code"}</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
                 <TextInput
                   style={styles.input}
                   placeholder="Password (min 6)"
@@ -967,6 +1057,11 @@ const styles = StyleSheet.create({
   dropdownItemLast: { borderBottomWidth: 0 },
   dropdownText: { fontSize: 14, color: "#1e293b", fontWeight: "600" },
   content: { padding: 16, paddingBottom: 48 },
+  loadingState: {
+    minHeight: 240,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   toolbar: {
     backgroundColor: "#ffffff",
     borderRadius: 16,
@@ -1034,12 +1129,6 @@ const styles = StyleSheet.create({
   },
   cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
   cardMain: { flex: 1, minWidth: 0 },
-  name: { fontSize: 16, fontWeight: "800", color: "#0f172a" },
-  sub: { fontSize: 12, color: "#64748b", marginTop: 2 },
-  presenceLabel: { fontWeight: "700" },
-  presenceActive: { color: "#16a34a" },
-  presenceInactive: { color: "#dc2626" },
-  presenceDisabled: { color: "#94a3b8" },
   assignBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -1051,6 +1140,12 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   assignBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  name: { fontSize: 16, fontWeight: "800", color: "#0f172a" },
+  sub: { fontSize: 12, color: "#64748b", marginTop: 2 },
+  presenceLabel: { fontWeight: "700" },
+  presenceActive: { color: "#16a34a" },
+  presenceInactive: { color: "#dc2626" },
+  presenceDisabled: { color: "#94a3b8" },
   metrics: { flexDirection: "row", marginTop: 12, gap: 10, alignItems: "stretch" },
   metric: {
     flex: 1,
@@ -1107,6 +1202,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     color: "#0f172a",
     backgroundColor: "#fff",
+  },
+  inputDisabled: {
+    backgroundColor: "#f1f5f9",
+    color: "#64748b",
   },
   sectionLabel: { marginTop: 12, marginBottom: 8, color: "#334155", fontWeight: "700" },
   rolePickRow: { flexDirection: "row", gap: 10, marginTop: 8 },

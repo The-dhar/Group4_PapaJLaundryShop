@@ -22,11 +22,30 @@ class Transaction extends Model
         'payment_status',
         'payment_method',
         'paid_amount',
+        'penalty_amount',
+        'penalty_suggested_amount',
+        'penalty_override_reason',
         'inventory_status',
         'due_date',
         'archived',
         'is_rush',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'total_weight' => 'float',
+            'subtotal' => 'float',
+            'extras' => 'float',
+            'total_amount' => 'float',
+            'paid_amount' => 'float',
+            'penalty_amount' => 'float',
+            'penalty_suggested_amount' => 'float',
+            'archived' => 'boolean',
+            'is_rush' => 'boolean',
+            'due_date' => 'date:Y-m-d',
+        ];
+    }
 
     public function items(): HasMany
     {

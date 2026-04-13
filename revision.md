@@ -2,11 +2,21 @@
 
 Use this file to track what is done and what is pending.
 Features that are already fixed:
-- Fixed: staff can view and act on staff-created transactions in their assigned branch, while clerk keeps full branch transaction visibility.
+- Staff can view and act on staff-created transactions in their assigned branch, while clerk keeps full branch transaction visibility.
+- Newly assigned staff accounts can see existing staff-created transactions in their assigned branch.
+- Clerk web pages auto-refresh transaction lists without hard refresh.
+- POS customer input fields no longer reset while staff is typing.
+- Mobile Create staff Step 2 now locks verified email, hides verification code entry after success, and supports Change email reset.
+- Mobile Branch and Employees tabs now show a centered loading spinner during initial data fetch, consistent with Employee Settings and Price loading behavior.
+- Web now has a dedicated Reports page (Issue Reports + Backjobs) and Receipt Management can create Issue Report or Backjob with employee assignment.
+- After successful report creation, users can jump directly to the Reports page, which now supports lightweight status/type filters.
 
 ## Project Info
 - Created: 2026-04-11
-- Last Updated: 2026-04-11 (implementation pass)
+- Last Updated: 2026-04-11 (implementation + validation + mobile verification UX + loading consistency + reports schema/backend/web flow + reports UX polish + QA pass results + local env/migration/test verification + assignment policy refinement + overdue penalty persistence/enforcement)
+
+## Revision Process
+- Rule: Every new revision must be recorded in this file in the same day it is implemented.
 
 ## Legend
 - [x] Done
@@ -68,6 +78,16 @@ Features that are already fixed:
 	- Target Date: 2026-04-14
 	- Priority: High
 	- Dependency: Backend access checks complete
+- [x] Add Reports page with Issue Reports and Backjobs tabs, including clerk/owner actions for status transitions.
+	- Status: Done
+	- Target Date: 2026-04-14
+	- Priority: High
+	- Dependency: Reports backend routes
+- [x] Add Report action in Receipt Management modal to create Issue Report or Backjob with assignee selection.
+	- Status: Done
+	- Target Date: 2026-04-14
+	- Priority: High
+	- Dependency: report-assignees endpoint
 
 ### Optional Frontend (ReactNative owner screens)
 - [x] Validate owner mobile screens still load transaction data correctly after backend changes.
@@ -77,13 +97,37 @@ Features that are already fixed:
 	- Dependency: Backend access checks complete
 - [x] Notes: Updated mobile transaction screens to show Created By from API creator fields.
 
+### Mobile (ReactNative create staff verification)
+- [x] After email verification, lock email input and hide verification code field/actions.
+	- Status: Done
+	- Target Date: 2026-04-14
+	- Priority: Medium
+	- Dependency: Verification send/check endpoints
+- [x] Add Change email action that resets verification state safely.
+	- Status: Done
+	- Target Date: 2026-04-14
+	- Priority: Medium
+	- Dependency: Verification send/check endpoints
+
+### Mobile (ReactNative loading UX consistency)
+- [x] Remove owner-only notice text in Employee Settings and show spinner while access state is loading.
+	- Status: Done
+	- Target Date: 2026-04-14
+	- Priority: Low
+	- Dependency: None
+- [x] Add initial centered loading spinner in Branch and Employees tabs while first payload is loading.
+	- Status: Done
+	- Target Date: 2026-04-14
+	- Priority: Low
+	- Dependency: None
+
 ## Test Scenarios
-- [ ] Clerk in Branch A sees all Branch A transactions.
-	- Status: Not Started
+- [x] Clerk in Branch A sees all Branch A transactions.
+	- Status: Done
 	- Target Date: 2026-04-14
 	- Priority: High
-- [ ] Staff in Branch A sees staff-created transactions in Branch A and does not see clerk-created transactions.
-	- Status: Not Started
+- [x] Staff in Branch A sees staff-created transactions in Branch A and does not see clerk-created transactions.
+	- Status: Done
 	- Target Date: 2026-04-14
 	- Priority: High
 - [ ] Staff cannot access or modify clerk-created transactions via API endpoints.
@@ -94,10 +138,14 @@ Features that are already fixed:
 	- Status: Not Started
 	- Target Date: 2026-04-14
 	- Priority: High
-- [ ] Newly assigned staff account in a branch can view existing staff-created branch transactions.
-	- Status: Not Started
+- [x] Newly assigned staff account in a branch can view existing staff-created branch transactions.
+	- Status: Done
 	- Target Date: 2026-04-14
 	- Priority: High
+- [x] In Create staff Step 2 on mobile, verified email locks and verification code input is removed until Change email is tapped.
+	- Status: Done
+	- Target Date: 2026-04-14
+	- Priority: Medium
 - [ ] Owner still sees expected transaction data by selected branch and date filters.
 	- Status: Not Started
 	- Target Date: 2026-04-14
@@ -124,4 +172,26 @@ Features that are already fixed:
 - [x] Implementation started (2026-04-11).
 - [x] Backend revision completed (2026-04-11).
 - [x] Frontend revision completed for ReactNative creator labels (2026-04-11).
+- [x] Clerk live auto-fetch now shows new staff transactions without hard refresh (2026-04-11).
+- [x] POS input fields no longer reset while staff is typing (2026-04-11).
+- [x] Staff-to-staff branch transaction visibility confirmed (2026-04-11).
+- [x] Mobile Create staff Step 2 now locks verified email and hides verification code flow after success (2026-04-11).
+- [x] Mobile tabs loading UX aligned: Settings, Branches, Employees, and Price show loading states consistently on initial load (2026-04-11).
+- [x] Added new Laravel migrations for issue reports, backjobs, and report activity logs (2026-04-11).
+- [x] Added backend models, controller logic, and API routes for issue reports/backjobs including role-aware access and activity logging (2026-04-11).
+- [x] Added ReactJS Reports page, sidebar routing, and receipt report creation modal integrated with new reports APIs (2026-04-11).
+- [x] Added Reports tab query routing, lightweight status/type filters, and post-submit "Go to Reports" navigation from Receipt Management (2026-04-11).
+- [x] QA: Verified report/backjob API route registration (issue-reports, backjobs, report-assignees) in backend route list (2026-04-11).
+- [x] QA: Verified ReactJS production build completes successfully; warnings are from pre-existing unrelated files (2026-04-11).
+- [x] QA: Resolved local test environment blockers by generating Laravel Vite build assets and creating local .env from .env.example (2026-04-11).
+- [x] QA: Backend test suite passes locally (41 passed, 132 assertions) after environment setup (2026-04-11).
+- [x] QA: Applied pending local migrations successfully, including issue reports/backjobs/report activity tables (2026-04-11).
+- [x] Policy update: Staff report creation assignment is now staff-only, while clerk/owner/manager can assign staff or clerk (same branch only) (2026-04-11).
+- [x] Workflow update: Added explicit staff-only "Escalate to clerk" action on Reports for open issue reports and backjobs assigned to the current staff user (2026-04-11).
+- [x] Visibility update: Staff can now view open issue reports/backjobs assigned to them, even when created by clerk/owner/manager (2026-04-11).
+- [x] Policy update: Overdue penalty now uses warning tier for 3-29 days and suggested full-amount penalty for 30+ days while still in shop (2026-04-11).
+- [x] Backend update: Added transaction penalty persistence fields (`penalty_amount`, `penalty_suggested_amount`, `penalty_override_reason`) with API validation and mark-paid enforcement (2026-04-11).
+- [x] Frontend update: Inventory and Express payment modals now prefill suggested penalty at 30+ days, keep penalty editable, and require override reason when below suggested amount (2026-04-11).
+- [x] Validation: Ran Laravel migration for penalty columns and backend tests including new `TransactionPenaltyPolicyTest` (44 passed, 144 assertions) (2026-04-11).
+- [x] Validation: Ran ReactJS production build successfully after penalty UI updates (2026-04-11).
 - [ ] End-to-end validation completed.
