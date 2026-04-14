@@ -455,6 +455,10 @@ const Receiptmanagement = () => {
         return next;
       });
 
+      // Close the modal immediately after successful submit.
+      // (Previously it waited for Swal choice, which looked stuck on "Submitting...".)
+      closeReportModal();
+
       const nextResult = await Swal.fire({
         title: 'Dispute created',
         text: 'Open the Dispute page now?',
@@ -463,8 +467,6 @@ const Receiptmanagement = () => {
         confirmButtonText: 'Go to Dispute',
         cancelButtonText: 'Stay here',
       });
-
-      closeReportModal();
 
       if (nextResult.isConfirmed) {
         setSelectedReceipt(null);
