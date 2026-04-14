@@ -34,12 +34,12 @@ function writeBackjobIdsCache(ids) {
   }
 }
 
-function formatInventoryStatus(status, isBackjobTransaction = false) {
+function formatInventoryStatus(status) {
   if (status == null || status === '') return '—';
   const key = String(status).toLowerCase();
   if (key === 'in_shop') return 'In Shop';
   if (key === 'backjob') return 'Backjob';
-  if (key === 'picked_up') return isBackjobTransaction ? 'Backjob / Pick Up' : 'Pick Up';
+  if (key === 'picked_up') return 'Pick Up';
   return String(status)
     .split('_')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
@@ -91,6 +91,21 @@ const Inventorymanagement = () => {
   useEffect(() => {
     loadBackjobTransactionIds();
   }, [loadBackjobTransactionIds]);
+
+  const effectiveBackjobTransactionIds = useMemo(() => {
+    const next = new Set(backjobTransactionIds);
+    transactions.forEach((row) => {
+      if (String(row?.inventory_status || '').toLowerCase() === 'backjob') {
+        const id = Number(row?.id || 0);
+        if (id > 0) next.add(id);
+      }
+    });
+    return next;
+  }, [backjobTransactionIds, transactions]);
+
+  useEffect(() => {
+    writeBackjobIdsCache(effectiveBackjobTransactionIds);
+  }, [effectiveBackjobTransactionIds]);
 
   /** Suggested policy: warning for 3-29 days, full-amount penalty for 30+ days while still in shop. */
   const calculateSuggestedPenalty = (amount, dueDate, inventoryStatus) => {
@@ -214,9 +229,15 @@ const Inventorymanagement = () => {
     {
       name: 'Status',
       cell: (row) => (
-        <span className={`status-pill status-${row.inventory_status}`}>
-          {formatInventoryStatus(row.inventory_status, backjobTransactionIds.has(Number(row.id)))}
-        </span>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span className={`status-pill status-${row.inventory_status}`}>
+            {formatInventoryStatus(row.inventory_status)}
+          </span>
+          {effectiveBackjobTransactionIds.has(Number(row.id)) &&
+            String(row.inventory_status || '').toLowerCase() !== 'backjob' && (
+              <span className="status-pill status-backjob">Backjob</span>
+            )}
+        </div>
       ),
     },
     { name: 'Amount', selector: (row) => `₱${row.amount.toFixed(2)}` },
@@ -387,10 +408,11 @@ const Inventorymanagement = () => {
             <p><strong>Payment Status:</strong> {selectedTxn.payment_status}</p>
             <p>
               <strong>Inventory Status:</strong>{' '}
-              {formatInventoryStatus(
-                selectedTxn.inventory_status,
-                backjobTransactionIds.has(Number(selectedTxn.id))
-              )}
+              {formatInventoryStatus(selectedTxn.inventory_status)}
+              {effectiveBackjobTransactionIds.has(Number(selectedTxn.id)) &&
+                String(selectedTxn.inventory_status || '').toLowerCase() !== 'backjob' && (
+                  <> + Backjob</>
+                )}
             </p>
             <p>
               <strong>Remaining Balance:</strong> 
