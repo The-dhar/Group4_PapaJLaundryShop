@@ -10,12 +10,12 @@ import '../styles/receiptstyle.css';
 import { jsPDF } from 'jspdf';
 import Swal from 'sweetalert2';
 
-function formatInventoryStatus(status, isBackjobTransaction = false) {
+function formatInventoryStatus(status) {
   if (status == null || status === '') return '—';
   const key = String(status).toLowerCase();
   if (key === 'in_shop') return 'In Shop';
-  if (key === 'backjob') return 'Backjob / In Shop';
-  if (key === 'picked_up') return isBackjobTransaction ? 'Backjob / Pick Up' : 'Pick Up';
+  if (key === 'backjob') return 'Backjob';
+  if (key === 'picked_up') return 'Pick Up';
   return String(status)
     .split('_')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
@@ -64,7 +64,18 @@ const Receiptmanagement = () => {
     });
   }, [readyReceipts, searchTerm, filterInventory]);
 
-  const columns = [
+  const effectiveBackjobTransactionIds = useMemo(() => {
+    const next = new Set(backjobTransactionIds);
+    transactions.forEach((row) => {
+      if (String(row?.inventory_status || '').toLowerCase() === 'backjob') {
+        const id = Number(row?.id || 0);
+        if (id > 0) next.add(id);
+      }
+    });
+    return next;
+  }, [backjobTransactionIds, transactions]);
+
+  const columns = useMemo(() => [
     { name: 'Receipt ID', selector: (row) => row.receipt, sortable: true },
     { name: 'Customer', selector: (row) => row.customer_name },
     { name: 'Service', selector: (row) => row.receipt_items?.[0]?.laundryType || 'N/A' },
@@ -77,9 +88,15 @@ const Receiptmanagement = () => {
     {
       name: 'Status',
       cell: (row) => (
-        <span className={`status-pill status-${row.inventory_status}`}>
-          {formatInventoryStatus(row.inventory_status, backjobTransactionIds.has(Number(row.id)))}
-        </span>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span className={`status-pill status-${row.inventory_status}`}>
+            {formatInventoryStatus(row.inventory_status)}
+          </span>
+          {effectiveBackjobTransactionIds.has(Number(row.id)) &&
+            String(row.inventory_status || '').toLowerCase() !== 'backjob' && (
+              <span className="status-pill status-backjob">Backjob</span>
+            )}
+        </div>
       ),
     },
     { name: 'Amount', selector: (row) => `₱${row.amount.toFixed(2)}` },
@@ -111,7 +128,7 @@ const Receiptmanagement = () => {
         </div>
       ),
     },
-  ];
+  ], [effectiveBackjobTransactionIds]);
 
   // Generate 58mm thermal-style PDF for the selected receipt
   const handlePrint = () => {
