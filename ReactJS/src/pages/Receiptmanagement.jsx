@@ -790,6 +790,9 @@ const Receiptmanagement = () => {
           <div className="receipt-report-modal" onClick={(e) => e.stopPropagation()}>
             <h3>Create Report</h3>
             <p className="receipt-report-sub">Receipt: <strong>{selectedReceipt.receipt}</strong> · Customer: <strong>{selectedReceipt.customer_name}</strong></p>
+            <p className="receipt-report-note">
+              Make sure that the dispute details are correct as this action cannot be edited later on.
+            </p>
 
             <label>Dispute type</label>
             <select value={issueType} onChange={(e) => setIssueType(e.target.value)}>

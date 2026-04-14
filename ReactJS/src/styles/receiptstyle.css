@@ -650,6 +650,17 @@
     font-size: 13px;
 }
 
+.receipt-report-note {
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #facc15;
+    background: #fffbeb;
+    color: #854d0e;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
 .receipt-report-modal label {
     font-size: 12px;
     font-weight: 600;
