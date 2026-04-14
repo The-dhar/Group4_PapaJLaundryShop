@@ -33,8 +33,8 @@ function writeBranchesCache(rows) {
 const formatPeso = (value) => `₱${Number(value).toLocaleString()}`;
 
 /** Same calendar windows as revenue charts (transaction dates). Refunds use `resolved_at` with the same windows. */
-function getViewDateBounds(viewType) {
-  const now = new Date();
+function getViewDateBounds(viewType, referenceDate = new Date()) {
+  const now = new Date(referenceDate);
   const start = new Date(now);
   const end = new Date(now);
 
@@ -235,6 +235,7 @@ const RefundLineChart = memo(function RefundLineChart({ data }) {
 const Dashboard = () => {
   const { transactions, fetchTransactions } = useTransactions();
   const [viewType, setViewType] = useState('week');
+  const [yearFilterDate, setYearFilterDate] = useState(() => new Date().toISOString().slice(0, 10));
   /** Restored from session on mount so navigating away/back does not flash empty. */
   const [branches, setBranches] = useState(() => readBranchesCache());
   const [issueReports, setIssueReports] = useState([]);
@@ -308,7 +309,12 @@ const Dashboard = () => {
   );
 
   /** One range object per view — avoids calling getViewDateBounds twice per render. */
-  const viewBounds = useMemo(() => getViewDateBounds(viewType), [viewType]);
+  const viewBounds = useMemo(() => {
+    const parsedYearDate = new Date(yearFilterDate);
+    const hasValidYearDate = !Number.isNaN(parsedYearDate.getTime());
+    const referenceDate = viewType === 'year' && hasValidYearDate ? parsedYearDate : new Date();
+    return getViewDateBounds(viewType, referenceDate);
+  }, [viewType, yearFilterDate]);
 
   const filteredTransactions = useMemo(() => {
     const { start, end } = viewBounds;
@@ -523,6 +529,9 @@ const Dashboard = () => {
   const setViewWeek = useCallback(() => setViewType('week'), []);
   const setViewMonth = useCallback(() => setViewType('month'), []);
   const setViewYear = useCallback(() => setViewType('year'), []);
+  const onYearFilterDateChange = useCallback((e) => {
+    setYearFilterDate(e.target.value);
+  }, []);
 
   return (
     <DashboardLayout>
@@ -592,6 +601,15 @@ const Dashboard = () => {
             >
               Yearly
             </button>
+            {viewType === 'year' && (
+              <input
+                type="date"
+                className="chart-year-date"
+                value={yearFilterDate}
+                onChange={onYearFilterDateChange}
+                aria-label="Select year date for yearly chart"
+              />
+            )}
           </div>
 
           <ResponsiveContainer width="100%" height={220}>

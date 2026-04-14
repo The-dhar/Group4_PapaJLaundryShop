@@ -199,6 +199,16 @@
     box-shadow: 0 4px 12px rgba(25, 118, 210, 0.4);
 }
 
+.chart-year-date {
+    height: 38px;
+    padding: 6px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #1e293b;
+    background: #ffffff;
+}
+
 .card-transaction {
     background: #ffffff;
     padding: 0 0 12px 0;
