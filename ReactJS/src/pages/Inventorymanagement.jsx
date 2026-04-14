@@ -12,6 +12,28 @@ import {
 import { API_URL } from '../config/api';
 import '../styles/inventorystyle.css';
 
+const BACKJOB_IDS_SESSION_KEY = 'inventory_backjob_transaction_ids_v1';
+
+function readBackjobIdsCache() {
+  try {
+    const raw = sessionStorage.getItem(BACKJOB_IDS_SESSION_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0));
+  } catch {
+    return new Set();
+  }
+}
+
+function writeBackjobIdsCache(ids) {
+  try {
+    sessionStorage.setItem(BACKJOB_IDS_SESSION_KEY, JSON.stringify(Array.from(ids)));
+  } catch {
+    // ignore quota/private mode
+  }
+}
+
 function formatInventoryStatus(status, isBackjobTransaction = false) {
   if (status == null || status === '') return '—';
   const key = String(status).toLowerCase();
@@ -41,7 +63,7 @@ const Inventorymanagement = () => {
   const [penaltyInput, setPenaltyInput] = useState('');
   const [penaltyOverrideReason, setPenaltyOverrideReason] = useState('');
   const [isMarkPaidProcessing, setIsMarkPaidProcessing] = useState(false);
-  const [backjobTransactionIds, setBackjobTransactionIds] = useState(new Set());
+  const [backjobTransactionIds, setBackjobTransactionIds] = useState(() => readBackjobIdsCache());
 
   const loadBackjobTransactionIds = useCallback(async () => {
     const token = localStorage.getItem('token');
@@ -60,6 +82,7 @@ const Inventorymanagement = () => {
         if (id > 0) next.add(id);
       });
       setBackjobTransactionIds(next);
+      writeBackjobIdsCache(next);
     } catch {
       // Keep previous cache if refresh fails.
     }
