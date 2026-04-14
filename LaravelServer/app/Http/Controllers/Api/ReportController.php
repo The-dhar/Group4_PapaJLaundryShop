@@ -15,7 +15,13 @@ use Illuminate\Validation\ValidationException;
 
 class ReportController extends Controller
 {
-    private const ISSUE_TYPES = ['damaged', 'lost', 'other'];
+    private const ISSUE_TYPES = [
+        'damaged',
+        'lost',
+        'poor_quality_cleaning',
+        'wrinkled_not_folded_well',
+        'other',
+    ];
     private const ISSUE_OPEN_STATUSES = ['pending', 'under_review'];
     private const ISSUE_RESOLVABLE_STATUSES = ['pending', 'under_review'];
     private const ISSUE_RESOLUTION_TYPES = ['refund', 'replacement'];
@@ -125,7 +131,7 @@ class ReportController extends Controller
 
         $validated = $request->validate([
             'transaction_id' => 'required|integer|exists:transactions,id',
-            'issue_type' => 'required|string|in:damaged,lost,other',
+            'issue_type' => 'required|string|in:damaged,lost,poor_quality_cleaning,wrinkled_not_folded_well,other',
             'issue_note' => 'nullable|string|max:2000',
             'assigned_employee_user_id' => 'nullable|integer|exists:users,id',
         ]);
@@ -296,6 +302,12 @@ class ReportController extends Controller
         $createdBackjob = null;
         if ($report->resolution_type === 'replacement') {
             $createdBackjob = $this->createReplacementBackjobIfMissing($report, $user);
+            if ($createdBackjob) {
+                // Backjob flow: keep dispute row, and tag source transaction as backjob in Transaction Log.
+                Transaction::query()
+                    ->whereKey($report->transaction_id)
+                    ->update(['inventory_status' => 'backjob']);
+            }
         }
 
         $report->load([

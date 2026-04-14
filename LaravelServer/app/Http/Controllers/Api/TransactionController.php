@@ -436,7 +436,7 @@ class TransactionController extends Controller
     public function update(Request $request, $id)
     {
         $validated = $request->validate([
-            'inventory_status' => 'nullable|in:in_shop,picked_up',
+            'inventory_status' => 'nullable|in:in_shop,picked_up,backjob',
         ]);
 
         $transaction = $this->transactionForUser($request->user(), (int) $id);

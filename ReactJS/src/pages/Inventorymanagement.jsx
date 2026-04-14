@@ -278,6 +278,7 @@ const Inventorymanagement = () => {
                 <option value="All">All Inventory</option>
                 <option value="in_shop">In Shop</option>
                 <option value="picked_up">Picked Up</option>
+                <option value="backjob">Backjob</option>
               </select>
             </div>
 

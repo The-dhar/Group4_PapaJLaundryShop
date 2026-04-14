@@ -35,6 +35,20 @@ function statusClass(status) {
   return `reports-status reports-status-${s.replace(/[^a-z0-9_-]/g, '_')}`;
 }
 
+function normalizeIssueType(issueType) {
+  return String(issueType || '').toLowerCase().replace(/\s+/g, '_').replace(/[^\w]/g, '');
+}
+
+function issueTypeLabel(issueType) {
+  const t = normalizeIssueType(issueType);
+  if (t === 'poor_quality_cleaning') return 'Poor Quality Cleaning';
+  if (t === 'wrinkled_not_folded_well') return 'Wrinkled/ Not Folded Well';
+  if (t === 'damaged') return 'Damaged';
+  if (t === 'lost') return 'Lost';
+  if (t === 'other') return 'Other';
+  return String(issueType || '—');
+}
+
 async function apiRequest(path, options = {}) {
   const token = getToken();
   const res = await fetch(`${API_URL}${path}`, {
@@ -175,13 +189,14 @@ export default function ReportsPage() {
         });
       }
 
-      if (action === 'resolve_refund') {
+      if (action === 'resolve_refund' || action === 'resolve_backjob') {
+        const isBackjob = action === 'resolve_backjob';
         const noteResult = await Swal.fire({
-          title: 'Resolve as refund',
+          title: isBackjob ? 'Resolve as backjob' : 'Resolve as refund',
           input: 'textarea',
           inputLabel: 'Optional note',
           showCancelButton: true,
-          confirmButtonText: 'Resolve refund',
+          confirmButtonText: isBackjob ? 'Resolve backjob' : 'Resolve refund',
           cancelButtonText: 'Cancel',
         });
         if (!noteResult.isConfirmed) return;
@@ -189,7 +204,7 @@ export default function ReportsPage() {
         await apiRequest(`/issue-reports/${row.id}/resolve`, {
           method: 'PUT',
           body: JSON.stringify({
-            resolution_type: 'refund',
+            resolution_type: isBackjob ? 'replacement' : 'refund',
             resolution_note: String(noteResult.value || '').trim() || null,
           }),
         });
@@ -232,7 +247,10 @@ export default function ReportsPage() {
 
   const renderIssueActions = (row) => {
     const status = String(row.status || '').toLowerCase();
+    const issueType = normalizeIssueType(row.issue_type);
     const isMutating = mutatingId === `issue-${row.id}`;
+    const refundTypes = new Set(['damaged', 'lost']);
+    const backjobTypes = new Set(['poor_quality_cleaning', 'wrinkled_not_folded_well']);
 
     if (!canResolve) {
       if (
@@ -261,10 +279,13 @@ export default function ReportsPage() {
         {status === 'pending' && (
           <button disabled={isMutating} onClick={() => updateIssue(row, 'under_review')}>Under review</button>
         )}
-        {status === 'under_review' && (
+        {status === 'under_review' && refundTypes.has(issueType) && (
           <>
             <button disabled={isMutating} onClick={() => updateIssue(row, 'resolve_refund')}>Resolve refund</button>
           </>
+        )}
+        {status === 'under_review' && backjobTypes.has(issueType) && (
+          <button disabled={isMutating} onClick={() => updateIssue(row, 'resolve_backjob')}>Backjob</button>
         )}
         <button disabled={isMutating} onClick={() => updateIssue(row, 'reject')}>Reject</button>
       </div>
@@ -335,7 +356,7 @@ export default function ReportsPage() {
                     <td>{row.transaction?.receipt || '—'}</td>
                     <td>{row.transaction?.customer_name || '—'}</td>
                     <td>
-                      <div className="reports-cell-title">{String(row.issue_type || '').toUpperCase()}</div>
+                      <div className="reports-cell-title">{issueTypeLabel(row.issue_type)}</div>
                       {row.issue_note ? <div className="reports-cell-sub">{row.issue_note}</div> : null}
                     </td>
                     <td>{row.assigned_employee_name || '—'}</td>
