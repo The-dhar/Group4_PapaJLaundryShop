@@ -108,7 +108,7 @@ const Sidebar = ({ sidebarOpen, toggleSidebar }) => {
 
                 <li className='sidebar-list-items'>
                     <NavLink to="/Reports">
-                        <BsFlag className='icon'/><span>Reports</span>
+                        <BsFlag className='icon'/><span>Dispute</span>
                     </NavLink>
                 </li>
 

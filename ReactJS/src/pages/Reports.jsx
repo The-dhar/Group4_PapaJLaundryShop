@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { BsArrowClockwise } from 'react-icons/bs';
 import Swal from 'sweetalert2';
 import DashboardLayout from '../components/dashboardlayout';
 import { API_URL } from '../config/api';
@@ -59,24 +59,12 @@ async function apiRequest(path, options = {}) {
 }
 
 export default function ReportsPage() {
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  const getTabFromQuery = useCallback(() => {
-    const params = new URLSearchParams(location.search || '');
-    const tab = String(params.get('tab') || '').toLowerCase();
-    return tab === 'backjobs' ? 'backjobs' : 'issues';
-  }, [location.search]);
-
-  const [activeTab, setActiveTab] = useState('issues');
   const [issueRows, setIssueRows] = useState([]);
-  const [backjobRows, setBackjobRows] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [mutatingId, setMutatingId] = useState(null);
   const [issueStatusFilter, setIssueStatusFilter] = useState('all');
   const [issueTypeFilter, setIssueTypeFilter] = useState('all');
-  const [backjobStatusFilter, setBackjobStatusFilter] = useState('all');
 
   const role = useMemo(() => getRole(), []);
   const currentUserId = useMemo(() => getUserId(), []);
@@ -87,12 +75,8 @@ export default function ReportsPage() {
     setIsLoading(true);
     setError('');
     try {
-      const [issues, backjobs] = await Promise.all([
-        apiRequest('/issue-reports'),
-        apiRequest('/backjobs'),
-      ]);
+      const issues = await apiRequest('/issue-reports');
       setIssueRows(Array.isArray(issues) ? issues : []);
-      setBackjobRows(Array.isArray(backjobs) ? backjobs : []);
     } catch (e) {
       setError(e.message || 'Failed to load reports.');
     } finally {
@@ -104,15 +88,6 @@ export default function ReportsPage() {
     loadData();
   }, [loadData]);
 
-  useEffect(() => {
-    setActiveTab(getTabFromQuery());
-  }, [getTabFromQuery]);
-
-  const switchTab = (nextTab) => {
-    setActiveTab(nextTab);
-    navigate(`/Reports?tab=${nextTab}`, { replace: true });
-  };
-
   const issueStatusOptions = useMemo(() => {
     const values = new Set(issueRows.map((row) => String(row.status || '').toLowerCase()).filter(Boolean));
     return ['all', ...Array.from(values).sort()];
@@ -123,11 +98,6 @@ export default function ReportsPage() {
     return ['all', ...Array.from(values).sort()];
   }, [issueRows]);
 
-  const backjobStatusOptions = useMemo(() => {
-    const values = new Set(backjobRows.map((row) => String(row.status || '').toLowerCase()).filter(Boolean));
-    return ['all', ...Array.from(values).sort()];
-  }, [backjobRows]);
-
   const filteredIssueRows = useMemo(() => {
     return issueRows.filter((row) => {
       const byStatus = issueStatusFilter === 'all' || String(row.status || '').toLowerCase() === issueStatusFilter;
@@ -135,12 +105,6 @@ export default function ReportsPage() {
       return byStatus && byType;
     });
   }, [issueRows, issueStatusFilter, issueTypeFilter]);
-
-  const filteredBackjobRows = useMemo(() => {
-    return backjobRows.filter((row) => {
-      return backjobStatusFilter === 'all' || String(row.status || '').toLowerCase() === backjobStatusFilter;
-    });
-  }, [backjobRows, backjobStatusFilter]);
 
   const pickClerkForEscalation = async (transactionId) => {
     const rows = await apiRequest(`/report-escalation-clerks?transaction_id=${encodeURIComponent(transactionId)}`);
@@ -240,49 +204,6 @@ export default function ReportsPage() {
     }
   };
 
-  const updateBackjob = async (row, action) => {
-    if (!canResolve) return;
-
-    const actionMap = {
-      approve: `/backjobs/${row.id}/approve`,
-      start: `/backjobs/${row.id}/start`,
-      complete: `/backjobs/${row.id}/complete`,
-      cancel: `/backjobs/${row.id}/cancel`,
-    };
-
-    const url = actionMap[action];
-    if (!url) return;
-
-    try {
-      setMutatingId(`backjob-${row.id}`);
-
-      let reasonNote = null;
-      if (action === 'cancel') {
-        const noteResult = await Swal.fire({
-          title: 'Cancel backjob',
-          input: 'textarea',
-          inputLabel: 'Optional note',
-          showCancelButton: true,
-          confirmButtonText: 'Cancel backjob',
-          cancelButtonText: 'Keep it open',
-        });
-        if (!noteResult.isConfirmed) return;
-        reasonNote = String(noteResult.value || '').trim() || null;
-      }
-
-      await apiRequest(url, {
-        method: 'PUT',
-        body: JSON.stringify({ reason_note: reasonNote }),
-      });
-
-      await loadData();
-    } catch (e) {
-      await Swal.fire({ title: 'Action failed', text: e.message || 'Request failed.', icon: 'error' });
-    } finally {
-      setMutatingId(null);
-    }
-  };
-
   const escalateIssue = async (row) => {
     if (!isStaff) return;
 
@@ -298,33 +219,6 @@ export default function ReportsPage() {
       if (!clerkId) return;
 
       await apiRequest(`/issue-reports/${row.id}/escalate`, {
-        method: 'PUT',
-        body: JSON.stringify({ clerk_user_id: clerkId }),
-      });
-
-      await loadData();
-    } catch (e) {
-      await Swal.fire({ title: 'Escalation failed', text: e.message || 'Request failed.', icon: 'error' });
-    } finally {
-      setMutatingId(null);
-    }
-  };
-
-  const escalateBackjob = async (row) => {
-    if (!isStaff) return;
-
-    const transactionId = Number(row.transaction_id || row.transaction?.id || 0);
-    if (!transactionId) {
-      await Swal.fire({ title: 'Escalation failed', text: 'Missing transaction reference.', icon: 'error' });
-      return;
-    }
-
-    try {
-      setMutatingId(`backjob-${row.id}`);
-      const clerkId = await pickClerkForEscalation(transactionId);
-      if (!clerkId) return;
-
-      await apiRequest(`/backjobs/${row.id}/escalate`, {
         method: 'PUT',
         body: JSON.stringify({ clerk_user_id: clerkId }),
       });
@@ -375,113 +269,49 @@ export default function ReportsPage() {
     );
   };
 
-  const renderBackjobActions = (row) => {
-    const status = String(row.status || '').toLowerCase();
-    const isMutating = mutatingId === `backjob-${row.id}`;
-
-    if (!canResolve) {
-      if (
-        isStaff &&
-        currentUserId !== null &&
-        Number(row.assigned_employee_user_id) === currentUserId &&
-        (status === 'pending' || status === 'approved' || status === 'in_progress')
-      ) {
-        return (
-          <div className="reports-actions">
-            <button disabled={isMutating} onClick={() => escalateBackjob(row)}>Escalate to clerk</button>
-          </div>
-        );
-      }
-
-      return <span className="reports-muted">View only</span>;
-    }
-
-
-    if (status === 'completed' || status === 'cancelled') {
-      return <span className="reports-muted">Closed</span>;
-    }
-
-    return (
-      <div className="reports-actions">
-        {status === 'pending' && (
-          <button disabled={isMutating} onClick={() => updateBackjob(row, 'approve')}>Approve</button>
-        )}
-        {status === 'approved' && (
-          <button disabled={isMutating} onClick={() => updateBackjob(row, 'start')}>Start</button>
-        )}
-        {status === 'in_progress' && (
-          <button disabled={isMutating} onClick={() => updateBackjob(row, 'complete')}>Complete</button>
-        )}
-        {(status === 'pending' || status === 'approved' || status === 'in_progress') && (
-          <button disabled={isMutating} onClick={() => updateBackjob(row, 'cancel')}>Cancel</button>
-        )}
-      </div>
-    );
-  };
-
   return (
     <DashboardLayout>
       <div className="reports-page">
         <div className="reports-header">
           <div>
-            <h2>Reports</h2>
-            <p>Issue reports and backjobs linked to receipt transactions.</p>
+            <h2>Dispute</h2>
+            <p>Issue reports linked to receipt transactions.</p>
           </div>
-          <button className="reports-refresh" onClick={loadData} disabled={isLoading}>Refresh</button>
-        </div>
-
-        <div className="reports-tabs">
           <button
-            className={activeTab === 'issues' ? 'active' : ''}
-            onClick={() => switchTab('issues')}
+            className="reports-refresh reports-refresh-icon"
+            onClick={loadData}
+            disabled={isLoading}
+            title="Refresh dispute list"
+            aria-label="Refresh dispute list"
           >
-            Issue Reports
-          </button>
-          <button
-            className={activeTab === 'backjobs' ? 'active' : ''}
-            onClick={() => switchTab('backjobs')}
-          >
-            Backjobs
+            <BsArrowClockwise />
           </button>
         </div>
 
         <div className="reports-filterbar">
-          {activeTab === 'issues' ? (
-            <>
-              <label>
-                Status
-                <select value={issueStatusFilter} onChange={(e) => setIssueStatusFilter(e.target.value)}>
-                  {issueStatusOptions.map((v) => (
-                    <option key={`issue-status-${v}`} value={v}>{v === 'all' ? 'All' : v}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Type
-                <select value={issueTypeFilter} onChange={(e) => setIssueTypeFilter(e.target.value)}>
-                  {issueTypeOptions.map((v) => (
-                    <option key={`issue-type-${v}`} value={v}>{v === 'all' ? 'All' : v}</option>
-                  ))}
-                </select>
-              </label>
-            </>
-          ) : (
-            <label>
-              Status
-              <select value={backjobStatusFilter} onChange={(e) => setBackjobStatusFilter(e.target.value)}>
-                {backjobStatusOptions.map((v) => (
-                  <option key={`backjob-status-${v}`} value={v}>{v === 'all' ? 'All' : v}</option>
-                ))}
-              </select>
-            </label>
-          )}
+          <label>
+            Status
+            <select value={issueStatusFilter} onChange={(e) => setIssueStatusFilter(e.target.value)}>
+              {issueStatusOptions.map((v) => (
+                <option key={`issue-status-${v}`} value={v}>{v === 'all' ? 'All' : v}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Type
+            <select value={issueTypeFilter} onChange={(e) => setIssueTypeFilter(e.target.value)}>
+              {issueTypeOptions.map((v) => (
+                <option key={`issue-type-${v}`} value={v}>{v === 'all' ? 'All' : v}</option>
+              ))}
+            </select>
+          </label>
         </div>
 
         {error ? <div className="reports-error">{error}</div> : null}
 
         {isLoading ? (
           <div className="reports-loading">Loading reports...</div>
-        ) : activeTab === 'issues' ? (
+        ) : (
           <div className="reports-table-wrap">
             <table className="reports-table">
               <thead>
@@ -515,39 +345,6 @@ export default function ReportsPage() {
                       ) : null}
                     </td>
                     <td>{renderIssueActions(row)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="reports-table-wrap">
-            <table className="reports-table">
-              <thead>
-                <tr>
-                  <th>Receipt</th>
-                  <th>Customer</th>
-                  <th>Assigned</th>
-                  <th>Created By</th>
-                  <th>Status</th>
-                  <th>Note</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredBackjobRows.length === 0 ? (
-                  <tr><td colSpan={7} className="reports-empty">No backjobs yet.</td></tr>
-                ) : filteredBackjobRows.map((row) => (
-                  <tr key={`backjob-${row.id}`}>
-                    <td>{row.transaction?.receipt || '—'}</td>
-                    <td>{row.transaction?.customer_name || '—'}</td>
-                    <td>{row.assigned_employee_name || '—'}</td>
-                    <td>{row.created_by_name || '—'}</td>
-                    <td>
-                      <span className={statusClass(row.status)}>{row.status || '—'}</span>
-                    </td>
-                    <td>{row.reason_note || '—'}</td>
-                    <td>{renderBackjobActions(row)}</td>
                   </tr>
                 ))}
               </tbody>
