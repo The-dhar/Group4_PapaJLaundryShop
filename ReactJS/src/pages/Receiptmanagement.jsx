@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import DataTable from 'react-data-table-component';
 import { BsEye, BsPrinter, BsCheck, BsFlag } from 'react-icons/bs';
 import { useNavigate } from 'react-router-dom';
@@ -35,6 +35,7 @@ const Receiptmanagement = () => {
   const [issueNote, setIssueNote] = useState('');
   const [backjobNote, setBackjobNote] = useState('');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const [reportedTransactionIds, setReportedTransactionIds] = useState(new Set());
 
   // Receipt Management: paid transactions only (unpaid belong in POS / collection flow)
   const readyReceipts = useMemo(
@@ -366,6 +367,41 @@ const Receiptmanagement = () => {
     return 'Request failed.';
   };
 
+  const loadReportedTransactions = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+      const headers = {
+        Accept: 'application/json',
+        Authorization: `Bearer ${token}`,
+      };
+      const [issuesRes, backjobsRes] = await Promise.all([
+        fetch(`${API_URL}/issue-reports`, { headers }),
+        fetch(`${API_URL}/backjobs`, { headers }),
+      ]);
+      const [issues, backjobs] = await Promise.all([
+        issuesRes.ok ? issuesRes.json().catch(() => []) : [],
+        backjobsRes.ok ? backjobsRes.json().catch(() => []) : [],
+      ]);
+      const next = new Set();
+      (Array.isArray(issues) ? issues : []).forEach((row) => {
+        const id = Number(row?.transaction_id || row?.transaction?.id || 0);
+        if (id > 0) next.add(id);
+      });
+      (Array.isArray(backjobs) ? backjobs : []).forEach((row) => {
+        const id = Number(row?.transaction_id || row?.transaction?.id || 0);
+        if (id > 0) next.add(id);
+      });
+      setReportedTransactionIds(next);
+    } catch {
+      // Keep previous cache if refresh fails.
+    }
+  }, []);
+
+  useEffect(() => {
+    loadReportedTransactions();
+  }, [loadReportedTransactions]);
+
   const openReportModal = () => {
     if (!selectedReceipt) return;
 
@@ -421,6 +457,13 @@ const Receiptmanagement = () => {
       if (!res.ok) {
         throw new Error(parseApiError(payload));
       }
+
+      // Lock this transaction from being reported again immediately in UI.
+      setReportedTransactionIds((prev) => {
+        const next = new Set(prev);
+        next.add(Number(selectedReceipt.id));
+        return next;
+      });
 
       const destinationTab = reportType === 'issue' ? 'issues' : 'backjobs';
       const nextResult = await Swal.fire({
@@ -646,9 +689,9 @@ const Receiptmanagement = () => {
                   <button
                     onClick={openReportModal}
                     className="receipt-btn-report"
-                    disabled={isSubmittingReport}
+                    disabled={isSubmittingReport || reportedTransactionIds.has(Number(selectedReceipt.id))}
                   >
-                    <BsFlag /> Report Issue / Backjob
+                    <BsFlag /> {reportedTransactionIds.has(Number(selectedReceipt.id)) ? 'Already Reported' : 'Report Issue / Backjob'}
                   </button>
                   {selectedReceipt.inventory_status === 'in_shop' && selectedReceipt.payment_status === 'paid' && (
                     <button
