@@ -209,6 +209,17 @@
     background: #ffffff;
 }
 
+.chart-date-range {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.chart-date-range-sep {
+    font-size: 13px;
+    color: #64748b;
+}
+
 .card-transaction {
     background: #ffffff;
     padding: 0 0 12px 0;
