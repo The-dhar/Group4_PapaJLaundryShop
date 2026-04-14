@@ -32,6 +32,21 @@ function writeBranchesCache(rows) {
 
 const formatPeso = (value) => `₱${Number(value).toLocaleString()}`;
 
+const DISPUTE_CHART_CONFIG = {
+  refund: {
+    label: 'Refund',
+    pluralLabel: 'Refunds',
+    resolutionType: 'refund',
+    lineColor: '#0d9488',
+  },
+  backjob: {
+    label: 'Backjob',
+    pluralLabel: 'Backjobs',
+    resolutionType: 'replacement',
+    lineColor: '#7c3aed',
+  },
+};
+
 /** Same calendar windows as revenue charts (transaction dates). Refunds use `resolved_at` with the same windows. */
 function getViewDateBounds(viewType, referenceDate = new Date()) {
   const now = new Date(referenceDate);
@@ -63,19 +78,19 @@ function getViewDateBounds(viewType, referenceDate = new Date()) {
   return { start, end };
 }
 
-function refundAmountFromReport(row) {
+function disputeAmountFromReport(row) {
   const n = Number(row?.transaction?.amount);
   return Number.isFinite(n) ? n : 0;
 }
 
-function buildRefundSeries(viewType, refunds) {
+function buildDisputeSeries(viewType, reports) {
   if (viewType === 'today') {
     const labels = ['12AM', '3AM', '6AM', '9AM', '12PM', '3PM', '6PM', '9PM'];
-    const buckets = labels.map((name) => ({ name, refunds: 0 }));
-    refunds.forEach((r) => {
+    const buckets = labels.map((name) => ({ name, amount: 0 }));
+    reports.forEach((r) => {
       const dt = new Date(r.resolved_at || r.updated_at || Date.now());
       const idx = Math.min(7, Math.floor(dt.getHours() / 3));
-      buckets[idx].refunds += refundAmountFromReport(r);
+      buckets[idx].amount += disputeAmountFromReport(r);
     });
     return buckets;
   }
@@ -92,25 +107,25 @@ function buildRefundSeries(viewType, refunds) {
     weekEnd.setDate(monday.getDate() + 6);
     weekEnd.setHours(23, 59, 59, 999);
 
-    const rows = Array.from({ length: 7 }).map((_, idx) => {
+    const weekRows = Array.from({ length: 7 }).map((_, idx) => {
       const d = new Date(monday);
       d.setDate(monday.getDate() + idx);
       return {
         name: dayLabels[idx],
         key: d.toDateString(),
-        refunds: 0,
+        amount: 0,
       };
     });
 
-    refunds.forEach((r) => {
+    reports.forEach((r) => {
       const dt = new Date(r.resolved_at || r.updated_at || Date.now());
       if (dt < monday || dt > weekEnd) return;
       const key = dt.toDateString();
-      const row = rows.find((x) => x.key === key);
-      if (row) row.refunds += refundAmountFromReport(r);
+      const row = weekRows.find((x) => x.key === key);
+      if (row) row.amount += disputeAmountFromReport(r);
     });
 
-    return rows.map(({ name, refunds: ref }) => ({ name, refunds: ref }));
+    return weekRows.map(({ name, amount }) => ({ name, amount }));
   }
 
   if (viewType === 'month') {
@@ -118,51 +133,51 @@ function buildRefundSeries(viewType, refunds) {
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth();
     const weekBuckets = [
-      { name: 'Week 1', refunds: 0 },
-      { name: 'Week 2', refunds: 0 },
-      { name: 'Week 3', refunds: 0 },
-      { name: 'Week 4', refunds: 0 },
+      { name: 'Week 1', amount: 0 },
+      { name: 'Week 2', amount: 0 },
+      { name: 'Week 3', amount: 0 },
+      { name: 'Week 4', amount: 0 },
     ];
 
-    refunds.forEach((r) => {
+    reports.forEach((r) => {
       const dt = new Date(r.resolved_at || r.updated_at || Date.now());
       if (dt.getFullYear() !== currentYear || dt.getMonth() !== currentMonth) return;
       const day = dt.getDate();
       const bucketIdx = Math.min(3, Math.floor((day - 1) / 7));
-      weekBuckets[bucketIdx].refunds += refundAmountFromReport(r);
+      weekBuckets[bucketIdx].amount += disputeAmountFromReport(r);
     });
 
     return weekBuckets;
   }
 
-  const rows = [
-    { name: 'Jan', refunds: 0 },
-    { name: 'Feb', refunds: 0 },
-    { name: 'Mar', refunds: 0 },
-    { name: 'Apr', refunds: 0 },
-    { name: 'May', refunds: 0 },
-    { name: 'Jun', refunds: 0 },
-    { name: 'Jul', refunds: 0 },
-    { name: 'Aug', refunds: 0 },
-    { name: 'Sep', refunds: 0 },
-    { name: 'Oct', refunds: 0 },
-    { name: 'Nov', refunds: 0 },
-    { name: 'Dec', refunds: 0 },
+  const yearRows = [
+    { name: 'Jan', amount: 0 },
+    { name: 'Feb', amount: 0 },
+    { name: 'Mar', amount: 0 },
+    { name: 'Apr', amount: 0 },
+    { name: 'May', amount: 0 },
+    { name: 'Jun', amount: 0 },
+    { name: 'Jul', amount: 0 },
+    { name: 'Aug', amount: 0 },
+    { name: 'Sep', amount: 0 },
+    { name: 'Oct', amount: 0 },
+    { name: 'Nov', amount: 0 },
+    { name: 'Dec', amount: 0 },
   ];
 
-  refunds.forEach((r) => {
+  reports.forEach((r) => {
     const dt = new Date(r.resolved_at || r.updated_at || Date.now());
     const monthIdx = dt.getMonth();
-    rows[monthIdx].refunds += refundAmountFromReport(r);
+    yearRows[monthIdx].amount += disputeAmountFromReport(r);
   });
 
-  return rows;
+  return yearRows;
 }
 
 const REFUND_CHART_H = 228;
 
 /** Fixed-size LineChart driven by container width — avoids ResponsiveContainer delay/clipping with percentage-height cards. */
-const RefundLineChart = memo(function RefundLineChart({ data }) {
+const RefundLineChart = memo(function RefundLineChart({ data, lineLabel, lineColor }) {
   const wrapRef = useRef(null);
   const [width, setWidth] = useState(0);
 
@@ -218,9 +233,9 @@ const RefundLineChart = memo(function RefundLineChart({ data }) {
           />
           <Line
             type="monotone"
-            dataKey="refunds"
-            name="Refunds"
-            stroke="#0d9488"
+            dataKey="amount"
+            name={lineLabel}
+            stroke={lineColor}
             strokeWidth={2}
             dot={{ r: 3, strokeWidth: 2, fill: '#fff' }}
             activeDot={{ r: 5 }}
@@ -230,7 +245,11 @@ const RefundLineChart = memo(function RefundLineChart({ data }) {
       ) : null}
     </div>
   );
-}, (prev, next) => prev.data === next.data);
+}, (prev, next) =>
+  prev.data === next.data &&
+  prev.lineLabel === next.lineLabel &&
+  prev.lineColor === next.lineColor
+);
 
 const Dashboard = () => {
   const { transactions, fetchTransactions } = useTransactions();
@@ -240,6 +259,7 @@ const Dashboard = () => {
   /** Restored from session on mount so navigating away/back does not flash empty. */
   const [branches, setBranches] = useState(() => readBranchesCache());
   const [issueReports, setIssueReports] = useState([]);
+  const [disputeChartType, setDisputeChartType] = useState('refund');
   /** False until the first /branches + /issue-reports attempt finishes (success or fail). */
   const [branchListFetchDone, setBranchListFetchDone] = useState(false);
 
@@ -333,15 +353,16 @@ const Dashboard = () => {
     });
   }, [activeTransactions, viewBounds, rangeStartDate, rangeEndDate]);
 
-  const refundsInView = useMemo(() => {
+  const disputesInView = useMemo(() => {
     const { start, end } = viewBounds;
+    const resolutionType = DISPUTE_CHART_CONFIG[disputeChartType]?.resolutionType || 'refund';
     return issueReports.filter((r) => {
       if (String(r.status || '').toLowerCase() !== 'resolved') return false;
-      if (String(r.resolution_type || '').toLowerCase() !== 'refund') return false;
+      if (String(r.resolution_type || '').toLowerCase() !== resolutionType) return false;
       const dt = new Date(r.resolved_at || r.updated_at || 0);
       return dt >= start && dt <= end;
     });
-  }, [issueReports, viewBounds]);
+  }, [issueReports, viewBounds, disputeChartType]);
 
   const sortedBranchesFromApi = useMemo(
     () => [...branches].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
@@ -365,16 +386,16 @@ const Dashboard = () => {
     return [...map.values()].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
   }, [sortedBranchesFromApi, issueReports]);
 
-  const refundStatsByBranch = useMemo(() => {
+  const disputeStatsByBranch = useMemo(() => {
     const map = new Map();
     branchesForRefunds.forEach((b) => {
       const id = Number(b.id);
-      const list = refundsInView.filter((r) => Number(r.branch_id) === id);
-      const total = list.reduce((sum, r) => sum + refundAmountFromReport(r), 0);
-      map.set(id, { count: list.length, total, chart: buildRefundSeries(viewType, list) });
+      const list = disputesInView.filter((r) => Number(r.branch_id) === id);
+      const total = list.reduce((sum, r) => sum + disputeAmountFromReport(r), 0);
+      map.set(id, { count: list.length, total, chart: buildDisputeSeries(viewType, list) });
     });
     return map;
-  }, [branchesForRefunds, refundsInView, viewType]);
+  }, [branchesForRefunds, disputesInView, viewType]);
 
   const paidTotal = useMemo(
     () =>
@@ -516,8 +537,8 @@ const Dashboard = () => {
     return yearData;
   }, [viewType, todayData, weekData, monthData, yearData]);
 
-  /** Stable empty series for refund fallback (avoid buildRefundSeries in render). */
-  const emptyRefundChart = useMemo(() => buildRefundSeries(viewType, []), [viewType]);
+  /** Stable empty series for dispute fallback. */
+  const emptyDisputeChart = useMemo(() => buildDisputeSeries(viewType, []), [viewType]);
 
   const revenueTooltipFormatter = useCallback((value) => formatPeso(value), []);
   const revenueYAxisTick = useCallback((value) => `₱${value}`, []);
@@ -544,6 +565,9 @@ const Dashboard = () => {
 
   const onRangeEndDateChange = useCallback((e) => {
     setRangeEndDate(e.target.value);
+  }, []);
+  const onDisputeChartTypeChange = useCallback((e) => {
+    setDisputeChartType(e.target.value);
   }, []);
 
   return (
@@ -668,31 +692,43 @@ const Dashboard = () => {
         </Card>
 
         <div className="dashboard-refunds-section">
+          <div className="refund-type-filter">
+            <label htmlFor="dispute-chart-type">Dispute chart</label>
+            <select id="dispute-chart-type" value={disputeChartType} onChange={onDisputeChartTypeChange}>
+              <option value="refund">Refund</option>
+              <option value="backjob">Backjob</option>
+            </select>
+          </div>
           {!branchListFetchDone && branchesForRefunds.length === 0 ? (
             <p className="dashboard-refunds-empty">Loading branch data…</p>
           ) : branchesForRefunds.length === 0 ? (
             <p className="dashboard-refunds-empty">No branches available for your account.</p>
           ) : (
             branchesForRefunds.map((branch) => {
-              const stats = refundStatsByBranch.get(Number(branch.id)) || {
+              const config = DISPUTE_CHART_CONFIG[disputeChartType] || DISPUTE_CHART_CONFIG.refund;
+              const stats = disputeStatsByBranch.get(Number(branch.id)) || {
                 count: 0,
                 total: 0,
-                chart: emptyRefundChart,
+                chart: emptyDisputeChart,
               };
               return (
-                <Card key={`refunds-branch-${branch.id}`} title={`Refunds — ${branch.name || `Branch ${branch.id}`}`}>
+                <Card key={`disputes-${disputeChartType}-branch-${branch.id}`} title={`${config.pluralLabel} — ${branch.name || `Branch ${branch.id}`}`}>
                   <div className="refund-branch-kpis">
                     <div className="refund-kpi">
-                      <span className="refund-kpi-label">Total refunded (est.)</span>
+                      <span className="refund-kpi-label">Total {config.label.toLowerCase()} amount (est.)</span>
                       <span className="refund-kpi-value">{formatPeso(stats.total)}</span>
                     </div>
                     <div className="refund-kpi">
-                      <span className="refund-kpi-label">Refund cases resolved</span>
+                      <span className="refund-kpi-label">{config.pluralLabel} cases resolved</span>
                       <span className="refund-kpi-value">{stats.count}</span>
                     </div>
                   </div>
                   <div className="refund-chart-wrap">
-                    <RefundLineChart data={stats.chart} />
+                    <RefundLineChart
+                      data={stats.chart}
+                      lineLabel={config.pluralLabel}
+                      lineColor={config.lineColor}
+                    />
                   </div>
                 </Card>
               );
