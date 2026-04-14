@@ -1,6 +1,8 @@
 import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BsBoxSeam, BsExclamationTriangle, BsCreditCard } from 'react-icons/bs';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 import Card from '../components/card';
 import DashboardLayout from '../components/dashboardlayout';
 import { useTransactions } from '../context/transactionsContext';
@@ -235,8 +237,8 @@ const RefundLineChart = memo(function RefundLineChart({ data }) {
 const Dashboard = () => {
   const { transactions, fetchTransactions } = useTransactions();
   const [viewType, setViewType] = useState('week');
-  const [rangeStartDate, setRangeStartDate] = useState('');
-  const [rangeEndDate, setRangeEndDate] = useState('');
+  const [chartDateRange, setChartDateRange] = useState([null, null]);
+  const [rangeStartDate, rangeEndDate] = chartDateRange;
   /** Restored from session on mount so navigating away/back does not flash empty. */
   const [branches, setBranches] = useState(() => readBranchesCache());
   const [issueReports, setIssueReports] = useState([]);
@@ -311,18 +313,21 @@ const Dashboard = () => {
 
   /** One range object per view — avoids calling getViewDateBounds twice per render. */
   const viewBounds = useMemo(() => {
-    const parsedYearDate = new Date(rangeStartDate || new Date().toISOString().slice(0, 10));
-    const hasValidYearDate = !Number.isNaN(parsedYearDate.getTime());
-    const referenceDate = viewType === 'year' && hasValidYearDate ? parsedYearDate : new Date();
+    const hasValidYearDate = rangeStartDate instanceof Date && !Number.isNaN(rangeStartDate.getTime());
+    const referenceDate = viewType === 'year' && hasValidYearDate ? rangeStartDate : new Date();
     return getViewDateBounds(viewType, referenceDate);
   }, [viewType, rangeStartDate]);
 
   const filteredTransactions = useMemo(() => {
     const { start, end } = viewBounds;
-    const hasStartDate = Boolean(rangeStartDate);
-    const hasEndDate = Boolean(rangeEndDate);
-    const startDate = hasStartDate ? new Date(`${rangeStartDate}T00:00:00`) : null;
-    const endDate = hasEndDate ? new Date(`${rangeEndDate}T23:59:59.999`) : null;
+    const startDate =
+      rangeStartDate instanceof Date && !Number.isNaN(rangeStartDate.getTime())
+        ? new Date(rangeStartDate.getFullYear(), rangeStartDate.getMonth(), rangeStartDate.getDate(), 0, 0, 0, 0)
+        : null;
+    const endDate =
+      rangeEndDate instanceof Date && !Number.isNaN(rangeEndDate.getTime())
+        ? new Date(rangeEndDate.getFullYear(), rangeEndDate.getMonth(), rangeEndDate.getDate(), 23, 59, 59, 999)
+        : null;
 
     return activeTransactions.filter((t) => {
       const dt = new Date(t.created_at || t.updated_at || Date.now());
@@ -538,12 +543,8 @@ const Dashboard = () => {
   const setViewWeek = useCallback(() => setViewType('week'), []);
   const setViewMonth = useCallback(() => setViewType('month'), []);
   const setViewYear = useCallback(() => setViewType('year'), []);
-  const onRangeStartDateChange = useCallback((e) => {
-    setRangeStartDate(e.target.value);
-  }, []);
-
-  const onRangeEndDateChange = useCallback((e) => {
-    setRangeEndDate(e.target.value);
+  const onChartDateRangeChange = useCallback((nextRange) => {
+    setChartDateRange(nextRange);
   }, []);
 
   return (
@@ -614,23 +615,17 @@ const Dashboard = () => {
             >
               Yearly
             </button>
-            <div className="chart-date-range">
-              <input
-                type="date"
-                className="chart-year-date"
-                value={rangeStartDate}
-                onChange={onRangeStartDateChange}
-                aria-label="Select start date for chart range"
-              />
-              <span className="chart-date-range-sep">to</span>
-              <input
-                type="date"
-                className="chart-year-date"
-                value={rangeEndDate}
-                onChange={onRangeEndDateChange}
-                aria-label="Select end date for chart range"
-              />
-            </div>
+            <DatePicker
+              className="chart-year-date"
+              selected={rangeStartDate}
+              onChange={onChartDateRangeChange}
+              startDate={rangeStartDate}
+              endDate={rangeEndDate}
+              selectsRange
+              isClearable
+              placeholderText="Select date range"
+              ariaLabelledBy="chart-date-range-picker"
+            />
           </div>
 
           <ResponsiveContainer width="100%" height={220}>
