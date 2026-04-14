@@ -147,6 +147,7 @@ export default function EmployeesScreen() {
   const [selectedBranchName, setSelectedBranchName] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [profitPeriod, setProfitPeriod] = useState<ProfitPeriod>("today");
+  const [filterMenu, setFilterMenu] = useState<"role" | "branch" | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createStep, setCreateStep] = useState(1);
@@ -517,6 +518,9 @@ export default function EmployeesScreen() {
     }
   };
 
+  const roleFilterLabel = roleFilter === "all" ? "All" : roleFilter === "clerk" ? "Clerk" : "Staff";
+  const branchFilterLabel = selectedBranchName || "All branches";
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
@@ -546,48 +550,16 @@ export default function EmployeesScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.toolbar}>
           <Text style={styles.toolbarLabel}>Role</Text>
-          <View style={styles.segmentRow}>
-            {(
-              [
-                ["all", "All"],
-                ["clerk", "Clerk"],
-                ["staff", "Staff"],
-              ] as const
-            ).map(([key, label]) => {
-              const active = roleFilter === key;
-              return (
-                <TouchableOpacity
-                  key={key}
-                  style={[styles.segmentChip, active && styles.segmentChipActive]}
-                  onPress={() => setRoleFilter(key)}
-                >
-                  <Text style={[styles.segmentChipText, active && styles.segmentChipTextActive]}>{label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <TouchableOpacity style={styles.dropdownButton} onPress={() => setFilterMenu("role") }>
+            <Text style={styles.dropdownButtonText}>{roleFilterLabel}</Text>
+            <Ionicons name="chevron-down" size={16} color="#475569" />
+          </TouchableOpacity>
 
           <Text style={[styles.toolbarLabel, { marginTop: 10 }]}>Branch</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <TouchableOpacity
-              style={[styles.chip, !selectedBranchName && styles.chipActive]}
-              onPress={() => setSelectedBranchName(null)}
-            >
-              <Text style={[styles.chipText, !selectedBranchName && styles.chipTextActive]}>All</Text>
-            </TouchableOpacity>
-            {branches.map((branch) => {
-              const active = selectedBranchName === branch.name;
-              return (
-                <TouchableOpacity
-                  key={branch.id}
-                  style={[styles.chip, active && styles.chipActive]}
-                  onPress={() => setSelectedBranchName(active ? null : branch.name)}
-                >
-                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{branch.name}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+          <TouchableOpacity style={styles.dropdownButton} onPress={() => setFilterMenu("branch") }>
+            <Text style={styles.dropdownButtonText}>{branchFilterLabel}</Text>
+            <Ionicons name="chevron-down" size={16} color="#475569" />
+          </TouchableOpacity>
 
           <Text style={[styles.toolbarLabel, { marginTop: 10 }]}>Profit period</Text>
           <View style={styles.segmentRow}>
@@ -750,6 +722,74 @@ export default function EmployeesScreen() {
           </>
         )}
       </ScrollView>
+
+      <Modal visible={filterMenu !== null} transparent animationType="fade" onRequestClose={() => setFilterMenu(null)}>
+        <View style={styles.filterModalOverlay}>
+          <View style={styles.filterModalBox}>
+            <View style={styles.filterModalHeader}>
+              <Text style={styles.filterModalTitle}>{filterMenu === "role" ? "Select role" : "Select branch"}</Text>
+              <TouchableOpacity onPress={() => setFilterMenu(null)}>
+                <Ionicons name="close" size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {filterMenu === "role" ? (
+                ([
+                  ["all", "All"],
+                  ["clerk", "Clerk"],
+                  ["staff", "Staff"],
+                ] as const).map(([key, label], index, arr) => {
+                  const active = roleFilter === key;
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      style={[styles.filterOption, index === arr.length - 1 && styles.filterOptionLast]}
+                      onPress={() => {
+                        setRoleFilter(key);
+                        setFilterMenu(null);
+                      }}
+                    >
+                      <Text style={[styles.filterOptionText, active && styles.filterOptionTextActive]}>{label}</Text>
+                      {active ? <Ionicons name="checkmark" size={18} color="#1d4ed8" /> : null}
+                    </TouchableOpacity>
+                  );
+                })
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={[styles.filterOption, !selectedBranchName && styles.filterOptionActive]}
+                    onPress={() => {
+                      setSelectedBranchName(null);
+                      setFilterMenu(null);
+                    }}
+                  >
+                    <Text style={[styles.filterOptionText, !selectedBranchName && styles.filterOptionTextActive]}>
+                      All branches
+                    </Text>
+                    {!selectedBranchName ? <Ionicons name="checkmark" size={18} color="#1d4ed8" /> : null}
+                  </TouchableOpacity>
+                  {branches.map((branch, index) => {
+                    const active = selectedBranchName === branch.name;
+                    return (
+                      <TouchableOpacity
+                        key={branch.id}
+                        style={[styles.filterOption, index === branches.length - 1 && styles.filterOptionLast, active && styles.filterOptionActive]}
+                        onPress={() => {
+                          setSelectedBranchName(branch.name);
+                          setFilterMenu(null);
+                        }}
+                      >
+                        <Text style={[styles.filterOptionText, active && styles.filterOptionTextActive]}>{branch.name}</Text>
+                        {active ? <Ionicons name="checkmark" size={18} color="#1d4ed8" /> : null}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={createOpen} transparent animationType="fade">
         <View style={styles.modalOverlay}>
@@ -1084,6 +1124,18 @@ const styles = StyleSheet.create({
   segmentChipText: { fontSize: 13, fontWeight: "700", color: "#475569" },
   segmentChipTextActive: { color: "#fff" },
   toolbarActions: { marginTop: 10, flexDirection: "row", justifyContent: "flex-end", gap: 8 },
+  dropdownButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+  },
+  dropdownButtonText: { fontSize: 14, fontWeight: "700", color: "#0f172a" },
   chip: {
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -1096,6 +1148,45 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: "#1e3a8a", borderColor: "#1e3a8a" },
   chipText: { fontSize: 12, fontWeight: "700", color: "#475569" },
   chipTextActive: { color: "#fff" },
+  filterModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+  },
+  filterModalBox: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: "#ffffff",
+    borderRadius: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  filterModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  filterModalTitle: { fontSize: 16, fontWeight: "800", color: "#0f172a" },
+  filterOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  filterOptionLast: { borderBottomWidth: 0 },
+  filterOptionActive: { backgroundColor: "#eff6ff" },
+  filterOptionText: { fontSize: 14, fontWeight: "700", color: "#334155" },
+  filterOptionTextActive: { color: "#1d4ed8" },
   sectionHeading: { fontSize: 16, fontWeight: "800", color: "#0f172a", marginBottom: 8 },
   sectionHint: { fontSize: 12, color: "#64748b", marginBottom: 10 },
   badge: {

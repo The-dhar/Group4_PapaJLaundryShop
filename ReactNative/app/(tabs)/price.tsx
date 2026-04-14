@@ -53,6 +53,11 @@ function mergeServiceFromApi(item: any): PriceService {
     String(item?.unit || "").toLowerCase() === "per piece" || firstRange.includes("piece")
       ? "per piece"
       : "kg";
+  const resolvedImageUrl =
+    item.image_url != null && item.image_url !== ""
+      ? resolvePublicFileUrl(String(item.image_url))
+      : null;
+  const imageVersion = item.updated_at ?? item.effective_date ?? item.id;
   return {
     id: Number(item.id),
     name: String(item.name),
@@ -67,10 +72,11 @@ function mergeServiceFromApi(item: any): PriceService {
       : [],
     updatedAt: item.updated_at ?? null,
     effectiveDate: item.effective_date ?? null,
-    imageUrl:
-      item.image_url != null && item.image_url !== ""
-        ? resolvePublicFileUrl(String(item.image_url))
-        : null,
+    imageUrl: resolvedImageUrl
+      ? (resolvedImageUrl.includes("?")
+          ? `${resolvedImageUrl}&v=${encodeURIComponent(String(imageVersion ?? ""))}`
+          : `${resolvedImageUrl}?v=${encodeURIComponent(String(imageVersion ?? ""))}`)
+      : null,
   };
 }
 

@@ -12,6 +12,8 @@ const { width } = Dimensions.get('window');
 
 export default function RevenueDashboard() {
   const [revenueView, setRevenueView] = useState("weekly");
+    const [dailyRevenueData, setDailyRevenueData] = useState<number[]>([]);
+    const [yearlyRevenueData, setYearlyRevenueData] = useState<number[]>([]);
   const router = useRouter();
   const { token } = useAuth();
   const { setBranch } = useBranchPages();
@@ -103,10 +105,45 @@ export default function RevenueDashboard() {
     }
   });
 
+    // Daily view - last 7 days
+    const dailyData = [0, 0, 0, 0, 0, 0, 0];
+    receipts.forEach((txn) => {
+      const created = new Date(txn.created_at || now);
+      const amount = Number(txn.amount || 0);
+      const dayDiff = Math.ceil((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
+      if (dayDiff >= 0 && dayDiff < 7) {
+        dailyData[6 - dayDiff] += amount;
+      }
+    });
+    setDailyRevenueData(dailyData);
+
+    // Yearly view - all 12 months
+    const yearlyData = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    receipts.forEach((txn) => {
+      const created = new Date(txn.created_at || now);
+      const amount = Number(txn.amount || 0);
+      if (created.getFullYear() === now.getFullYear()) {
+        yearlyData[created.getMonth()] += amount;
+      }
+    });
+    setYearlyRevenueData(yearlyData);
+
   const currentRevenue = revenueView === "weekly" ? weeklyRevenueData : monthlyRevenueData;
   const currentLabels = revenueView === "weekly" 
     ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] 
     : ["W1", "W2", "W3", "W4"];
+
+    const finalRevenue = revenueView === "daily" 
+      ? dailyRevenueData 
+      : revenueView === "yearly" 
+        ? yearlyRevenueData 
+        : currentRevenue;
+
+    const finalLabels = revenueView === "daily"
+      ? ["7d", "6d", "5d", "4d", "3d", "2d", "1d"]
+      : revenueView === "yearly"
+        ? ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        : currentLabels;
 
   const chartWidth = width - 32;
 
@@ -161,6 +198,22 @@ export default function RevenueDashboard() {
                   Monthly
                 </Text>
               </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.filterButton, revenueView === "daily" && styles.filterBtnActive]}
+                  onPress={() => setRevenueView("daily")}
+                >
+                  <Text style={[styles.filterText, revenueView === "daily" && styles.filterTextActive]}>
+                    Daily
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.filterButton, revenueView === "yearly" && styles.filterBtnActive]}
+                  onPress={() => setRevenueView("yearly")}
+                >
+                  <Text style={[styles.filterText, revenueView === "yearly" && styles.filterTextActive]}>
+                    Yearly
+                  </Text>
+                </TouchableOpacity>
             </View>
           </View>
 
@@ -179,8 +232,8 @@ export default function RevenueDashboard() {
 
               <LineChart
                 data={{
-                  labels: currentLabels,
-                  datasets: [{ data: currentRevenue }],
+                    labels: finalLabels,
+                    datasets: [{ data: finalRevenue }],
                 }}
                 width={chartWidth - 48}
                 height={220}

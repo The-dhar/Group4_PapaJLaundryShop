@@ -321,6 +321,48 @@ export default function DashboardAnalytics() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
+          <View style={styles.dateRangeCard}>
+            <Text style={styles.dateRangeTitle}>Date range</Text>
+            <View style={styles.presetRow}>
+              {(
+                [
+                  ["weekly", "Weekly"],
+                  ["monthly", "Monthly"],
+                  ["yearly", "Yearly"],
+                  ["range", "Range"],
+                ] as const
+              ).map(([key, label]) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[styles.presetChip, periodPreset === key && styles.presetChipActive]}
+                  onPress={() => applyPeriodPreset(key)}
+                  activeOpacity={0.85}
+                >
+                  <Text
+                    style={[styles.presetChipText, periodPreset === key && styles.presetChipTextActive]}
+                  >
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.dateRangeSummary}>{formatRangeSummary(rangeFrom, rangeTo)}</Text>
+            <View style={styles.dateRangeRow}>
+              <TouchableOpacity style={styles.dateChip} onPress={() => openDatePicker("from")} activeOpacity={0.85}>
+                <Text style={styles.dateChipLabel}>From</Text>
+                <Text style={styles.dateChipValue}>
+                  {parseYmd(rangeFrom).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.dateChip} onPress={() => openDatePicker("to")} activeOpacity={0.85}>
+                <Text style={styles.dateChipLabel}>To</Text>
+                <Text style={styles.dateChipValue}>
+                  {parseYmd(rangeTo).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
         {/* CARDS */}
         <View style={styles.cardRow}>
           {/* Total Sales Card */}
@@ -355,47 +397,6 @@ export default function DashboardAnalytics() {
           </View>
         </View>
 
-        <View style={styles.dateRangeCard}>
-          <Text style={styles.dateRangeTitle}>Date range</Text>
-          <View style={styles.presetRow}>
-            {(
-              [
-                ["weekly", "Weekly"],
-                ["monthly", "Monthly"],
-                ["yearly", "Yearly"],
-                ["range", "Range"],
-              ] as const
-            ).map(([key, label]) => (
-              <TouchableOpacity
-                key={key}
-                style={[styles.presetChip, periodPreset === key && styles.presetChipActive]}
-                onPress={() => applyPeriodPreset(key)}
-                activeOpacity={0.85}
-              >
-                <Text
-                  style={[styles.presetChipText, periodPreset === key && styles.presetChipTextActive]}
-                >
-                  {label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Text style={styles.dateRangeSummary}>{formatRangeSummary(rangeFrom, rangeTo)}</Text>
-          <View style={styles.dateRangeRow}>
-            <TouchableOpacity style={styles.dateChip} onPress={() => openDatePicker("from")} activeOpacity={0.85}>
-              <Text style={styles.dateChipLabel}>From</Text>
-              <Text style={styles.dateChipValue}>
-                {parseYmd(rangeFrom).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.dateChip} onPress={() => openDatePicker("to")} activeOpacity={0.85}>
-              <Text style={styles.dateChipLabel}>To</Text>
-              <Text style={styles.dateChipValue}>
-                {parseYmd(rangeTo).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
 
         {pickerTarget && Platform.OS === "android" ? (
           <DateTimePicker

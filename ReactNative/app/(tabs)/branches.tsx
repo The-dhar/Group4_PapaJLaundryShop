@@ -37,6 +37,12 @@ const BranchAccountManager = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [branchName, setBranchName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pendingDeleteBranch, setPendingDeleteBranch] = useState<Branch | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const ITEMS_PER_PAGE = 5;
 
   const handleProfile = () => {
     setOpen(false);
@@ -82,10 +88,19 @@ const BranchAccountManager = () => {
   );
 
   const branchesSorted = useMemo(() => {
-    return [...branches].sort((a, b) =>
-      String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" })
-    );
-  }, [branches]);
+    return [...branches].sort((a, b) => {
+      const dateA = new Date(a.created_at || 0).getTime();
+      const dateB = new Date(b.created_at || 0).getTime();
+      return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+    });
+  }, [branches, sortOrder]);
+
+  const paginatedBranches = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return branchesSorted.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [branchesSorted, currentPage]);
+
+  const totalPages = Math.ceil(branchesSorted.length / ITEMS_PER_PAGE);
 
   const handleConfirm = async () => {
     const name = branchName.trim();
@@ -147,6 +162,41 @@ const BranchAccountManager = () => {
         createdAt: branch.created_at ?? '',
       },
     });
+  };
+
+  const handleDeleteBranch = (branch: Branch) => {
+    setPendingDeleteBranch(branch);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteBranch || !token) return;
+    try {
+      setIsDeleting(true);
+      const response = await fetch(`${API_URL}/branches/${pendingDeleteBranch.id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        Alert.alert('Error', 'Could not delete branch.');
+        return;
+      }
+
+      setBranches((prev) => prev.filter((b) => b.id !== pendingDeleteBranch.id));
+      setPendingDeleteBranch(null);
+      if (currentPage > 1 && paginatedBranches.length === 1) {
+        setCurrentPage((page) => Math.max(1, page - 1));
+      }
+      Alert.alert('Success', 'Branch deleted successfully.');
+    } catch (error) {
+      console.log(error);
+      Alert.alert('Error', 'Failed to delete branch.');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -217,6 +267,22 @@ const BranchAccountManager = () => {
 
           </View>
 
+          <View style={styles.filterBar}>
+            <TouchableOpacity
+              style={styles.sortButton}
+              onPress={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+            >
+              <Ionicons
+                name={sortOrder === 'asc' ? 'arrow-up' : 'arrow-down'}
+                size={16}
+                color="#3b82f6"
+              />
+              <Text style={styles.sortButtonText}>
+                {sortOrder === 'asc' ? 'Oldest' : 'Newest'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.tableContent}>
 
             {isLoadingBranches && branchesSorted.length === 0 ? (
@@ -225,7 +291,7 @@ const BranchAccountManager = () => {
               </View>
             ) : (
 
-              branchesSorted.map((branch, index) => (
+              paginatedBranches.map((branch, index) => (
 
                 <View key={branch.id} style={styles.branchRowWrapper}>
 
@@ -255,9 +321,16 @@ const BranchAccountManager = () => {
                       <Text style={styles.viewButtonText}>View</Text>
                     </TouchableOpacity>
 
+                    <TouchableOpacity
+                      onPress={() => handleDeleteBranch(branch)}
+                      style={styles.deleteButton}
+                    >
+                      <Ionicons name="trash" size={16} color="#fff" />
+                    </TouchableOpacity>
+
                   </View>
 
-                  {index < branchesSorted.length - 1 && (
+                  {index < paginatedBranches.length - 1 && (
                     <View style={styles.rowDivider} />
                   )}
 
@@ -267,6 +340,26 @@ const BranchAccountManager = () => {
             )}
 
           </View>
+
+          {totalPages > 1 && (
+            <View style={styles.paginationContainer}>
+              <TouchableOpacity
+                disabled={currentPage === 1}
+                onPress={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                style={[styles.paginationButton, currentPage === 1 && styles.paginationButtonDisabled]}
+              >
+                <Text style={styles.paginationButtonText}>← Previous</Text>
+              </TouchableOpacity>
+              <Text style={styles.paginationText}>Page {currentPage} of {totalPages}</Text>
+              <TouchableOpacity
+                disabled={currentPage === totalPages}
+                onPress={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                style={[styles.paginationButton, currentPage === totalPages && styles.paginationButtonDisabled]}
+              >
+                <Text style={styles.paginationButtonText}>Next →</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
         </View>
 
@@ -336,6 +429,44 @@ const BranchAccountManager = () => {
 
         </View>
 
+      </Modal>
+
+      <Modal visible={pendingDeleteBranch !== null} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Delete Branch?</Text>
+              <TouchableOpacity
+                onPress={() => setPendingDeleteBranch(null)}
+                style={styles.closeButton}
+              >
+                <Ionicons name="close" size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalMessage}>
+              Are you sure you want to delete "{pendingDeleteBranch?.name}"? This action cannot be undone.
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.clearButton]}
+                onPress={() => setPendingDeleteBranch(null)}
+              >
+                <Text style={styles.clearButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.deleteConfirmButton]}
+                onPress={confirmDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.deleteConfirmButtonText}>Delete</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
 
     </SafeAreaView>
@@ -434,6 +565,31 @@ const styles = StyleSheet.create({
     fontSize: 15,
     letterSpacing: 0.3,
   },
+  filterBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: '#f8fafc',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    alignItems: 'center',
+  },
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#dbeafe',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+  },
+  sortButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#3b82f6',
+  },
   tableContent: {
     paddingVertical: 8,
   },
@@ -518,6 +674,52 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
   },
+  deleteButton: {
+    marginLeft: 10,
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: '#ef4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  paginationContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    backgroundColor: '#f8fafc',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  paginationButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#3b82f6',
+    minWidth: 104,
+    alignItems: 'center',
+  },
+  paginationButtonDisabled: {
+    backgroundColor: '#cbd5e1',
+  },
+  paginationButtonText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  paginationText: {
+    color: '#475569',
+    fontWeight: '700',
+    fontSize: 13,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
@@ -559,6 +761,14 @@ const styles = StyleSheet.create({
     color: '#64748b',
     lineHeight: 18,
   },
+  modalMessage: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 8,
+    fontSize: 14,
+    color: '#475569',
+    lineHeight: 20,
+  },
   closeButton: {
     width: 36,
     height: 36,
@@ -593,6 +803,15 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    padding: 24,
+    paddingTop: 8,
+  },
+  modalButton: {
+    flex: 1,
+  },
   modalButtons: {
     flexDirection: 'row',
     gap: 12,
@@ -615,6 +834,18 @@ const styles = StyleSheet.create({
   },
   clearButtonText: {
     color: '#64748b',
+    fontWeight: '700',
+    fontSize: 16,
+    letterSpacing: 0.3,
+  },
+  deleteConfirmButton: {
+    paddingVertical: 16,
+    borderRadius: 12,
+    backgroundColor: '#ef4444',
+    alignItems: 'center',
+  },
+  deleteConfirmButtonText: {
+    color: '#ffffff',
     fontWeight: '700',
     fontSize: 16,
     letterSpacing: 0.3,
