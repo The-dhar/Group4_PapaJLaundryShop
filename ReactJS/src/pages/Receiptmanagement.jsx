@@ -10,11 +10,12 @@ import '../styles/receiptstyle.css';
 import { jsPDF } from 'jspdf';
 import Swal from 'sweetalert2';
 
-function formatInventoryStatus(status) {
+function formatInventoryStatus(status, isBackjobTransaction = false) {
   if (status == null || status === '') return '—';
-  const map = { in_shop: 'In Shop', picked_up: 'Pick Up' };
   const key = String(status).toLowerCase();
-  if (map[key]) return map[key];
+  if (key === 'in_shop') return 'In Shop';
+  if (key === 'backjob') return 'Backjob / In Shop';
+  if (key === 'picked_up') return isBackjobTransaction ? 'Backjob / Pick Up' : 'Pick Up';
   return String(status)
     .split('_')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
@@ -34,6 +35,12 @@ const Receiptmanagement = () => {
   const [issueNote, setIssueNote] = useState('');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [reportedTransactionIds, setReportedTransactionIds] = useState(new Set());
+  const [backjobTransactionIds, setBackjobTransactionIds] = useState(new Set());
+
+  const isInShopLike = useCallback(
+    (status) => ['in_shop', 'backjob'].includes(String(status || '').toLowerCase()),
+    []
+  );
 
   // Receipt Management: paid transactions only (unpaid belong in POS / collection flow)
   const readyReceipts = useMemo(
@@ -71,7 +78,7 @@ const Receiptmanagement = () => {
       name: 'Status',
       cell: (row) => (
         <span className={`status-pill status-${row.inventory_status}`}>
-          {formatInventoryStatus(row.inventory_status)}
+          {formatInventoryStatus(row.inventory_status, backjobTransactionIds.has(Number(row.id)))}
         </span>
       ),
     },
@@ -389,6 +396,12 @@ const Receiptmanagement = () => {
         if (id > 0) next.add(id);
       });
       setReportedTransactionIds(next);
+      const nextBackjobs = new Set();
+      (Array.isArray(backjobs) ? backjobs : []).forEach((row) => {
+        const id = Number(row?.transaction_id || row?.transaction?.id || 0);
+        if (id > 0) nextBackjobs.add(id);
+      });
+      setBackjobTransactionIds(nextBackjobs);
     } catch {
       // Keep previous cache if refresh fails.
     }
@@ -684,7 +697,7 @@ const Receiptmanagement = () => {
                   >
                     <BsFlag /> {reportedTransactionIds.has(Number(selectedReceipt.id)) ? 'Already Reported' : 'Report Dispute'}
                   </button>
-                  {selectedReceipt.inventory_status === 'in_shop' && selectedReceipt.payment_status === 'paid' && (
+                  {isInShopLike(selectedReceipt.inventory_status) && selectedReceipt.payment_status === 'paid' && (
                     <button
                       onClick={handleMarkPickedUp}
                       className="receipt-btn-pickup"
@@ -692,7 +705,7 @@ const Receiptmanagement = () => {
                       <BsCheck /> Mark as Picked Up
                     </button>
                   )}
-                  {selectedReceipt.inventory_status === 'in_shop' && selectedReceipt.payment_status === 'unpaid' && (
+                  {isInShopLike(selectedReceipt.inventory_status) && selectedReceipt.payment_status === 'unpaid' && (
                     <div style={{ color: '#dc3545', fontWeight: 'bold', padding: '10px', textAlign: 'center' }}>
                       Cannot mark picked up (Transaction requires payment first)
                     </div>

@@ -13,7 +13,7 @@ import '../styles/inventorystyle.css';
 
 function formatInventoryStatus(status) {
   if (status == null || status === '') return '—';
-  const map = { in_shop: 'In Shop', picked_up: 'Pick Up' };
+  const map = { in_shop: 'In Shop', backjob: 'Backjob / In Shop', picked_up: 'Pick Up' };
   const key = String(status).toLowerCase();
   if (map[key]) return map[key];
   return String(status)
