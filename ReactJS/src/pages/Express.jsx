@@ -45,7 +45,7 @@ const Express = () => {
   const [penaltyInput, setPenaltyInput] = useState('');
   const [penaltyOverrideReason, setPenaltyOverrideReason] = useState('');
 
-  /** Suggested policy: warning for 3-29 days, full-amount penalty for 30+ days while still in shop. */
+  /** Suggested policy: warning for 7-29 days, full-amount penalty for 30+ days while still in shop. */
   const calculateSuggestedPenalty = (amount, dueDate, inventoryStatus) => {
     if (String(inventoryStatus || '').toLowerCase() !== 'in_shop') return 0;
     return isThirtyOrMoreDaysPastDueDate(dueDate) ? Number(amount || 0) : 0;
@@ -61,14 +61,15 @@ const Express = () => {
     ? Number(selectedTxn.penalty_amount ?? selectedTxn.penalty ?? 0)
     : 0;
   const selectedSuggestedPenalty = selectedTxn
-    ? Number(
-        selectedTxn.penalty_suggested_amount ??
-          calculateSuggestedPenalty(
-            selectedTxn.amount,
-            selectedTxn.due_date,
-            selectedTxn.inventory_status
-          )
-      )
+    ? (() => {
+        const storedSuggested = Number(selectedTxn.penalty_suggested_amount || 0);
+        if (storedSuggested > 0) return storedSuggested;
+        return calculateSuggestedPenalty(
+          selectedTxn.amount,
+          selectedTxn.due_date,
+          selectedTxn.inventory_status
+        );
+      })()
     : 0;
   const penaltyParsed = parseMoneyInput(penaltyInput);
   const penaltyEntered = penaltyParsed !== null ? penaltyParsed : 0;
@@ -350,8 +351,8 @@ const Express = () => {
                     Suggested penalty: ₱{selectedSuggestedPenalty.toFixed(2)}
                     {selectedSuggestedPenalty > 0
                       ? ' (30+ days past due)'
-                      : getDaysPastDue(selectedTxn?.due_date) >= 3
-                        ? ' (3-29 days past due warning only)'
+                      : getDaysPastDue(selectedTxn?.due_date) >= 7
+                          ? ' (7-29 days past due warning only)'
                         : ''}
                   </p>
                 )}

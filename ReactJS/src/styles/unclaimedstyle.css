@@ -134,7 +134,7 @@
 }
 
 
-/* ====== Overdue Rows (must match JS: warning = 3–29 days, critical = 30+ days) ====== */
+/* ====== Overdue Rows (must match JS: warning = 7–29 days, critical = 30+ days) ====== */
 
 .rdt_TableRow.overdue-row--critical {
     background-color: rgba(254, 202, 202, 0.92) !important;

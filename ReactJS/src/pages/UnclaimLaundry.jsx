@@ -49,12 +49,12 @@ const UnclaimLaundry = () => {
   const [sortOrder, setSortOrder] = useState('none');
   const [selectedTxn, setSelectedTxn] = useState(null);
 
-  /** Due column icon — any row on this page is already 3+ days past due */
+  /** Due column icon — any row on this page is already 7+ days past due */
   const showUnclaimedWarning = (dueDate) => isThreeOrMoreDaysPastDueDate(dueDate);
 
   const overdueAlertKeyRef = useRef('');
 
-  // Still In Shop + 3+ calendar days past due_date only
+  // Still In Shop + 7+ calendar days past due_date only
   const filteredData = useMemo(() => {
     return transactions.filter((row) => {
       if (row.archived) return false;
@@ -81,7 +81,7 @@ const UnclaimLaundry = () => {
     return data;
   }, [filteredData, sortOrder]);
 
-  // Alert: in-shop orders that are 3+ days past due date
+  // Alert: in-shop orders that are 7+ days past due date
   useEffect(() => {
     const overdueItems = transactions.filter(
       (row) =>
@@ -102,8 +102,8 @@ const UnclaimLaundry = () => {
       title: 'Overdue Laundry Alert',
       html: `
             <div style="text-align:left; font-size:15px; line-height:1.6;">
-              <b>${overdueItems.length}</b> item${overdueItems.length !== 1 ? 's are' : ' is'} <b>3 or more days past the due date</b> and still <b>In Shop</b>.<br><br>
-              Please review them in the <b>Unclaimed</b> table below (yellow: 3–29 days past due; red: 30+ days past due).
+              <b>${overdueItems.length}</b> item${overdueItems.length !== 1 ? 's are' : ' is'} <b>7 or more days past the due date</b> and still <b>In Shop</b>.<br><br>
+              Please review them in the <b>Unclaimed</b> table below (yellow: 7–29 days past due; red: 30+ days past due).
             </div>
           `,
       icon: 'warning',
@@ -151,7 +151,7 @@ const UnclaimLaundry = () => {
               title={
                 isThirtyOrMoreDaysPastDueDate(row.due_date)
                   ? '30+ days past due — urgent (red row)'
-                  : '3–29 days past due — warning (yellow row)'
+                  : '7–29 days past due — warning (yellow row)'
               }
             />
           )}
@@ -237,7 +237,7 @@ const UnclaimLaundry = () => {
                 noDataComponent={
                   <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
                     No orders here yet. This list only shows laundry that is still <strong>In Shop</strong> and{' '}
-                    <strong>3 or more calendar days past the due date</strong>.
+                    <strong>7 or more calendar days past the due date</strong>.
                   </div>
                 }
               />

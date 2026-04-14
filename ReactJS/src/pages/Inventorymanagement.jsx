@@ -107,13 +107,13 @@ const Inventorymanagement = () => {
     writeBackjobIdsCache(effectiveBackjobTransactionIds);
   }, [effectiveBackjobTransactionIds]);
 
-  /** Suggested policy: warning for 3-29 days, full-amount penalty for 30+ days while still in shop. */
+  /** Suggested policy: warning for 7-29 days, full-amount penalty for 30+ days while still in shop. */
   const calculateSuggestedPenalty = (amount, dueDate, inventoryStatus) => {
     if (String(inventoryStatus || '').toLowerCase() !== 'in_shop') return 0;
     return isThirtyOrMoreDaysPastDueDate(dueDate) ? Number(amount || 0) : 0;
   };
 
-  /** Transaction Log: none | warning (3–29d) | urgent (30+d) — only when still In Shop. */
+  /** Transaction Log: none | warning (7–29d) | urgent (30+d) — only when still In Shop. */
   function unclaimedTier(row) {
     if (String(row.inventory_status || '').toLowerCase() !== 'in_shop') return 'none';
     if (isThirtyOrMoreDaysPastDueDate(row.due_date)) return 'urgent';
@@ -131,14 +131,15 @@ const Inventorymanagement = () => {
     ? Number(selectedTxn.penalty_amount ?? selectedTxn.penalty ?? 0)
     : 0;
   const selectedSuggestedPenalty = selectedTxn
-    ? Number(
-        selectedTxn.penalty_suggested_amount ??
-          calculateSuggestedPenalty(
-            selectedTxn.amount,
-            selectedTxn.due_date,
-            selectedTxn.inventory_status
-          )
-      )
+    ? (() => {
+        const storedSuggested = Number(selectedTxn.penalty_suggested_amount || 0);
+        if (storedSuggested > 0) return storedSuggested;
+        return calculateSuggestedPenalty(
+          selectedTxn.amount,
+          selectedTxn.due_date,
+          selectedTxn.inventory_status
+        );
+      })()
     : 0;
   const penaltyParsed = parseMoneyInput(penaltyInput);
   const penaltyEntered = penaltyParsed !== null ? penaltyParsed : 0;
@@ -270,7 +271,7 @@ const Inventorymanagement = () => {
         }
         if (t === 'warning') {
           return (
-            <span className="unclaimed-pill unclaimed-pill--warning" title="3–29 days past due — no penalty yet">
+            <span className="unclaimed-pill unclaimed-pill--warning" title="7–29 days past due — no penalty yet">
               Warning
             </span>
           );
@@ -310,11 +311,13 @@ const Inventorymanagement = () => {
               });
               setPaidAmountInput(row.paid_amount && row.paid_amount !== 0 ? String(row.paid_amount) : '');
               const existingPenalty = Number(row.penalty_amount ?? row.penalty ?? 0) || 0;
+              const storedSuggested = Number(row.penalty_suggested_amount || 0);
               const suggestedPenalty =
-                Number(row.penalty_suggested_amount) ||
-                calculateSuggestedPenalty(row.amount, row.due_date, row.inventory_status);
+                storedSuggested > 0
+                  ? storedSuggested
+                  : calculateSuggestedPenalty(row.amount, row.due_date, row.inventory_status);
               const nextPenalty =
-                existingPenalty > 0 || row.payment_status === 'paid'
+                existingPenalty > 0
                   ? existingPenalty
                   : suggestedPenalty;
               setPenaltyInput(nextPenalty > 0 ? String(nextPenalty) : '');
@@ -463,8 +466,8 @@ const Inventorymanagement = () => {
                   Suggested penalty: ₱{selectedSuggestedPenalty.toFixed(2)}
                   {selectedSuggestedPenalty > 0
                     ? ' (30+ days past due)'
-                    : getDaysPastDue(selectedTxn?.due_date) >= 3
-                      ? ' (3-29 days past due warning only)'
+                    : getDaysPastDue(selectedTxn?.due_date) >= 7
+                      ? ' (7-29 days past due warning only)'
                       : ''}
                 </p>
               )}
