@@ -38,6 +38,7 @@ const Inventorymanagement = () => {
   const [paidAmountInput, setPaidAmountInput] = useState('');
   const [penaltyInput, setPenaltyInput] = useState('');
   const [penaltyOverrideReason, setPenaltyOverrideReason] = useState('');
+  const [isMarkPaidProcessing, setIsMarkPaidProcessing] = useState(false);
 
   /** Suggested policy: warning for 3-29 days, full-amount penalty for 30+ days while still in shop. */
   const calculateSuggestedPenalty = (amount, dueDate, inventoryStatus) => {
@@ -115,6 +116,7 @@ const Inventorymanagement = () => {
   // Mark paid logic with fixed payment_method = Cash
   const handleMarkPaid = async () => {
     if (!selectedTxn) return;
+    if (isMarkPaidProcessing) return;
 
     const paidAmount = parseMoneyInput(paidAmountInput);
     if (paidAmount === null) return;
@@ -124,22 +126,27 @@ const Inventorymanagement = () => {
     if (paidAmount + 0.001 < required) return;
     if (showPenaltyOverrideReasonError) return;
 
-    await updateTransactionPaidAmount(
-      selectedTxn.id,
-      paidAmount,
-      penalty,
-      'Cash',
-      penalty + 0.001 < selectedSuggestedPenalty ? penaltyOverrideReason : ''
-    );
+    try {
+      setIsMarkPaidProcessing(true);
+      await updateTransactionPaidAmount(
+        selectedTxn.id,
+        paidAmount,
+        penalty,
+        'Cash',
+        penalty + 0.001 < selectedSuggestedPenalty ? penaltyOverrideReason : ''
+      );
 
-    if (selectedTxn.payment_status !== 'paid') {
-      await markTransactionPaid(selectedTxn.id);
+      if (selectedTxn.payment_status !== 'paid') {
+        await markTransactionPaid(selectedTxn.id);
+      }
+
+      setSelectedTxn(null);
+      setPaidAmountInput('');
+      setPenaltyInput('');
+      setPenaltyOverrideReason('');
+    } finally {
+      setIsMarkPaidProcessing(false);
     }
-
-    setSelectedTxn(null);
-    setPaidAmountInput('');
-    setPenaltyInput('');
-    setPenaltyOverrideReason('');
   };
 
   const columns = [
@@ -442,6 +449,7 @@ const Inventorymanagement = () => {
          - If status is PAID: Keep enabled so penalty can be updated.
       */
       disabled={
+        isMarkPaidProcessing ||
         showPenaltyOverrideReasonError ||
         showInsufficientPayment ||
         (selectedTxn.payment_status !== 'paid' &&
@@ -450,7 +458,11 @@ const Inventorymanagement = () => {
       }
       className="modal-btn primary"
     >
-      {selectedTxn.payment_status === 'paid' ? 'Update Transaction' : 'Mark as Paid'}
+      {isMarkPaidProcessing
+        ? 'Processing...'
+        : selectedTxn.payment_status === 'paid'
+          ? 'Update Transaction'
+          : 'Mark as Paid'}
     </button>
   )}
 </div>
