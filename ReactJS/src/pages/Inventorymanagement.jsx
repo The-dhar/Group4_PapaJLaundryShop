@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import DataTable from 'react-data-table-component';
 import DashboardLayout from '../components/dashboardlayout';
 import TransactionExtrasSummary from '../components/TransactionExtrasSummary';
@@ -9,13 +9,15 @@ import {
   isThreeOrMoreDaysPastDueDate,
   isThirtyOrMoreDaysPastDueDate,
 } from '../utils/unclaimedDue';
+import { API_URL } from '../config/api';
 import '../styles/inventorystyle.css';
 
-function formatInventoryStatus(status) {
+function formatInventoryStatus(status, isBackjobTransaction = false) {
   if (status == null || status === '') return '—';
-  const map = { in_shop: 'In Shop', backjob: 'Backjob / In Shop', picked_up: 'Pick Up' };
   const key = String(status).toLowerCase();
-  if (map[key]) return map[key];
+  if (key === 'in_shop') return 'In Shop';
+  if (key === 'backjob') return 'Backjob';
+  if (key === 'picked_up') return isBackjobTransaction ? 'Backjob / Pick Up' : 'Pick Up';
   return String(status)
     .split('_')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
@@ -39,6 +41,33 @@ const Inventorymanagement = () => {
   const [penaltyInput, setPenaltyInput] = useState('');
   const [penaltyOverrideReason, setPenaltyOverrideReason] = useState('');
   const [isMarkPaidProcessing, setIsMarkPaidProcessing] = useState(false);
+  const [backjobTransactionIds, setBackjobTransactionIds] = useState(new Set());
+
+  const loadBackjobTransactionIds = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/backjobs`, {
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const rows = res.ok ? await res.json().catch(() => []) : [];
+      const next = new Set();
+      (Array.isArray(rows) ? rows : []).forEach((row) => {
+        const id = Number(row?.transaction_id || row?.transaction?.id || 0);
+        if (id > 0) next.add(id);
+      });
+      setBackjobTransactionIds(next);
+    } catch {
+      // Keep previous cache if refresh fails.
+    }
+  }, []);
+
+  useEffect(() => {
+    loadBackjobTransactionIds();
+  }, [loadBackjobTransactionIds]);
 
   /** Suggested policy: warning for 3-29 days, full-amount penalty for 30+ days while still in shop. */
   const calculateSuggestedPenalty = (amount, dueDate, inventoryStatus) => {
@@ -163,7 +192,7 @@ const Inventorymanagement = () => {
       name: 'Status',
       cell: (row) => (
         <span className={`status-pill status-${row.inventory_status}`}>
-          {formatInventoryStatus(row.inventory_status)}
+          {formatInventoryStatus(row.inventory_status, backjobTransactionIds.has(Number(row.id)))}
         </span>
       ),
     },
@@ -333,7 +362,13 @@ const Inventorymanagement = () => {
               <p><strong>Penalty Override Reason:</strong> {selectedTxn.penalty_override_reason}</p>
             )}
             <p><strong>Payment Status:</strong> {selectedTxn.payment_status}</p>
-            <p><strong>Inventory Status:</strong> {formatInventoryStatus(selectedTxn.inventory_status)}</p>
+            <p>
+              <strong>Inventory Status:</strong>{' '}
+              {formatInventoryStatus(
+                selectedTxn.inventory_status,
+                backjobTransactionIds.has(Number(selectedTxn.id))
+              )}
+            </p>
             <p>
               <strong>Remaining Balance:</strong> 
               <span style={{ color: (selectedTxn.amount + selectedTxnPenalty - (Number(selectedTxn.paid_amount) || 0)) > 0 ? 'red' : 'green' }}>
