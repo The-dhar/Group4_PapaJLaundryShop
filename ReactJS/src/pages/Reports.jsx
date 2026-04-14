@@ -175,14 +175,13 @@ export default function ReportsPage() {
         });
       }
 
-      if (action === 'resolve_refund' || action === 'resolve_replacement') {
-        const isRefund = action === 'resolve_refund';
+      if (action === 'resolve_refund') {
         const noteResult = await Swal.fire({
-          title: isRefund ? 'Resolve as refund' : 'Resolve as replacement',
+          title: 'Resolve as refund',
           input: 'textarea',
           inputLabel: 'Optional note',
           showCancelButton: true,
-          confirmButtonText: isRefund ? 'Resolve refund' : 'Resolve replacement',
+          confirmButtonText: 'Resolve refund',
           cancelButtonText: 'Cancel',
         });
         if (!noteResult.isConfirmed) return;
@@ -190,7 +189,7 @@ export default function ReportsPage() {
         await apiRequest(`/issue-reports/${row.id}/resolve`, {
           method: 'PUT',
           body: JSON.stringify({
-            resolution_type: isRefund ? 'refund' : 'replacement',
+            resolution_type: 'refund',
             resolution_note: String(noteResult.value || '').trim() || null,
           }),
         });
@@ -265,7 +264,6 @@ export default function ReportsPage() {
         {status === 'under_review' && (
           <>
             <button disabled={isMutating} onClick={() => updateIssue(row, 'resolve_refund')}>Resolve refund</button>
-            <button disabled={isMutating} onClick={() => updateIssue(row, 'resolve_replacement')}>Resolve replacement</button>
           </>
         )}
         <button disabled={isMutating} onClick={() => updateIssue(row, 'reject')}>Reject</button>
