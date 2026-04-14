@@ -692,13 +692,6 @@ const Dashboard = () => {
         </Card>
 
         <div className="dashboard-refunds-section">
-          <div className="refund-type-filter">
-            <label htmlFor="dispute-chart-type">Dispute chart</label>
-            <select id="dispute-chart-type" value={disputeChartType} onChange={onDisputeChartTypeChange}>
-              <option value="refund">Refund</option>
-              <option value="backjob">Backjob</option>
-            </select>
-          </div>
           {!branchListFetchDone && branchesForRefunds.length === 0 ? (
             <p className="dashboard-refunds-empty">Loading branch data…</p>
           ) : branchesForRefunds.length === 0 ? (
@@ -712,7 +705,21 @@ const Dashboard = () => {
                 chart: emptyDisputeChart,
               };
               return (
-                <Card key={`disputes-${disputeChartType}-branch-${branch.id}`} title={`${config.pluralLabel} — ${branch.name || `Branch ${branch.id}`}`}>
+                <Card key={`disputes-${disputeChartType}-branch-${branch.id}`}>
+                  <div className="refund-card-header">
+                    <h3 className="refund-card-title">{`${config.pluralLabel} — ${branch.name || `Branch ${branch.id}`}`}</h3>
+                    <div className="refund-type-filter">
+                      <label htmlFor={`dispute-chart-type-${branch.id}`}>Type</label>
+                      <select
+                        id={`dispute-chart-type-${branch.id}`}
+                        value={disputeChartType}
+                        onChange={onDisputeChartTypeChange}
+                      >
+                        <option value="refund">Refund</option>
+                        <option value="backjob">Backjob</option>
+                      </select>
+                    </div>
+                  </div>
                   <div className="refund-branch-kpis">
                     <div className="refund-kpi">
                       <span className="refund-kpi-label">Total {config.label.toLowerCase()} amount (est.)</span>
