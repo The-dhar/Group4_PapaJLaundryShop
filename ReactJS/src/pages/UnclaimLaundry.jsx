@@ -23,6 +23,23 @@ function formatInventoryStatus(status) {
     .join(' ');
 }
 
+function formatDueDateDisplay(value) {
+  if (!value) return '—';
+  const raw = String(value).trim();
+  const ymd = raw.slice(0, 10);
+  let date;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+    const [y, m, d] = ymd.split('-').map(Number);
+    date = new Date(y, m - 1, d);
+  } else {
+    date = new Date(raw);
+  }
+
+  if (Number.isNaN(date.getTime())) return raw;
+  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 const UnclaimLaundry = () => {
   const { transactions } = useTransactions();
 
@@ -123,7 +140,7 @@ const UnclaimLaundry = () => {
       name: 'Due Date',
       cell: (row) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span>{row.due_date}</span>
+          <span>{formatDueDateDisplay(row.due_date)}</span>
           {showUnclaimedWarning(row.due_date) && (
             <BsExclamationTriangle
               className={
@@ -255,7 +272,7 @@ const UnclaimLaundry = () => {
               <p><strong>Payment Method:</strong> {selectedTxn.payment_method || 'Cash'}</p>
               <p><strong>Paid Amount:</strong> ₱{(Number(selectedTxn.paid_amount) || 0).toFixed(2)}</p>
               <p><strong>Penalty:</strong> ₱{(Number(selectedTxn.penalty_amount ?? selectedTxn.penalty) || 0).toFixed(2)}</p>
-              <p><strong>Due Date:</strong> {selectedTxn.due_date}</p>
+              <p><strong>Due Date:</strong> {formatDueDateDisplay(selectedTxn.due_date)}</p>
               <p><strong>Payment Status:</strong> {selectedTxn.payment_status}</p>
               <p><strong>Inventory Status:</strong> {formatInventoryStatus(selectedTxn.inventory_status)}</p>
               <p>
