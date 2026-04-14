@@ -29,7 +29,7 @@ function getUserDisplayName(user) {
     return '';
 }
 
-const Sidebar = ({ sidebarOpen, toggleSidebar }) => {
+const Sidebar = ({ sidebarOpen, toggleSidebar, onNavigate }) => {
     const navigate = useNavigate();
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
     const user = getUserFromStorage();
@@ -60,6 +60,12 @@ const Sidebar = ({ sidebarOpen, toggleSidebar }) => {
         navigate('/');
     };
 
+    const handleNavClick = () => {
+        if (typeof onNavigate === 'function') {
+            onNavigate();
+        }
+    };
+
     return (
         <aside id='sidebar' className={sidebarOpen ? "open" : "closed"}>
             <div className='sidebar-title'>
@@ -71,49 +77,49 @@ const Sidebar = ({ sidebarOpen, toggleSidebar }) => {
 
             <ul className='sidebar-list'>
                 <li className='sidebar-list-items'>
-                    <NavLink to="/dashboard">
+                    <NavLink to="/dashboard" onClick={handleNavClick}>
                         <BsGrid1X2Fill className='icon'/><span>Dashboard</span>
                     </NavLink>
                 </li>
 
                 <li className='sidebar-list-items'>
-                    <NavLink to="/POS">
+                    <NavLink to="/POS" onClick={handleNavClick}>
                         <BsCart3 className='icon'/><span>POS</span>
                     </NavLink>
                 </li>
 
                 <li className='sidebar-list-items'>
-                    <NavLink to="/Inventory">
+                    <NavLink to="/Inventory" onClick={handleNavClick}>
                         <BsCashStack className='icon'/><span>Transaction Log</span>
                     </NavLink>
                 </li>
                 
                 <li className='sidebar-list-items'>
-                    <NavLink to="/Express">
+                    <NavLink to="/Express" onClick={handleNavClick}>
                         <BsLightningCharge className='icon'/><span>Rush Orders</span>
                     </NavLink>
                 </li>
                 
                 <li className='sidebar-list-items'>
-                    <NavLink to="/Unclaimed">
+                    <NavLink to="/Unclaimed" onClick={handleNavClick}>
                         <BsBoxSeam className='icon'/><span>Unclaimed Items</span>
                     </NavLink>
                 </li>
 
                 <li className='sidebar-list-items'>
-                    <NavLink to="/Receipt">
+                    <NavLink to="/Receipt" onClick={handleNavClick}>
                         <BsReceiptCutoff className='icon'/><span>Receipt Management</span>
                     </NavLink>
                 </li>
 
                 <li className='sidebar-list-items'>
-                    <NavLink to="/Reports">
+                    <NavLink to="/Reports" onClick={handleNavClick}>
                         <BsFlag className='icon'/><span>Dispute</span>
                     </NavLink>
                 </li>
 
                 <li className='sidebar-list-items'>
-                    <NavLink to="/Archive">
+                    <NavLink to="/Archive" onClick={handleNavClick}>
                         <BsArchive className='icon'/><span>Archive</span>
                     </NavLink>
                 </li>

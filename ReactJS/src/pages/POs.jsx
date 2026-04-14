@@ -5,7 +5,7 @@ import SmallCard from '../components/smallCard';
 import SmallcardModal from '../components/smallcardModal';
 import CustomerModal from '../components/customerModal';
 import { useTransactions } from '../context/transactionsContext';
-import { API_URL } from '../config/api';
+import { API_URL, resolvePublicFileUrl } from '../config/api';
 import '../styles/posstyle.css';
 import Swal from 'sweetalert2';
 import { jsPDF } from 'jspdf';
@@ -148,6 +148,13 @@ function parseChargeTypeFromDescription(raw) {
   };
 }
 
+function withImageVersion(url, version) {
+  if (!url) return null;
+  const v = encodeURIComponent(String(version ?? ''));
+  if (!v) return url;
+  return url.includes('?') ? `${url}&v=${v}` : `${url}?v=${v}`;
+}
+
 const POs = () => {
   const { createTransaction, transactions } = useTransactions();
 
@@ -157,6 +164,7 @@ const POs = () => {
   const [laundryItems, setLaundryItems] = useState([]);
   /** True until API returns (no hardcoded placeholder cards on refresh). */
   const [servicesLoading, setServicesLoading] = useState(true);
+  const [servicesRefreshNonce, setServicesRefreshNonce] = useState(0);
 
   // --- States ---
   const [selectedItem, setSelectedItem] = useState(null);
@@ -277,6 +285,23 @@ const POs = () => {
   }, [sessionUser]);
 
   useEffect(() => {
+    const triggerRefresh = () => setServicesRefreshNonce((n) => n + 1);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        triggerRefresh();
+      }
+    };
+
+    window.addEventListener('focus', triggerRefresh);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      window.removeEventListener('focus', triggerRefresh);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
       setServicesLoading(false);
@@ -313,7 +338,13 @@ const POs = () => {
               : [];
             return {
               id: Number(s.id),
-              icon: s.image_url || DEFAULT_SERVICE_ICONS[key] || '/pictures/clean-clothes.png',
+              icon:
+                withImageVersion(
+                  resolvePublicFileUrl(s.image_url),
+                  s.updated_at ?? s.effective_date ?? s.id
+                ) ||
+                DEFAULT_SERVICE_ICONS[key] ||
+                '/pictures/clean-clothes.png',
               name,
               pricing: tiers,
             };
@@ -328,7 +359,7 @@ const POs = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [servicesRefreshNonce]);
 
   const mergeCustomerSources = useCallback((apiRows, txRows) => {
     const map = new Map();
@@ -1126,6 +1157,9 @@ const POs = () => {
                 <span className="mini-item-notes">Notes</span>
                 <span className="mini-item-actions">Actions</span>
               </div>
+              {selectedServices.length === 0 && (
+                <div className="pos-empty-services">No service items added yet.</div>
+              )}
               {selectedServices.map(service => (
                 <div key={service.id} className="mini-item-row">
                   <span className="mini-item-name">{service.serviceName}</span>
