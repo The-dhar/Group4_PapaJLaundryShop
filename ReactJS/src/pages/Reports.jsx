@@ -262,8 +262,12 @@ export default function ReportsPage() {
         {status === 'pending' && (
           <button disabled={isMutating} onClick={() => updateIssue(row, 'under_review')}>Under review</button>
         )}
-        <button disabled={isMutating} onClick={() => updateIssue(row, 'resolve_refund')}>Resolve refund</button>
-        <button disabled={isMutating} onClick={() => updateIssue(row, 'resolve_replacement')}>Resolve replacement</button>
+        {status === 'under_review' && (
+          <>
+            <button disabled={isMutating} onClick={() => updateIssue(row, 'resolve_refund')}>Resolve refund</button>
+            <button disabled={isMutating} onClick={() => updateIssue(row, 'resolve_replacement')}>Resolve replacement</button>
+          </>
+        )}
         <button disabled={isMutating} onClick={() => updateIssue(row, 'reject')}>Reject</button>
       </div>
     );
