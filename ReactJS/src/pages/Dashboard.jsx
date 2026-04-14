@@ -427,12 +427,16 @@ const Dashboard = () => {
   }, [filteredTransactions]);
 
   const todayData = useMemo(() => {
-    const labels = ['12AM', '3AM', '6AM', '9AM', '12PM', '3PM', '6PM', '9PM'];
+    const labels = ['8AM', '10AM', '12PM', '2PM', '4PM', '6PM'];
     const buckets = labels.map((name) => ({ name, revenue: 0, unpaid: 0 }));
+    const START_HOUR = 8;
+    const END_HOUR = 18;
 
     filteredTransactions.forEach((t) => {
       const dt = new Date(t.created_at || t.updated_at || Date.now());
-      const idx = Math.min(7, Math.floor(dt.getHours() / 3));
+      const hour = dt.getHours();
+      if (hour < START_HOUR || hour > END_HOUR) return;
+      const idx = Math.min(labels.length - 1, Math.floor((hour - START_HOUR) / 2));
       const amount = Number(t.amount) || 0;
       if (t.payment_status === 'paid') buckets[idx].revenue += amount;
       else buckets[idx].unpaid += amount;
