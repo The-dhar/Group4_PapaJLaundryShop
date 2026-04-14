@@ -601,15 +601,13 @@ const Dashboard = () => {
             >
               Yearly
             </button>
-            {viewType === 'year' && (
-              <input
-                type="date"
-                className="chart-year-date"
-                value={yearFilterDate}
-                onChange={onYearFilterDateChange}
-                aria-label="Select year date for yearly chart"
-              />
-            )}
+            <input
+              type="date"
+              className="chart-year-date"
+              value={yearFilterDate}
+              onChange={onYearFilterDateChange}
+              aria-label="Select year date for yearly chart"
+            />
           </div>
 
           <ResponsiveContainer width="100%" height={220}>
