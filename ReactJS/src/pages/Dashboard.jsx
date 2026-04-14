@@ -234,6 +234,24 @@ const RefundLineChart = memo(function RefundLineChart({ data }) {
   );
 }, (prev, next) => prev.data === next.data);
 
+const ChartRangeInput = React.forwardRef(function ChartRangeInput(
+  { value, onClick, onChange, placeholder },
+  ref
+) {
+  return (
+    <input
+      ref={ref}
+      type="text"
+      className="chart-year-date"
+      value={value || ''}
+      onClick={onClick}
+      onChange={onChange}
+      placeholder={placeholder}
+      readOnly
+    />
+  );
+});
+
 const Dashboard = () => {
   const { transactions, fetchTransactions } = useTransactions();
   const [viewType, setViewType] = useState('week');
@@ -616,7 +634,6 @@ const Dashboard = () => {
               Yearly
             </button>
             <DatePicker
-              className="chart-year-date"
               selected={rangeStartDate}
               onChange={onChartDateRangeChange}
               startDate={rangeStartDate}
@@ -625,6 +642,8 @@ const Dashboard = () => {
               isClearable
               placeholderText="Select date range"
               ariaLabelledBy="chart-date-range-picker"
+              dateFormat="dd/MM/yyyy"
+              customInput={<ChartRangeInput />}
             />
           </div>
 
