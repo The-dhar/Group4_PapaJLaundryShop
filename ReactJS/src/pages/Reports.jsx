@@ -49,6 +49,13 @@ function issueTypeLabel(issueType) {
   return String(issueType || '—');
 }
 
+function formatDateCell(value) {
+  if (!value) return '—';
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return '—';
+  return dt.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 async function apiRequest(path, options = {}) {
   const token = getToken();
   const res = await fetch(`${API_URL}${path}`, {
@@ -344,13 +351,15 @@ export default function ReportsPage() {
                   <th>Issue</th>
                   <th>Assigned</th>
                   <th>Reported By</th>
+                  <th>Date Reported</th>
+                  <th>Date Solved</th>
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredIssueRows.length === 0 ? (
-                  <tr><td colSpan={7} className="reports-empty">No issue reports yet.</td></tr>
+                  <tr><td colSpan={9} className="reports-empty">No issue reports yet.</td></tr>
                 ) : filteredIssueRows.map((row) => (
                   <tr key={`issue-${row.id}`}>
                     <td>{row.transaction?.receipt || '—'}</td>
@@ -361,6 +370,8 @@ export default function ReportsPage() {
                     </td>
                     <td>{row.assigned_employee_name || '—'}</td>
                     <td>{row.reported_by_name || '—'}</td>
+                    <td>{formatDateCell(row.created_at)}</td>
+                    <td>{formatDateCell(row.resolved_at || row.closed_at)}</td>
                     <td>
                       <span className={statusClass(row.status)}>{row.status || '—'}</span>
                       {row.resolution_type ? (
