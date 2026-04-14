@@ -138,6 +138,15 @@ export default function DashboardAnalytics() {
 
   const [transactions, setTransactions] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
+  const [issueReports, setIssueReports] = useState<any[]>([]);
+  const [disputeChartType, setDisputeChartType] = useState<"refund" | "backjob">("refund");
+  const [disputeTooltip, setDisputeTooltip] = useState({
+    x: 0,
+    y: 0,
+    value: 0,
+    label: "",
+    visible: false,
+  });
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -157,20 +166,25 @@ export default function DashboardAnalytics() {
         date_to: to,
       });
 
-      const [txRes, brRes] = await Promise.all([
+      const [txRes, brRes, issueRes] = await Promise.all([
         fetch(`${API_URL}/transactions?${qs.toString()}`, {
           headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
         }),
         fetch(`${API_URL}/branches`, {
           headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
         }),
+        fetch(`${API_URL}/issue-reports`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        }),
       ]);
 
       const txData = txRes.ok ? await txRes.json() : [];
       const brData = brRes.ok ? await brRes.json() : [];
+      const issueData = issueRes.ok ? await issueRes.json() : [];
 
       setTransactions(Array.isArray(txData) ? txData : []);
       setBranches(Array.isArray(brData) ? brData : []);
+      setIssueReports(Array.isArray(issueData) ? issueData : []);
     } catch (error) {
       console.log(error);
     }
@@ -238,6 +252,98 @@ export default function DashboardAnalytics() {
   const revenueChartWidth = getResponsiveChartWidth(currentLabels);
   const branchComparisonChartWidth = getResponsiveChartWidth(currentBranchLabels);
   const branchPerformanceChartWidth = getResponsiveChartWidth(currentBranchLabels);
+
+  const filteredResolvedDisputes = useMemo(() => {
+    const from = parseYmd(rangeFrom <= rangeTo ? rangeFrom : rangeTo);
+    const to = parseYmd(rangeFrom <= rangeTo ? rangeTo : rangeFrom);
+    from.setHours(0, 0, 0, 0);
+    to.setHours(23, 59, 59, 999);
+    const resolutionType = disputeChartType === "refund" ? "refund" : "replacement";
+    return issueReports.filter((row) => {
+      if (String(row?.resolution_type || "").toLowerCase() !== resolutionType) return false;
+      const dt = new Date(row?.resolved_at || row?.updated_at || 0);
+      if (Number.isNaN(dt.getTime())) return false;
+      return dt >= from && dt <= to;
+    });
+  }, [issueReports, rangeFrom, rangeTo, disputeChartType]);
+
+  const disputeSeries = useMemo(() => {
+    const amountFromReport = (row: any) => {
+      const n = Number(row?.transaction?.amount);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    if (periodPreset === "weekly") {
+      const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      const start = mondayOfCalendarWeek(parseYmd(rangeTo));
+      const rows = labels.map((name, idx) => {
+        const d = new Date(start);
+        d.setDate(start.getDate() + idx);
+        d.setHours(0, 0, 0, 0);
+        return { name, key: toYmd(d), amount: 0 };
+      });
+      filteredResolvedDisputes.forEach((r) => {
+        const dt = new Date(r?.resolved_at || r?.updated_at || 0);
+        if (Number.isNaN(dt.getTime())) return;
+        const key = toYmd(dt);
+        const row = rows.find((x) => x.key === key);
+        if (row) row.amount += amountFromReport(r);
+      });
+      return { labels: rows.map((r) => r.name), values: rows.map((r) => Number(r.amount.toFixed(2))) };
+    }
+
+    if (periodPreset === "monthly") {
+      const rows = [
+        { name: "Week 1", amount: 0 },
+        { name: "Week 2", amount: 0 },
+        { name: "Week 3", amount: 0 },
+        { name: "Week 4", amount: 0 },
+      ];
+      filteredResolvedDisputes.forEach((r) => {
+        const dt = new Date(r?.resolved_at || r?.updated_at || 0);
+        if (Number.isNaN(dt.getTime())) return;
+        const idx = Math.min(3, Math.floor((dt.getDate() - 1) / 7));
+        rows[idx].amount += amountFromReport(r);
+      });
+      return { labels: rows.map((r) => r.name), values: rows.map((r) => Number(r.amount.toFixed(2))) };
+    }
+
+    if (periodPreset === "yearly") {
+      const rows = [
+        { name: "Jan", amount: 0 }, { name: "Feb", amount: 0 }, { name: "Mar", amount: 0 },
+        { name: "Apr", amount: 0 }, { name: "May", amount: 0 }, { name: "Jun", amount: 0 },
+        { name: "Jul", amount: 0 }, { name: "Aug", amount: 0 }, { name: "Sep", amount: 0 },
+        { name: "Oct", amount: 0 }, { name: "Nov", amount: 0 }, { name: "Dec", amount: 0 },
+      ];
+      filteredResolvedDisputes.forEach((r) => {
+        const dt = new Date(r?.resolved_at || r?.updated_at || 0);
+        if (Number.isNaN(dt.getTime())) return;
+        rows[dt.getMonth()].amount += amountFromReport(r);
+      });
+      return { labels: rows.map((r) => r.name), values: rows.map((r) => Number(r.amount.toFixed(2))) };
+    }
+
+    const days = eachYmdInRange(rangeFrom <= rangeTo ? rangeFrom : rangeTo, rangeFrom <= rangeTo ? rangeTo : rangeFrom);
+    const rows = days.map((day) => ({ day, amount: 0 }));
+    filteredResolvedDisputes.forEach((r) => {
+      const dt = new Date(r?.resolved_at || r?.updated_at || 0);
+      if (Number.isNaN(dt.getTime())) return;
+      const key = toYmd(dt);
+      const row = rows.find((x) => x.day === key);
+      if (row) row.amount += amountFromReport(r);
+    });
+    return {
+      labels: rows.map((r) => parseYmd(r.day).toLocaleDateString("en-US", { month: "short", day: "numeric" })),
+      values: rows.map((r) => Number(r.amount.toFixed(2))),
+    };
+  }, [filteredResolvedDisputes, periodPreset, rangeFrom, rangeTo]);
+
+  const disputeChartWidth = getResponsiveChartWidth(disputeSeries.labels);
+  const disputeKpiAmount = useMemo(
+    () => filteredResolvedDisputes.reduce((sum, r) => sum + Number(r?.transaction?.amount || 0), 0),
+    [filteredResolvedDisputes]
+  );
+  const disputeKpiCount = filteredResolvedDisputes.length;
   
   const totalSales = transactions.reduce((sum, t) => sum + Number(t.amount || 0), 0);
   const totalOrders = transactions.length;
@@ -654,6 +760,116 @@ export default function DashboardAnalytics() {
             )}
           </View>
         </View>
+
+        {/* OVERALL DISPUTES (ALL BRANCHES) */}
+        <View style={styles.chartBox}>
+          <View style={styles.disputeHeaderRow}>
+            <Text style={styles.chartTitle}>Disputes (All Branches)</Text>
+            <View style={styles.disputeTypeRow}>
+              <TouchableOpacity
+                style={[styles.disputeTypeChip, disputeChartType === "refund" && styles.disputeTypeChipActive]}
+                onPress={() => setDisputeChartType("refund")}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.disputeTypeChipText, disputeChartType === "refund" && styles.disputeTypeChipTextActive]}>
+                  Refund
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.disputeTypeChip, disputeChartType === "backjob" && styles.disputeTypeChipActive]}
+                onPress={() => setDisputeChartType("backjob")}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.disputeTypeChipText, disputeChartType === "backjob" && styles.disputeTypeChipTextActive]}>
+                  Backjob
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.disputeKpiRow}>
+            <View style={styles.disputeKpiCard}>
+              <Text style={styles.disputeKpiLabel}>
+                {disputeChartType === "refund" ? "Total Refund Amount (Est.)" : "Total Backjob Amount (Est.)"}
+              </Text>
+              <Text style={styles.disputeKpiValue}>
+                ₱{disputeKpiAmount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+              </Text>
+            </View>
+            <View style={styles.disputeKpiCard}>
+              <Text style={styles.disputeKpiLabel}>
+                {disputeChartType === "refund" ? "Refund Cases Resolved" : "Backjob Cases Resolved"}
+              </Text>
+              <Text style={styles.disputeKpiValue}>{disputeKpiCount.toLocaleString()}</Text>
+            </View>
+          </View>
+
+          <View style={{ alignItems: "center" }}>
+            {disputeTooltip.visible && (
+              <View
+                style={{
+                  position: "absolute",
+                  left: disputeTooltip.x - 40,
+                  top: disputeTooltip.y - 50,
+                  backgroundColor: disputeChartType === "refund" ? "#0d9488" : "#7c3aed",
+                  paddingVertical: 6,
+                  paddingHorizontal: 10,
+                  borderRadius: 8,
+                  zIndex: 20,
+                }}
+              >
+                <Text style={{ color: "white", fontWeight: "700" }}>
+                  {disputeTooltip.label}: ₱{disputeTooltip.value.toLocaleString()}
+                </Text>
+              </View>
+            )}
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: "center" }}>
+              <Pressable
+                onPressOut={() => setDisputeTooltip((prev) => ({ ...prev, visible: false }))}
+                style={{ width: disputeChartWidth + 50 }}
+              >
+                <LineChart
+                  key={`disp-${periodPreset}-${disputeChartType}-${disputeSeries.values.join(",")}`}
+                  data={{
+                    labels: disputeSeries.labels,
+                    datasets: [{ data: disputeSeries.values.length ? disputeSeries.values : [0] }],
+                  }}
+                  width={disputeChartWidth + 50}
+                  height={220}
+                  chartConfig={{
+                    backgroundColor: "#ffffff",
+                    backgroundGradientFrom: "#ffffff",
+                    backgroundGradientTo: "#ffffff",
+                    decimalPlaces: 0,
+                    color: () => (disputeChartType === "refund" ? "rgba(13,148,136,1)" : "rgba(124,58,237,1)"),
+                    labelColor: () => `rgba(30, 41, 59, 1)`,
+                    propsForLabels: {
+                      fontSize: isSmallScreen ? 10 : 12,
+                    },
+                    propsForBackgroundLines: {
+                      stroke: "#00000051",
+                      strokeWidth: 1,
+                    },
+                  }}
+                  formatYLabel={(yValue) => `₱${parseInt(yValue).toLocaleString()}`}
+                  bezier
+                  fromZero
+                  style={{ marginLeft: -20, borderRadius: 12, marginTop: 8 }}
+                  onDataPointClick={(data) => {
+                    setDisputeTooltip({
+                      x: data.x,
+                      y: data.y,
+                      value: data.value,
+                      label: disputeSeries.labels[data.index] || "",
+                      visible: true,
+                    });
+                  }}
+                />
+              </Pressable>
+            </ScrollView>
+          </View>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -871,6 +1087,59 @@ const styles = StyleSheet.create({
   },
   chartHeader: {
     marginBottom: 16,
+  },
+  disputeHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+    gap: 10,
+  },
+  disputeTypeRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  disputeTypeChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: "#f1f5f9",
+  },
+  disputeTypeChipActive: {
+    backgroundColor: "#0f172a",
+  },
+  disputeTypeChipText: {
+    fontSize: 12,
+    color: "#64748b",
+    fontWeight: "700",
+  },
+  disputeTypeChipTextActive: {
+    color: "#ffffff",
+  },
+  disputeKpiRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 8,
+  },
+  disputeKpiCard: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+  },
+  disputeKpiLabel: {
+    fontSize: 11,
+    color: "#64748b",
+    fontWeight: "700",
+    marginBottom: 6,
+  },
+  disputeKpiValue: {
+    fontSize: 22,
+    color: "#0f172a",
+    fontWeight: "800",
   },
   chartTitle: {
     fontSize: 20,

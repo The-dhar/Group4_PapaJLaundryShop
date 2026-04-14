@@ -1,7 +1,7 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useBranchPages } from "@/contexts/BranchPagesContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LineChart } from 'react-native-chart-kit';
@@ -12,8 +12,6 @@ const { width } = Dimensions.get('window');
 
 export default function RevenueDashboard() {
   const [revenueView, setRevenueView] = useState("weekly");
-    const [dailyRevenueData, setDailyRevenueData] = useState<number[]>([]);
-    const [yearlyRevenueData, setYearlyRevenueData] = useState<number[]>([]);
   const router = useRouter();
   const { token } = useAuth();
   const { setBranch } = useBranchPages();
@@ -105,7 +103,7 @@ export default function RevenueDashboard() {
     }
   });
 
-    // Daily view - last 7 days
+  const dailyRevenueData = useMemo(() => {
     const dailyData = [0, 0, 0, 0, 0, 0, 0];
     receipts.forEach((txn) => {
       const created = new Date(txn.created_at || now);
@@ -115,9 +113,10 @@ export default function RevenueDashboard() {
         dailyData[6 - dayDiff] += amount;
       }
     });
-    setDailyRevenueData(dailyData);
+    return dailyData;
+  }, [receipts]);
 
-    // Yearly view - all 12 months
+  const yearlyRevenueData = useMemo(() => {
     const yearlyData = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     receipts.forEach((txn) => {
       const created = new Date(txn.created_at || now);
@@ -126,7 +125,8 @@ export default function RevenueDashboard() {
         yearlyData[created.getMonth()] += amount;
       }
     });
-    setYearlyRevenueData(yearlyData);
+    return yearlyData;
+  }, [receipts]);
 
   const currentRevenue = revenueView === "weekly" ? weeklyRevenueData : monthlyRevenueData;
   const currentLabels = revenueView === "weekly" 

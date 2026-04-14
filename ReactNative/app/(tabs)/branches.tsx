@@ -37,6 +37,7 @@ const BranchAccountManager = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [branchName, setBranchName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState(1);
   const [pendingDeleteBranch, setPendingDeleteBranch] = useState<Branch | null>(null);
@@ -116,8 +117,12 @@ const BranchAccountManager = () => {
         return;
       }
 
-      const response = await fetch(`${API_URL}/branches`, {
-        method: "POST",
+      const isEditing = editingBranch !== null;
+      const endpoint = isEditing
+        ? `${API_URL}/branches/${editingBranch.id}`
+        : `${API_URL}/branches`;
+      const response = await fetch(endpoint, {
+        method: isEditing ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -127,7 +132,9 @@ const BranchAccountManager = () => {
       });
 
       if (!response.ok) {
-        let msg = `Could not create branch (${response.status}).`;
+        let msg = isEditing
+          ? `Could not update branch (${response.status}).`
+          : `Could not create branch (${response.status}).`;
         try {
           const err = await response.json();
           if (err?.message) msg = typeof err.message === "string" ? err.message : msg;
@@ -136,13 +143,21 @@ const BranchAccountManager = () => {
         return;
       }
 
-      const newBranch: Branch = await response.json();
-      setBranches((prev) => [...prev, newBranch]);
+      const savedBranch: Branch = await response.json();
+      if (isEditing) {
+        setBranches((prev) =>
+          prev.map((b) => (b.id === editingBranch.id ? { ...b, ...savedBranch, name } : b))
+        );
+      } else {
+        setBranches((prev) => [...prev, savedBranch]);
+      }
       setIsModalOpen(false);
+      setEditingBranch(null);
       setBranchName('');
+      Alert.alert("Success", isEditing ? "Branch updated successfully." : "Branch created successfully.");
     } catch (error) {
       console.log(error);
-      Alert.alert("Error", "Failed to create branch.");
+      Alert.alert("Error", editingBranch ? "Failed to update branch." : "Failed to create branch.");
     } finally {
       setIsSaving(false);
     }
@@ -150,7 +165,14 @@ const BranchAccountManager = () => {
 
   const handleClear = () => {
     setIsModalOpen(false);
+    setEditingBranch(null);
     setBranchName('');
+  };
+
+  const handleEditBranch = (branch: Branch) => {
+    setEditingBranch(branch);
+    setBranchName(branch.name || '');
+    setIsModalOpen(true);
   };
 
   const handleViewBranch = (branch: Branch) => {
@@ -322,6 +344,13 @@ const BranchAccountManager = () => {
                     </TouchableOpacity>
 
                     <TouchableOpacity
+                      onPress={() => handleEditBranch(branch)}
+                      style={styles.editButton}
+                    >
+                      <Ionicons name="create" size={16} color="#fff" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
                       onPress={() => handleDeleteBranch(branch)}
                       style={styles.deleteButton}
                     >
@@ -373,7 +402,9 @@ const BranchAccountManager = () => {
 
             <View style={styles.modalHeader}>
 
-              <Text style={styles.modalTitle}>Create branch</Text>
+              <Text style={styles.modalTitle}>
+                {editingBranch ? 'Edit branch' : 'Create branch'}
+              </Text>
 
               <TouchableOpacity
                 onPress={() => setIsModalOpen(false)}
@@ -419,7 +450,9 @@ const BranchAccountManager = () => {
                 {isSaving ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.confirmButtonText}>Confirm</Text>
+                  <Text style={styles.confirmButtonText}>
+                    {editingBranch ? 'Save changes' : 'Confirm'}
+                  </Text>
                 )}
               </TouchableOpacity>
 
@@ -683,6 +716,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  editButton: {
+    marginLeft: 10,
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: '#f59e0b',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#f59e0b',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.25,
     shadowRadius: 6,
