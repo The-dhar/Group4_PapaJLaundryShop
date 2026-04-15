@@ -42,6 +42,7 @@ const BranchAccountManager = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pendingDeleteBranch, setPendingDeleteBranch] = useState<Branch | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [openBranchMenuId, setOpenBranchMenuId] = useState<number | null>(null);
 
   const ITEMS_PER_PAGE = 5;
 
@@ -170,12 +171,14 @@ const BranchAccountManager = () => {
   };
 
   const handleEditBranch = (branch: Branch) => {
+    setOpenBranchMenuId(null);
     setEditingBranch(branch);
     setBranchName(branch.name || '');
     setIsModalOpen(true);
   };
 
   const handleViewBranch = (branch: Branch) => {
+    setOpenBranchMenuId(null);
     router.push({
       pathname: '/dashboardbyaccount',
       params: {
@@ -187,6 +190,7 @@ const BranchAccountManager = () => {
   };
 
   const handleDeleteBranch = (branch: Branch) => {
+    setOpenBranchMenuId(null);
     setPendingDeleteBranch(branch);
   };
 
@@ -326,7 +330,26 @@ const BranchAccountManager = () => {
                       </View>
 
                       <View style={styles.branchInfo}>
-                        <Text style={styles.branchName}>{branch.name}</Text>
+                        <View style={styles.branchTopRow}>
+                          <Text style={styles.branchName} numberOfLines={1}>{branch.name}</Text>
+                          <View style={styles.inlineActions}>
+                            <TouchableOpacity
+                              onPress={() => handleViewBranch(branch)}
+                              style={styles.viewButtonInline}
+                            >
+                              <Ionicons name="eye" size={14} color="#fff" />
+                              <Text style={styles.viewButtonInlineText}>View</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() =>
+                                setOpenBranchMenuId((prev) => (prev === branch.id ? null : branch.id))
+                              }
+                              style={styles.moreButton}
+                            >
+                              <Ionicons name="ellipsis-vertical" size={16} color="#475569" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
                         <Text style={styles.branchUsername} numberOfLines={1}>
                           {branch.is_active === false ? 'Inactive · ' : ''}
                           Clerk label: {branch.clerk_username?.trim() ? `@${branch.clerk_username}` : '—'}
@@ -334,30 +357,25 @@ const BranchAccountManager = () => {
                       </View>
 
                     </View>
-
-                    <TouchableOpacity
-                      onPress={() => handleViewBranch(branch)}
-                      style={styles.viewButton}
-                    >
-                      <Ionicons name="eye" size={16} color="#fff" />
-                      <Text style={styles.viewButtonText}>View</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => handleEditBranch(branch)}
-                      style={styles.editButton}
-                    >
-                      <Ionicons name="create" size={16} color="#fff" />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => handleDeleteBranch(branch)}
-                      style={styles.deleteButton}
-                    >
-                      <Ionicons name="trash" size={16} color="#fff" />
-                    </TouchableOpacity>
-
                   </View>
+                  {openBranchMenuId === branch.id && (
+                    <View style={styles.branchMenu}>
+                      <TouchableOpacity
+                        onPress={() => handleEditBranch(branch)}
+                        style={[styles.branchMenuItem, styles.branchMenuItemEdit]}
+                      >
+                        <Ionicons name="create-outline" size={14} color="#ffffff" />
+                        <Text style={styles.branchMenuItemText}>Edit</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteBranch(branch)}
+                        style={[styles.branchMenuItem, styles.branchMenuItemDelete]}
+                      >
+                        <Ionicons name="trash-outline" size={14} color="#ffffff" />
+                        <Text style={styles.branchMenuItemText}>Delete</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
 
                   {index < paginatedBranches.length - 1 && (
                     <View style={styles.rowDivider} />
@@ -676,64 +694,80 @@ const styles = StyleSheet.create({
   branchInfo: {
     flex: 1,
   },
+  branchTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 4,
+  },
   branchName: {
     fontSize: 17,
     fontWeight: '700',
     color: '#1e293b',
-    marginBottom: 4,
     letterSpacing: -0.2,
+    flexShrink: 1,
+  },
+  inlineActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
+  },
+  viewButtonInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  viewButtonInlineText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  moreButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   branchUsername: {
     fontSize: 13,
     color: '#64748b',
     fontWeight: '500',
   },
-  viewButton: {
+  branchMenu: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 4,
+    marginHorizontal: 20,
+  },
+  branchMenuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#3b82f6',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 12,
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
   },
-  viewButtonText: {
+  branchMenuItemEdit: {
+    backgroundColor: '#f59e0b',
+  },
+  branchMenuItemDelete: {
+    backgroundColor: '#ef4444',
+  },
+  branchMenuItemText: {
     color: '#ffffff',
     fontWeight: '700',
-    fontSize: 14,
-  },
-  deleteButton: {
-    marginLeft: 10,
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: '#ef4444',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#ef4444',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  editButton: {
-    marginLeft: 10,
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: '#f59e0b',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#f59e0b',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 4,
+    fontSize: 13,
   },
   paginationContainer: {
     flexDirection: 'row',
