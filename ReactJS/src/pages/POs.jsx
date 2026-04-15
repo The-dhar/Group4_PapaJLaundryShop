@@ -6,6 +6,11 @@ import SmallcardModal from '../components/smallcardModal';
 import CustomerModal from '../components/customerModal';
 import { useTransactions } from '../context/transactionsContext';
 import { API_URL, resolvePublicFileUrl } from '../config/api';
+import {
+  findPsgcByName,
+  loadPsgcBarangaysByCityCode,
+  loadPsgcCities,
+} from '../utils/psgc';
 import '../styles/posstyle.css';
 import Swal from 'sweetalert2';
 import { jsPDF } from 'jspdf';
@@ -184,6 +189,15 @@ const POs = () => {
   const [street, setStreet] = useState('');
   const [barangay, setBarangay] = useState('');
   const [city, setCity] = useState('');
+  const [psgcCities, setPsgcCities] = useState([]);
+  const [psgcCitiesLoading, setPsgcCitiesLoading] = useState(false);
+  const [psgcCitiesError, setPsgcCitiesError] = useState('');
+  const [selectedCityCode, setSelectedCityCode] = useState('');
+
+  const [psgcBarangays, setPsgcBarangays] = useState([]);
+  const [psgcBarangaysLoading, setPsgcBarangaysLoading] = useState(false);
+  const [psgcBarangaysError, setPsgcBarangaysError] = useState('');
+  const [selectedBarangayCode, setSelectedBarangayCode] = useState('');
 
   const [dueDate, setDueDate] = useState('');
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -204,6 +218,106 @@ const POs = () => {
   useEffect(() => {
     setPastSearches(JSON.parse(localStorage.getItem('pastSearches') || '[]'));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setPsgcCitiesLoading(true);
+      setPsgcCitiesError('');
+      try {
+        const rows = await loadPsgcCities();
+        if (!cancelled) setPsgcCities(rows);
+      } catch {
+        if (!cancelled) {
+          setPsgcCities([]);
+          setPsgcCitiesError('City list is unavailable right now. You may type manually.');
+        }
+      } finally {
+        if (!cancelled) setPsgcCitiesLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (psgcCitiesError || psgcCities.length === 0) return;
+
+    const match = findPsgcByName(psgcCities, city);
+    if (!match) {
+      setSelectedCityCode('');
+      setPsgcBarangays([]);
+      setSelectedBarangayCode('');
+      return;
+    }
+
+    setSelectedCityCode(match.code);
+    if (city !== (match.display_name || match.name)) {
+      setCity(match.display_name || match.name);
+    }
+  }, [city, psgcCities, psgcCitiesError]);
+
+  useEffect(() => {
+    if (psgcCitiesError || !selectedCityCode) {
+      setPsgcBarangays([]);
+      setSelectedBarangayCode('');
+      setPsgcBarangaysError('');
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setPsgcBarangaysLoading(true);
+      setPsgcBarangaysError('');
+      try {
+        const rows = await loadPsgcBarangaysByCityCode(selectedCityCode);
+        if (!cancelled) setPsgcBarangays(rows);
+      } catch {
+        if (!cancelled) {
+          setPsgcBarangays([]);
+          setSelectedBarangayCode('');
+          setPsgcBarangaysError('Barangay list is unavailable right now. You may type manually.');
+        }
+      } finally {
+        if (!cancelled) setPsgcBarangaysLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [psgcCitiesError, selectedCityCode]);
+
+  useEffect(() => {
+    if (
+      psgcCitiesError ||
+      psgcBarangaysError ||
+      !selectedCityCode ||
+      psgcBarangays.length === 0
+    ) {
+      if (!selectedCityCode) setSelectedBarangayCode('');
+      return;
+    }
+
+    const match = findPsgcByName(psgcBarangays, barangay);
+    if (!match) {
+      setSelectedBarangayCode('');
+      return;
+    }
+
+    setSelectedBarangayCode(match.code);
+    if (barangay !== match.name) {
+      setBarangay(match.name);
+    }
+  }, [
+    barangay,
+    psgcBarangays,
+    psgcBarangaysError,
+    psgcCitiesError,
+    selectedCityCode,
+  ]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -494,6 +608,42 @@ const POs = () => {
     }
   };
 
+  const handleCitySelectChange = (e) => {
+    const nextCode = e.target.value;
+    setSelectedCityCode(nextCode);
+
+    if (!nextCode) {
+      setCity('');
+      setBarangay('');
+      setSelectedBarangayCode('');
+      setPsgcBarangays([]);
+      setPsgcBarangaysError('');
+      return;
+    }
+
+    const picked = psgcCities.find((row) => String(row.code) === String(nextCode));
+    if (picked) {
+      setCity(picked.display_name || picked.name);
+    }
+    setBarangay('');
+    setSelectedBarangayCode('');
+    setPsgcBarangays([]);
+    setPsgcBarangaysError('');
+  };
+
+  const handleBarangaySelectChange = (e) => {
+    const nextCode = e.target.value;
+    setSelectedBarangayCode(nextCode);
+    if (!nextCode) {
+      setBarangay('');
+      return;
+    }
+    const picked = psgcBarangays.find((row) => String(row.code) === String(nextCode));
+    if (picked) {
+      setBarangay(picked.name);
+    }
+  };
+
   const handleAddServiceFromModal = (laundryItem, selectedTier, kilos, laundryType, extra, notes) => {
     const serviceData = {
       serviceName: laundryItem.name,
@@ -572,6 +722,10 @@ const POs = () => {
   const resetForm = () => {
     setSelectedServices([]);
     setFirstName(''); setMiddleName(''); setLastName(''); setStreet(''); setBarangay(''); setCity('');
+    setSelectedCityCode('');
+    setSelectedBarangayCode('');
+    setPsgcBarangays([]);
+    setPsgcBarangaysError('');
     setCustomerSearchInput('');
     setCustomerSuggestions([]);
     setSuggestionOpen(false);
@@ -848,6 +1002,27 @@ const POs = () => {
       Swal.fire({ title: "Missing Information", text: "Please complete all customer details.", icon: "warning", width: 350 });
       return;
     }
+
+    if (!allowManualCity && !selectedCityCode) {
+      Swal.fire({
+        title: 'Select city',
+        text: 'Please select a city from the PSGC dropdown.',
+        icon: 'warning',
+        width: 380,
+      });
+      return;
+    }
+
+    if (selectedCityCode && !allowManualBarangay && !selectedBarangayCode) {
+      Swal.fire({
+        title: 'Select barangay',
+        text: 'Please select a barangay from the PSGC dropdown.',
+        icon: 'warning',
+        width: 380,
+      });
+      return;
+    }
+
     if (!dueDate) {
       Swal.fire({ title: "Missing Information", text: "Due date is required.", icon: "warning", width: 350 });
       return;
@@ -911,6 +1086,11 @@ const POs = () => {
       setIsSaving(false);
     }
   };
+
+  const allowManualCity = Boolean(psgcCitiesError);
+  const allowManualBarangay =
+    allowManualCity ||
+    (selectedCityCode && (psgcBarangaysError || (!psgcBarangaysLoading && psgcBarangays.length === 0)));
 
   return (
     <DashboardLayout>
@@ -1035,17 +1215,75 @@ const POs = () => {
                   <input type="text" className="for-receipt-customerinput" value={lastName} onChange={e => setLastName(e.target.value)} />
                 </label>
               </div>
-              <label>Street / Drive:
-                <input type="text" className="for-receipt-customerinput" value={street} onChange={e => setStreet(e.target.value)} />
-              </label>
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                <label style={{ flex: 1 }}>Barangay:
-                  <input type="text" className="for-receipt-customerinput" value={barangay} onChange={e => setBarangay(e.target.value)} />
-                </label>
                 <label style={{ flex: 1 }}>City:
-                  <input type="text" className="for-receipt-customerinput" value={city} onChange={e => setCity(e.target.value)} />
+                  {allowManualCity ? (
+                    <input
+                      type="text"
+                      className="for-receipt-customerinput"
+                      value={city}
+                      onChange={e => setCity(e.target.value)}
+                    />
+                  ) : (
+                    <select
+                      className="for-receipt-customerinput"
+                      value={selectedCityCode}
+                      onChange={handleCitySelectChange}
+                      disabled={psgcCitiesLoading}
+                    >
+                      <option value="">{psgcCitiesLoading ? 'Loading cities...' : 'Select city'}</option>
+                      {psgcCities.map((row) => (
+                        <option key={row.code} value={row.code}>
+                          {row.display_name || row.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {psgcCitiesError && (
+                    <small style={{ display: 'block', marginTop: 4, color: '#b45309', fontWeight: 500 }}>
+                      {psgcCitiesError}
+                    </small>
+                  )}
+                </label>
+                <label style={{ flex: 1 }}>Barangay:
+                  {allowManualBarangay ? (
+                    <input
+                      type="text"
+                      className="for-receipt-customerinput"
+                      value={barangay}
+                      onChange={e => setBarangay(e.target.value)}
+                    />
+                  ) : (
+                    <select
+                      className="for-receipt-customerinput"
+                      value={selectedBarangayCode}
+                      onChange={handleBarangaySelectChange}
+                      disabled={!selectedCityCode || psgcBarangaysLoading}
+                    >
+                      <option value="">
+                        {!selectedCityCode
+                          ? 'Select city first'
+                          : psgcBarangaysLoading
+                            ? 'Loading barangays...'
+                            : 'Select barangay'}
+                      </option>
+                      {psgcBarangays.map((row) => (
+                        <option key={row.code} value={row.code}>
+                          {row.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {psgcBarangaysError && selectedCityCode && (
+                    <small style={{ display: 'block', marginTop: 4, color: '#b45309', fontWeight: 500 }}>
+                      {psgcBarangaysError}
+                    </small>
+                  )}
                 </label>
               </div>
+              <label style={{ marginTop: '10px' }}>Street / Drive:
+                <input type="text" className="for-receipt-customerinput" value={street} onChange={e => setStreet(e.target.value)} />
+              </label>
             </div>
 
             {/* Payment & Extras Section */}
