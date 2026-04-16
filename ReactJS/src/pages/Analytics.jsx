@@ -5,6 +5,7 @@ import Card from '../components/card';
 import DashboardLayout from '../components/dashboardlayout';
 import { useTransactions } from '../context/transactionsContext';
 import { API_URL } from '../config/api';
+import { buildAnalyticsCsv, downloadAnalyticsCsv, exportAnalyticsPdf } from '../utils/analyticsExport';
 import '../styles/dashboardstyle.css';
 import '../styles/analyticsstyle.css';
 
@@ -14,6 +15,13 @@ const formatPeso = (value) => `P${Number(value || 0).toLocaleString()}`;
 const DISPUTE_CHART_CONFIG = {
   refund: { label: 'Refund', pluralLabel: 'Refunds', resolutionType: 'refund', lineColor: '#0d9488' },
   backjob: { label: 'Backjob', pluralLabel: 'Backjobs', resolutionType: 'replacement', lineColor: '#7c3aed' },
+};
+
+const VIEW_TYPE_LABELS = {
+  today: 'Today',
+  week: 'Weekly',
+  month: 'Monthly',
+  year: 'Yearly',
 };
 
 function getViewDateBounds(viewType, referenceDate = new Date()) {
@@ -376,6 +384,59 @@ export default function AnalyticsPage() {
   const onRangeEndDateChange = useCallback((e) => setRangeEndDate(e.target.value), []);
   const onDisputeChartTypeChange = useCallback((e) => setDisputeChartType(e.target.value), []);
 
+  const exportPayload = useMemo(
+    () => ({
+      branchName: (selectedBranch && selectedBranch.name) || '—',
+      branchId: selectedBranchId || '—',
+      viewTypeLabel: VIEW_TYPE_LABELS[viewType] || viewType,
+      rangeStartDate,
+      rangeEndDate,
+      viewWindowStartIso: viewBounds.start.toISOString(),
+      viewWindowEndIso: viewBounds.end.toISOString(),
+      paidTotal,
+      debitCount,
+      inShopCount,
+      overdueCount,
+      disputeTypeLabel: disputeConfig.label,
+      disputeTotal: disputeStats.total,
+      disputeCount: disputeStats.count,
+      chartData,
+      disputeChartData: disputeStats.chart,
+      recentTransactions,
+    }),
+    [
+      selectedBranch,
+      selectedBranchId,
+      viewType,
+      rangeStartDate,
+      rangeEndDate,
+      viewBounds.start,
+      viewBounds.end,
+      paidTotal,
+      debitCount,
+      inShopCount,
+      overdueCount,
+      disputeConfig.label,
+      disputeStats.total,
+      disputeStats.count,
+      chartData,
+      disputeStats.chart,
+      recentTransactions,
+    ]
+  );
+
+  const handleExportCsv = useCallback(() => {
+    downloadAnalyticsCsv(buildAnalyticsCsv(exportPayload), 'branch-analytics');
+  }, [exportPayload]);
+
+  const handleExportPdf = useCallback(() => {
+    exportAnalyticsPdf(exportPayload);
+  }, [exportPayload]);
+
+  const handlePrint = useCallback(() => {
+    window.print();
+  }, []);
+
   return (
     <DashboardLayout>
       <div className="main-cards analytics-page">
@@ -383,6 +444,26 @@ export default function AnalyticsPage() {
 
         {selectedBranchId ? (
           <>
+            <div className="analytics-export-toolbar">
+              <span className="analytics-export-label">Export</span>
+              <button type="button" className="analytics-export-btn" onClick={handleExportCsv}>
+                CSV
+              </button>
+              <button type="button" className="analytics-export-btn" onClick={handleExportPdf}>
+                PDF
+              </button>
+              <button type="button" className="analytics-export-btn" onClick={handlePrint}>
+                Print
+              </button>
+            </div>
+
+            <p className="analytics-print-meta">
+              Branch: {selectedBranch?.name || '—'} · Chart period: {VIEW_TYPE_LABELS[viewType] || viewType}
+              {(rangeStartDate || rangeEndDate) && (
+                <> · Custom range: {rangeStartDate || '—'} to {rangeEndDate || '—'}</>
+              )}
+            </p>
+
             <div className="card-small">
               <div className="card-total">
                 <div className="chart-title">Total Sales</div>
