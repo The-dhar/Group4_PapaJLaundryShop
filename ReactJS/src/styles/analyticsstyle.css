@@ -1,5 +1,24 @@
+/* Match dashboard refund cards: global `.custom-card` uses height:50% and clips stacked charts. */
 .analytics-page .custom-card {
   margin-bottom: 14px;
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0;
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+.analytics-page .custom-card .card-content {
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0;
+  overflow: visible;
+}
+
+.analytics-page.main-cards {
+  height: auto;
+  min-height: 0;
+  max-height: none;
 }
 
 .analytics-header {
@@ -187,6 +206,12 @@
   flex-direction: column;
   justify-content: flex-start;
   min-height: 120px;
+  min-width: 0;
+}
+
+.analytics-kpi-tile .icon-value span {
+  min-width: 0;
+  word-break: break-word;
 }
 
 .analytics-kpi-tile .chart-title {
@@ -237,6 +262,25 @@
 
 .analytics-secondary-kpis {
   grid-template-columns: repeat(3, 1fr);
+}
+
+.analytics-page .refund-card-header {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px 14px;
+}
+
+.analytics-page .refund-card-title {
+  min-width: 0;
+  flex: 1 1 200px;
+}
+
+.analytics-page .refund-type-filter {
+  flex-shrink: 0;
+}
+
+.analytics-refund-chart-wrap {
+  overflow: visible;
 }
 
 @media (max-width: 1024px) {

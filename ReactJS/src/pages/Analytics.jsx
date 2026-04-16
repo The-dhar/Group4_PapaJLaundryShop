@@ -753,10 +753,14 @@ export default function AnalyticsPage() {
                   refund and backjobs.
                 </p>
                 <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={monthlyLossStack12} margin={{ top: 8, right: 12, left: 4, bottom: 8 }}>
+                  <BarChart data={monthlyLossStack12} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                     <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 11 }} />
-                    <YAxis tickFormatter={revenueYAxisTick} tick={{ fill: '#64748b', fontSize: 11 }} />
+                    <YAxis
+                      width={78}
+                      tickFormatter={revenueYAxisTick}
+                      tick={{ fill: '#64748b', fontSize: 10 }}
+                    />
                     <Tooltip formatter={pesoTooltipFormatter} />
                     <Legend />
                     <Bar dataKey="refund" stackId="loss" name="Refunds" fill="#0d9488" radius={[0, 0, 0, 0]} />
@@ -778,11 +782,11 @@ export default function AnalyticsPage() {
                   New customers by first transaction month (last 12 months), based on name + address from orders.
                 </p>
                 <ResponsiveContainer width="100%" height={240}>
-                  <LineChart data={newCustomersByMonth12} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
+                  <LineChart data={newCustomersByMonth12} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <Legend verticalAlign="top" align="center" iconType="circle" iconSize={10} wrapperStyle={{ paddingBottom: 8 }} />
                     <XAxis dataKey="name" />
-                    <YAxis allowDecimals={false} tick={{ fill: '#64748b', fontSize: 11 }} />
+                    <YAxis width={44} allowDecimals={false} tick={{ fill: '#64748b', fontSize: 11 }} />
                     <Tooltip formatter={growthCountTooltipFormatter} />
                     <Line
                       type="monotone"
@@ -810,11 +814,11 @@ export default function AnalyticsPage() {
                 </div>
               </div>
               <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
+                <LineChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <Legend verticalAlign="top" align="center" iconType="circle" iconSize={10} wrapperStyle={{ paddingBottom: 8 }} />
                   <XAxis dataKey="name" />
-                  <YAxis tickFormatter={revenueYAxisTick} />
+                  <YAxis width={78} tickFormatter={revenueYAxisTick} tick={{ fill: '#64748b', fontSize: 10 }} />
                   <Tooltip formatter={pesoTooltipFormatter} />
                   <Line type="monotone" dataKey="revenue" name="Revenue" stroke="#185BCB" strokeWidth={3} dot={{ r: 4 }} />
                   <Line type="monotone" dataKey="unpaid" name="Debit sales" stroke="#E63946" strokeWidth={3} dot={{ r: 4 }} />
@@ -853,12 +857,16 @@ export default function AnalyticsPage() {
                   <div className="refund-kpi-value">{disputeStats.count}</div>
                 </div>
               </div>
-              <div className="refund-chart-wrap">
+              <div className="refund-chart-wrap analytics-refund-chart-wrap">
                 <ResponsiveContainer width="100%" height={228}>
-                  <LineChart data={disputeStats.chart} margin={{ top: 12, right: 12, left: 2, bottom: 28 }}>
+                  <LineChart data={disputeStats.chart} margin={{ top: 12, right: 12, left: 8, bottom: 28 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                     <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 12 }} />
-                    <YAxis tickFormatter={revenueYAxisTick} tick={{ fill: '#64748b', fontSize: 11 }} />
+                    <YAxis
+                      width={78}
+                      tickFormatter={revenueYAxisTick}
+                      tick={{ fill: '#64748b', fontSize: 10 }}
+                    />
                     <Tooltip formatter={pesoTooltipFormatter} />
                     <Line
                       type="monotone"
