@@ -6,6 +6,11 @@ import SmallcardModal from '../components/smallcardModal';
 import CustomerModal from '../components/customerModal';
 import { useTransactions } from '../context/transactionsContext';
 import { API_URL, resolvePublicFileUrl } from '../config/api';
+import {
+  findPsgcByName,
+  loadPsgcBarangaysByCityCode,
+  loadPsgcCities,
+} from '../utils/psgc';
 import '../styles/posstyle.css';
 import Swal from 'sweetalert2';
 import { jsPDF } from 'jspdf';
@@ -138,6 +143,21 @@ const DEFAULT_SERVICE_ICONS = {
   drying: '/pictures/male-clothes.png',
 };
 
+const RUSH_FEE = 100;
+
+function isRushExtraName(name) {
+  const raw = String(name || '').trim().toLowerCase();
+  return raw.includes('rush') || raw.includes('express');
+}
+
+function todayInputDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function parseChargeTypeFromDescription(raw) {
   const text = String(raw || '').trim();
   const m = text.match(/^\[(?:charge_)?type:(fixed|incremental)\]\s*/i);
@@ -153,6 +173,82 @@ function withImageVersion(url, version) {
   const v = encodeURIComponent(String(version ?? ''));
   if (!v) return url;
   return url.includes('?') ? `${url}&v=${v}` : `${url}?v=${v}`;
+}
+
+function openAndAutoPrintPdf(doc) {
+  if (!doc) return;
+
+  try {
+    if (typeof doc.autoPrint === 'function') {
+      doc.autoPrint();
+    }
+  } catch {
+    // continue with manual print trigger fallback
+  }
+
+  const blob = doc.output('blob');
+  const blobUrl = URL.createObjectURL(blob);
+
+  const frame = document.createElement('iframe');
+  frame.style.position = 'fixed';
+  frame.style.right = '0';
+  frame.style.bottom = '0';
+  frame.style.width = '0';
+  frame.style.height = '0';
+  frame.style.border = '0';
+  frame.setAttribute('aria-hidden', 'true');
+
+  let loaded = false;
+  let printed = false;
+
+  const printFromFrame = () => {
+    if (printed) return;
+    printed = true;
+    try {
+      const target = frame.contentWindow;
+      target?.focus();
+      target?.print();
+    } catch {
+      // ignore print errors; fallback is handled below
+    }
+  };
+
+  const cleanup = () => {
+    setTimeout(() => {
+      try {
+        URL.revokeObjectURL(blobUrl);
+      } catch {
+        // ignore
+      }
+      if (frame.parentNode) {
+        frame.parentNode.removeChild(frame);
+      }
+    }, 4000);
+  };
+
+  frame.onload = () => {
+    loaded = true;
+    setTimeout(printFromFrame, 220);
+    setTimeout(cleanup, 5000);
+  };
+
+  document.body.appendChild(frame);
+  frame.src = blobUrl;
+
+  // If embedded PDF never loads in the hidden iframe, fallback to a visible tab.
+  setTimeout(() => {
+    if (loaded || printed) return;
+    const popup = window.open(blobUrl, '_blank');
+    if (!popup) {
+      Swal.fire({
+        title: 'Print preview blocked',
+        text: 'Please allow popups, then try printing again.',
+        icon: 'info',
+        width: 420,
+      });
+    }
+    cleanup();
+  }, 2600);
 }
 
 const POs = () => {
@@ -172,7 +268,7 @@ const POs = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingServiceId, setEditingServiceId] = useState(null); // Tracks if we are editing an item
 
-  const [activeExtras, setActiveExtras] = useState({ discount: false });
+  const [activeExtras, setActiveExtras] = useState({ discount: false, express: false });
   const [discountAmount, setDiscountAmount] = useState(0);
   const [dynamicExtras, setDynamicExtras] = useState([]);
   const [selectedDynamicExtras, setSelectedDynamicExtras] = useState({});
@@ -184,6 +280,15 @@ const POs = () => {
   const [street, setStreet] = useState('');
   const [barangay, setBarangay] = useState('');
   const [city, setCity] = useState('');
+  const [psgcCities, setPsgcCities] = useState([]);
+  const [psgcCitiesLoading, setPsgcCitiesLoading] = useState(false);
+  const [psgcCitiesError, setPsgcCitiesError] = useState('');
+  const [selectedCityCode, setSelectedCityCode] = useState('');
+
+  const [psgcBarangays, setPsgcBarangays] = useState([]);
+  const [psgcBarangaysLoading, setPsgcBarangaysLoading] = useState(false);
+  const [psgcBarangaysError, setPsgcBarangaysError] = useState('');
+  const [selectedBarangayCode, setSelectedBarangayCode] = useState('');
 
   const [dueDate, setDueDate] = useState('');
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -200,10 +305,111 @@ const POs = () => {
   const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [suggestionOpen, setSuggestionOpen] = useState(false);
   const searchWrapRef = useRef(null);
+  const todayDate = useMemo(() => todayInputDate(), []);
 
   useEffect(() => {
     setPastSearches(JSON.parse(localStorage.getItem('pastSearches') || '[]'));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setPsgcCitiesLoading(true);
+      setPsgcCitiesError('');
+      try {
+        const rows = await loadPsgcCities();
+        if (!cancelled) setPsgcCities(rows);
+      } catch {
+        if (!cancelled) {
+          setPsgcCities([]);
+          setPsgcCitiesError('City list is unavailable right now. You may type manually.');
+        }
+      } finally {
+        if (!cancelled) setPsgcCitiesLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (psgcCitiesError || psgcCities.length === 0) return;
+
+    const match = findPsgcByName(psgcCities, city);
+    if (!match) {
+      setSelectedCityCode('');
+      setPsgcBarangays([]);
+      setSelectedBarangayCode('');
+      return;
+    }
+
+    setSelectedCityCode(match.code);
+    if (city !== (match.display_name || match.name)) {
+      setCity(match.display_name || match.name);
+    }
+  }, [city, psgcCities, psgcCitiesError]);
+
+  useEffect(() => {
+    if (psgcCitiesError || !selectedCityCode) {
+      setPsgcBarangays([]);
+      setSelectedBarangayCode('');
+      setPsgcBarangaysError('');
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setPsgcBarangaysLoading(true);
+      setPsgcBarangaysError('');
+      try {
+        const rows = await loadPsgcBarangaysByCityCode(selectedCityCode);
+        if (!cancelled) setPsgcBarangays(rows);
+      } catch {
+        if (!cancelled) {
+          setPsgcBarangays([]);
+          setSelectedBarangayCode('');
+          setPsgcBarangaysError('Barangay list is unavailable right now. You may type manually.');
+        }
+      } finally {
+        if (!cancelled) setPsgcBarangaysLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [psgcCitiesError, selectedCityCode]);
+
+  useEffect(() => {
+    if (
+      psgcCitiesError ||
+      psgcBarangaysError ||
+      !selectedCityCode ||
+      psgcBarangays.length === 0
+    ) {
+      if (!selectedCityCode) setSelectedBarangayCode('');
+      return;
+    }
+
+    const match = findPsgcByName(psgcBarangays, barangay);
+    if (!match) {
+      setSelectedBarangayCode('');
+      return;
+    }
+
+    setSelectedBarangayCode(match.code);
+    if (barangay !== match.name) {
+      setBarangay(match.name);
+    }
+  }, [
+    barangay,
+    psgcBarangays,
+    psgcBarangaysError,
+    psgcCitiesError,
+    selectedCityCode,
+  ]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -233,7 +439,7 @@ const POs = () => {
               type: parsed.type,
             };
           })
-          .filter((row) => row.name);
+          .filter((row) => row.name && !isRushExtraName(row.name));
         if (!cancelled) setDynamicExtras(miscRows);
       } catch {
         if (!cancelled) setDynamicExtras([]);
@@ -485,12 +691,56 @@ const POs = () => {
     else setPaymentMethod('');
   }, [paymentStatus]);
 
+  useEffect(() => {
+    const shouldRush = dueDate === todayDate;
+    setActiveExtras((prev) => {
+      if (prev.express === shouldRush) return prev;
+      return { ...prev, express: shouldRush };
+    });
+  }, [dueDate, todayDate]);
+
   // --- Handlers ---
 
   const handleCustomerSearchKeyDown = (e) => {
     if (e.key === 'Enter' && customerSuggestions.length > 0) {
       e.preventDefault();
       applyCustomerSuggestion(customerSuggestions[0]);
+    }
+  };
+
+  const handleCitySelectChange = (e) => {
+    const nextCode = e.target.value;
+    setSelectedCityCode(nextCode);
+
+    if (!nextCode) {
+      setCity('');
+      setBarangay('');
+      setSelectedBarangayCode('');
+      setPsgcBarangays([]);
+      setPsgcBarangaysError('');
+      return;
+    }
+
+    const picked = psgcCities.find((row) => String(row.code) === String(nextCode));
+    if (picked) {
+      setCity(picked.display_name || picked.name);
+    }
+    setBarangay('');
+    setSelectedBarangayCode('');
+    setPsgcBarangays([]);
+    setPsgcBarangaysError('');
+  };
+
+  const handleBarangaySelectChange = (e) => {
+    const nextCode = e.target.value;
+    setSelectedBarangayCode(nextCode);
+    if (!nextCode) {
+      setBarangay('');
+      return;
+    }
+    const picked = psgcBarangays.find((row) => String(row.code) === String(nextCode));
+    if (picked) {
+      setBarangay(picked.name);
     }
   };
 
@@ -559,6 +809,7 @@ const POs = () => {
 
   const calculateExtras = () => {
     let total = 0;
+    if (activeExtras.express) total += RUSH_FEE;
     if (activeExtras.discount) total -= Number(discountAmount || 0);
     total += dynamicExtras.reduce((sum, extra) => {
       const qty = Number(selectedDynamicExtras[extra.id] || 0);
@@ -572,11 +823,15 @@ const POs = () => {
   const resetForm = () => {
     setSelectedServices([]);
     setFirstName(''); setMiddleName(''); setLastName(''); setStreet(''); setBarangay(''); setCity('');
+    setSelectedCityCode('');
+    setSelectedBarangayCode('');
+    setPsgcBarangays([]);
+    setPsgcBarangaysError('');
     setCustomerSearchInput('');
     setCustomerSuggestions([]);
     setSuggestionOpen(false);
     setDueDate('');
-    setActiveExtras({ discount: false });
+    setActiveExtras({ discount: false, express: false });
     setDiscountAmount(0);
     setPaymentStatus('later');
     setAmountPaid('');
@@ -620,17 +875,21 @@ const POs = () => {
       doc.setFont('courier', 'normal');
       centerText("Present this upon payment", y, 8);
 
-      const blobUrl = doc.output('bloburl');
-      window.open(blobUrl);
+      openAndAutoPrintPdf(doc);
       return;
     }
 
     
     const extrasActive = txn.active_extras || {};
     const slist = txn.sub_extras || {};
+    const hasRush =
+      txn.is_rush === true ||
+      txn.is_rush === 1 ||
+      extrasActive.express ||
+      (txn.extra_charge_type && txn.extra_charge_type.includes('express'));
     
     let extraHeight = 0;
-    if (extrasActive.express || (txn.extra_charge_type && txn.extra_charge_type.includes('express'))) extraHeight += 4;
+    if (hasRush) extraHeight += 4;
     if (slist.extra_detergent) extraHeight += 4;
     if (slist.extra_softener) extraHeight += 4;
     if (slist.stain_removal) extraHeight += 4;
@@ -727,7 +986,7 @@ const POs = () => {
     doc.text(`P${computedSubtotal.toFixed(2)}`, 56, y, { align: 'right' });
     y += 4;
 
-    if (extrasActive.express || (txn.extra_charge_type && txn.extra_charge_type.includes('express'))) {
+    if (hasRush) {
       doc.text("Rush Charge:", 2, y);
       doc.text("P100.00", 56, y, { align: 'right' });
       y += 4;
@@ -822,7 +1081,7 @@ const POs = () => {
     doc.setFontSize(6);
     centerText("This is not an official receipt.", y, 6);
 
-    window.open(doc.output('bloburl'));
+    openAndAutoPrintPdf(doc);
   };
 
   const dynamicExtrasTotal = useMemo(
@@ -848,8 +1107,38 @@ const POs = () => {
       Swal.fire({ title: "Missing Information", text: "Please complete all customer details.", icon: "warning", width: 350 });
       return;
     }
+
+    if (!allowManualCity && !selectedCityCode) {
+      Swal.fire({
+        title: 'Select city',
+        text: 'Please select a city from the PSGC dropdown.',
+        icon: 'warning',
+        width: 380,
+      });
+      return;
+    }
+
+    if (selectedCityCode && !allowManualBarangay && !selectedBarangayCode) {
+      Swal.fire({
+        title: 'Select barangay',
+        text: 'Please select a barangay from the PSGC dropdown.',
+        icon: 'warning',
+        width: 380,
+      });
+      return;
+    }
+
     if (!dueDate) {
       Swal.fire({ title: "Missing Information", text: "Due date is required.", icon: "warning", width: 350 });
+      return;
+    }
+    if (dueDate < todayDate) {
+      Swal.fire({
+        title: 'Invalid due date',
+        text: 'Past dates are not allowed for due date.',
+        icon: 'warning',
+        width: 360,
+      });
       return;
     }
     if (selectedServices.length === 0) {
@@ -859,6 +1148,10 @@ const POs = () => {
 
     const fullName = buildFullName(firstName, middleName, lastName);
     const fullAddress = `${street.trim()}, ${barangay.trim()}, ${city.trim()}`;
+    const normalizedExtras = {
+      ...activeExtras,
+      express: dueDate === todayDate || activeExtras.express,
+    };
 
     try {
       setIsSaving(true);
@@ -872,6 +1165,7 @@ const POs = () => {
         setIsSaving(false);
         return;
       }
+
       const newTransaction = await createTransaction({
         customer_name: fullName,
         customer_first_name: firstName.trim(),
@@ -884,12 +1178,12 @@ const POs = () => {
         due_date: dueDate,
         extra_charge_type:
           [
-            ...Object.keys(activeExtras).filter((k) => activeExtras[k]),
+            ...Object.keys(normalizedExtras).filter((k) => normalizedExtras[k]),
             ...selectedDynamicExtraNames,
           ].join(', ') || 'none',
-        discount_amount: activeExtras.discount ? Number(discountAmount) : 0,
+        discount_amount: normalizedExtras.discount ? Number(discountAmount) : 0,
         additional_amount: dynamicExtrasTotal,
-        active_extras: activeExtras,
+        active_extras: normalizedExtras,
         sub_extras: {},
         payment_status: paymentStatus === 'full' ? 'paid' : 'unpaid',
         payment_method: paymentMethod,
@@ -898,7 +1192,12 @@ const POs = () => {
       });
 
       printThermalReceipt(newTransaction);
-      Swal.fire({ title: "Transaction Saved!", icon: "success", width: 350 });
+      Swal.fire({
+        title: "Transaction Saved!",
+        text: "Print dialog should open automatically.",
+        icon: "success",
+        width: 400,
+      });
       resetForm();
     } catch (error) {
       Swal.fire({
@@ -911,6 +1210,11 @@ const POs = () => {
       setIsSaving(false);
     }
   };
+
+  const allowManualCity = Boolean(psgcCitiesError);
+  const allowManualBarangay =
+    allowManualCity ||
+    (selectedCityCode && (psgcBarangaysError || (!psgcBarangaysLoading && psgcBarangays.length === 0)));
 
   return (
     <DashboardLayout>
@@ -1016,7 +1320,13 @@ const POs = () => {
                 <div className="for-receipt-bottom">
                   <div className="for-receipt-calendar">
                     <span style={{ fontSize: 12, color: '#666' }}>Laundry to be claimed on:</span> <br />
-                    <input type="date" className="for-receipt-date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                    <input
+                      type="date"
+                      className="for-receipt-date"
+                      value={dueDate}
+                      min={todayDate}
+                      onChange={e => setDueDate(e.target.value)}
+                    />
                   </div>
                 </div>
               </div>
@@ -1035,17 +1345,75 @@ const POs = () => {
                   <input type="text" className="for-receipt-customerinput" value={lastName} onChange={e => setLastName(e.target.value)} />
                 </label>
               </div>
-              <label>Street / Drive:
-                <input type="text" className="for-receipt-customerinput" value={street} onChange={e => setStreet(e.target.value)} />
-              </label>
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                <label style={{ flex: 1 }}>Barangay:
-                  <input type="text" className="for-receipt-customerinput" value={barangay} onChange={e => setBarangay(e.target.value)} />
-                </label>
                 <label style={{ flex: 1 }}>City:
-                  <input type="text" className="for-receipt-customerinput" value={city} onChange={e => setCity(e.target.value)} />
+                  {allowManualCity ? (
+                    <input
+                      type="text"
+                      className="for-receipt-customerinput"
+                      value={city}
+                      onChange={e => setCity(e.target.value)}
+                    />
+                  ) : (
+                    <select
+                      className="for-receipt-customerinput"
+                      value={selectedCityCode}
+                      onChange={handleCitySelectChange}
+                      disabled={psgcCitiesLoading}
+                    >
+                      <option value="">{psgcCitiesLoading ? 'Loading cities...' : 'Select city'}</option>
+                      {psgcCities.map((row) => (
+                        <option key={row.code} value={row.code}>
+                          {row.display_name || row.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {psgcCitiesError && (
+                    <small style={{ display: 'block', marginTop: 4, color: '#b45309', fontWeight: 500 }}>
+                      {psgcCitiesError}
+                    </small>
+                  )}
+                </label>
+                <label style={{ flex: 1 }}>Barangay:
+                  {allowManualBarangay ? (
+                    <input
+                      type="text"
+                      className="for-receipt-customerinput"
+                      value={barangay}
+                      onChange={e => setBarangay(e.target.value)}
+                    />
+                  ) : (
+                    <select
+                      className="for-receipt-customerinput"
+                      value={selectedBarangayCode}
+                      onChange={handleBarangaySelectChange}
+                      disabled={!selectedCityCode || psgcBarangaysLoading}
+                    >
+                      <option value="">
+                        {!selectedCityCode
+                          ? 'Select city first'
+                          : psgcBarangaysLoading
+                            ? 'Loading barangays...'
+                            : 'Select barangay'}
+                      </option>
+                      {psgcBarangays.map((row) => (
+                        <option key={row.code} value={row.code}>
+                          {row.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {psgcBarangaysError && selectedCityCode && (
+                    <small style={{ display: 'block', marginTop: 4, color: '#b45309', fontWeight: 500 }}>
+                      {psgcBarangaysError}
+                    </small>
+                  )}
                 </label>
               </div>
+              <label style={{ marginTop: '10px' }}>Street / Drive:
+                <input type="text" className="for-receipt-customerinput" value={street} onChange={e => setStreet(e.target.value)} />
+              </label>
             </div>
 
             {/* Payment & Extras Section */}
@@ -1074,6 +1442,22 @@ const POs = () => {
                 <h3>Extra Charges</h3>
                 <div className="payment-options">
                   <label className="payment-option">
+                    <input
+                      type="checkbox"
+                      checked={activeExtras.express}
+                      disabled={dueDate === todayDate && activeExtras.express}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setDueDate(todayDate);
+                          setActiveExtras((prev) => ({ ...prev, express: true }));
+                          return;
+                        }
+                        setActiveExtras((prev) => ({ ...prev, express: false }));
+                      }}
+                    />
+                    <span>Rush (Express) + P{RUSH_FEE.toFixed(2)}</span>
+                  </label>
+                  <label className="payment-option">
                     <input 
                       type="checkbox" 
                       checked={activeExtras.discount} 
@@ -1081,6 +1465,11 @@ const POs = () => {
                     />
                     <span>Discount</span>
                   </label>
+                  {dueDate === todayDate && (
+                    <small style={{ marginLeft: '10px', color: '#64748b', fontWeight: 500 }}>
+                      Rush is automatically enabled when due date is today.
+                    </small>
+                  )}
                   {dynamicExtras.map((extra) => {
                     const qty = Number(selectedDynamicExtras[extra.id] || 0);
                     const isIncremental = extra.type === 'incremental';
@@ -1178,6 +1567,13 @@ const POs = () => {
             <div className="container-information">
               <div className="for-receipt-totals">
                 <div className="total-row"><span>Subtotal:</span><span>P{subtotal.toFixed(2)}</span></div>
+
+                {activeExtras.express && (
+                  <div className="total-row" style={{ color: '#555', fontSize: '13px', margin: '2px 0' }}>
+                    <span>Rush (Express):</span>
+                    <span>P{RUSH_FEE.toFixed(2)}</span>
+                  </div>
+                )}
                 
                 {dynamicExtras
                   .filter((extra) => Number(selectedDynamicExtras[extra.id] || 0) > 0)

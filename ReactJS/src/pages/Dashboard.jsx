@@ -30,7 +30,28 @@ function writeBranchesCache(rows) {
   }
 }
 
-const formatPeso = (value) => `₱${Number(value).toLocaleString()}`;
+const formatPeso = (value) => {
+  const amount = Number(value);
+  const safeAmount = Number.isFinite(amount) ? amount : 0;
+  return `₱${safeAmount.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+};
+
+function parseDateOnlyAsLocal(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const ymd = raw.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+    const [y, m, d] = ymd.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
 
 const DISPUTE_CHART_CONFIG = {
   refund: {
@@ -220,7 +241,7 @@ const RefundLineChart = memo(function RefundLineChart({ data, lineLabel, lineCol
             tick={{ fill: '#64748b', fontSize: 11 }}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(value) => `₱${value}`}
+            tickFormatter={formatPeso}
             domain={[0, 'auto']}
           />
           <Tooltip
@@ -420,7 +441,8 @@ const Dashboard = () => {
     today.setHours(0, 0, 0, 0);
     return filteredTransactions.filter((t) => {
       if (t.inventory_status !== 'in_shop' || !t.due_date) return false;
-      const due = new Date(t.due_date);
+      const due = parseDateOnlyAsLocal(t.due_date);
+      if (!due) return false;
       due.setHours(0, 0, 0, 0);
       return due < today;
     }).length;
@@ -545,7 +567,7 @@ const Dashboard = () => {
   const emptyDisputeChart = useMemo(() => buildDisputeSeries(viewType, []), [viewType]);
 
   const revenueTooltipFormatter = useCallback((value) => formatPeso(value), []);
-  const revenueYAxisTick = useCallback((value) => `₱${value}`, []);
+  const revenueYAxisTick = useCallback((value) => formatPeso(value), []);
   const revenueLegendFormatter = useCallback(
     (value) => <span style={{ color: '#334155', fontSize: 13 }}>{value}</span>,
     []

@@ -3,12 +3,52 @@ import { API_URL } from "../config/api";
 
 const TransactionsContext = createContext(null);
 const LIVE_POLL_MS = 10000;
+const RUSH_FEE = 100;
 
 function shouldPollTransactions() {
   if (typeof window === "undefined") return true;
   const path = String(window.location.pathname || "").toLowerCase();
   // Polling while encoding a POS transaction can cause disruptive re-renders.
   return !path.startsWith("/pos");
+}
+
+function isTodayInputDate(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return false;
+
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const today = `${year}-${month}-${day}`;
+
+  return raw === today;
+}
+
+function sanitizeDateOnly(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+
+  const ymd = raw.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+    return ymd;
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return '';
+
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function sanitizeDateTime(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toISOString();
 }
 
 const normalizeTransaction = (txn) => {
@@ -36,6 +76,11 @@ const normalizeTransaction = (txn) => {
     penalty: penaltyAmount,
     penalty_suggested_amount: penaltySuggestedAmount,
     penalty_override_reason: txn.penalty_override_reason || "",
+    due_date: sanitizeDateOnly(txn.due_date),
+    created_at:
+      sanitizeDateTime(txn.created_at) ||
+      sanitizeDateTime(txn.updated_at) ||
+      '',
     weight: txn.total_weight ?? txn.weight ?? 0,
     services,
   };
@@ -151,9 +196,9 @@ export const TransactionsProvider = ({ children }) => {
         }
       }
 
-      const isRush = active_extras?.express || false;
+      const isRush = Boolean(active_extras?.express) || isTodayInputDate(due_date);
       const extras =
-        (isRush ? 100 : 0) +
+        (isRush ? RUSH_FEE : 0) +
         ((sub_extras?.extra_detergent || 0) * 20) +
         ((sub_extras?.extra_softener || 0) * 20) +
         (sub_extras?.stain_removal ? 50 : 0) +
@@ -221,12 +266,13 @@ export const TransactionsProvider = ({ children }) => {
         penalty_amount: Number(result.penalty_amount ?? 0) || 0,
         penalty_suggested_amount: Number(result.penalty_suggested_amount ?? 0) || 0,
         penalty_override_reason: result.penalty_override_reason || "",
+        is_rush: Boolean(result.is_rush ?? isRush),
         payment_status: result.payment_status ?? payment_status ?? "unpaid",
         payment_method: result.payment_method ?? payment_method ?? "",
         inventory_status: result.inventory_status ?? "in_shop",
-        due_date: result.due_date ?? due_date,
+        due_date: sanitizeDateOnly(result.due_date ?? due_date),
         archived: false,
-        created_at: result.created_at ?? new Date().toISOString(),
+        created_at: sanitizeDateTime(result.created_at) || new Date().toISOString(),
         receipt_items: Array.isArray(result.receipt_items) && result.receipt_items.length > 0
           ? result.receipt_items
           : (services || []).map((s, idx) => ({

@@ -40,9 +40,7 @@ const BranchAccountManager = () => {
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState(1);
-  const [pendingDeleteBranch, setPendingDeleteBranch] = useState<Branch | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [openBranchMenuId, setOpenBranchMenuId] = useState<number | null>(null);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   const ITEMS_PER_PAGE = 5;
 
@@ -91,9 +89,10 @@ const BranchAccountManager = () => {
 
   const branchesSorted = useMemo(() => {
     return [...branches].sort((a, b) => {
-      const dateA = new Date(a.created_at || 0).getTime();
-      const dateB = new Date(b.created_at || 0).getTime();
-      return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+      const nameA = String(a.name || '').trim();
+      const nameB = String(b.name || '').trim();
+      const compare = nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+      return sortOrder === 'asc' ? compare : -compare;
     });
   }, [branches, sortOrder]);
 
@@ -171,14 +170,12 @@ const BranchAccountManager = () => {
   };
 
   const handleEditBranch = (branch: Branch) => {
-    setOpenBranchMenuId(null);
     setEditingBranch(branch);
     setBranchName(branch.name || '');
     setIsModalOpen(true);
   };
 
   const handleViewBranch = (branch: Branch) => {
-    setOpenBranchMenuId(null);
     router.push({
       pathname: '/dashboardbyaccount',
       params: {
@@ -189,17 +186,18 @@ const BranchAccountManager = () => {
     });
   };
 
-  const handleDeleteBranch = (branch: Branch) => {
-    setOpenBranchMenuId(null);
-    setPendingDeleteBranch(branch);
-  };
+  const toggleEditingBranchStatus = async () => {
+    if (!editingBranch || !token) return;
 
-  const confirmDelete = async () => {
-    if (!pendingDeleteBranch || !token) return;
+    const isActive = editingBranch.is_active !== false;
+    const endpoint = isActive
+      ? `${API_URL}/branches/${editingBranch.id}/deactivate`
+      : `${API_URL}/branches/${editingBranch.id}/activate`;
+
     try {
-      setIsDeleting(true);
-      const response = await fetch(`${API_URL}/branches/${pendingDeleteBranch.id}`, {
-        method: 'DELETE',
+      setIsUpdatingStatus(true);
+      const response = await fetch(endpoint, {
+        method: 'PUT',
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
@@ -207,21 +205,31 @@ const BranchAccountManager = () => {
       });
 
       if (!response.ok) {
-        Alert.alert('Error', 'Could not delete branch.');
+        Alert.alert('Error', `Could not ${isActive ? 'deactivate' : 'reactivate'} branch.`);
         return;
       }
 
-      setBranches((prev) => prev.filter((b) => b.id !== pendingDeleteBranch.id));
-      setPendingDeleteBranch(null);
-      if (currentPage > 1 && paginatedBranches.length === 1) {
-        setCurrentPage((page) => Math.max(1, page - 1));
-      }
-      Alert.alert('Success', 'Branch deleted successfully.');
+      const payload = await response.json().catch(() => ({}));
+      const updatedBranch: Branch = {
+        ...editingBranch,
+        ...(payload?.branch || {}),
+        is_active: payload?.branch?.is_active ?? !isActive,
+      };
+
+      setBranches((prev) =>
+        prev.map((b) =>
+          b.id === editingBranch.id
+            ? updatedBranch
+            : b
+        )
+      );
+      setEditingBranch(updatedBranch);
+      Alert.alert('Success', `Branch ${isActive ? 'deactivated' : 'reactivated'} successfully.`);
     } catch (error) {
       console.log(error);
-      Alert.alert('Error', 'Failed to delete branch.');
+      Alert.alert('Error', `Failed to ${isActive ? 'deactivate' : 'reactivate'} branch.`);
     } finally {
-      setIsDeleting(false);
+      setIsUpdatingStatus(false);
     }
   };
 
@@ -304,7 +312,7 @@ const BranchAccountManager = () => {
                 color="#3b82f6"
               />
               <Text style={styles.sortButtonText}>
-                {sortOrder === 'asc' ? 'Oldest' : 'Newest'}
+                {sortOrder === 'asc' ? 'A-Z' : 'Z-A'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -321,7 +329,11 @@ const BranchAccountManager = () => {
 
                 <View key={branch.id} style={styles.branchRowWrapper}>
 
-                  <View style={styles.branchRow}>
+                  <TouchableOpacity
+                    style={styles.branchRow}
+                    activeOpacity={0.92}
+                    onPress={() => handleViewBranch(branch)}
+                  >
 
                     <View style={styles.branchLeft}>
 
@@ -334,19 +346,13 @@ const BranchAccountManager = () => {
                           <Text style={styles.branchName} numberOfLines={1}>{branch.name}</Text>
                           <View style={styles.inlineActions}>
                             <TouchableOpacity
-                              onPress={() => handleViewBranch(branch)}
-                              style={styles.viewButtonInline}
+                              onPress={(event) => {
+                                event.stopPropagation();
+                                handleEditBranch(branch);
+                              }}
+                              style={styles.editButtonInline}
                             >
-                              <Ionicons name="eye" size={14} color="#fff" />
-                              <Text style={styles.viewButtonInlineText}>View</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              onPress={() =>
-                                setOpenBranchMenuId((prev) => (prev === branch.id ? null : branch.id))
-                              }
-                              style={styles.moreButton}
-                            >
-                              <Ionicons name="ellipsis-vertical" size={16} color="#475569" />
+                              <Ionicons name="create-outline" size={22} color="#3b82f6" />
                             </TouchableOpacity>
                           </View>
                         </View>
@@ -357,25 +363,7 @@ const BranchAccountManager = () => {
                       </View>
 
                     </View>
-                  </View>
-                  {openBranchMenuId === branch.id && (
-                    <View style={styles.branchMenu}>
-                      <TouchableOpacity
-                        onPress={() => handleEditBranch(branch)}
-                        style={[styles.branchMenuItem, styles.branchMenuItemEdit]}
-                      >
-                        <Ionicons name="create-outline" size={14} color="#ffffff" />
-                        <Text style={styles.branchMenuItemText}>Edit</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => handleDeleteBranch(branch)}
-                        style={[styles.branchMenuItem, styles.branchMenuItemDelete]}
-                      >
-                        <Ionicons name="trash-outline" size={14} color="#ffffff" />
-                        <Text style={styles.branchMenuItemText}>Delete</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
+                  </TouchableOpacity>
 
                   {index < paginatedBranches.length - 1 && (
                     <View style={styles.rowDivider} />
@@ -451,6 +439,29 @@ const BranchAccountManager = () => {
 
             </View>
 
+            {editingBranch && (
+              <View style={styles.statusToggleContainer}>
+                <TouchableOpacity
+                  onPress={toggleEditingBranchStatus}
+                  style={[
+                    styles.statusToggleButton,
+                    editingBranch.is_active === false
+                      ? styles.activateConfirmButton
+                      : styles.deactivateConfirmButton,
+                  ]}
+                  disabled={isUpdatingStatus}
+                >
+                  {isUpdatingStatus ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.statusConfirmButtonText}>
+                      {editingBranch.is_active === false ? 'Reactivate branch' : 'Deactivate branch'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+
             <View style={styles.modalButtons}>
 
               <TouchableOpacity
@@ -480,44 +491,6 @@ const BranchAccountManager = () => {
 
         </View>
 
-      </Modal>
-
-      <Modal visible={pendingDeleteBranch !== null} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Delete Branch?</Text>
-              <TouchableOpacity
-                onPress={() => setPendingDeleteBranch(null)}
-                style={styles.closeButton}
-              >
-                <Ionicons name="close" size={24} color="#6b7280" />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.modalMessage}>
-              Are you sure you want to delete "{pendingDeleteBranch?.name}"? This action cannot be undone.
-            </Text>
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.clearButton]}
-                onPress={() => setPendingDeleteBranch(null)}
-              >
-                <Text style={styles.clearButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.deleteConfirmButton]}
-                onPress={confirmDelete}
-                disabled={isDeleting}
-              >
-                {isDeleting ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.deleteConfirmButtonText}>Delete</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
       </Modal>
 
     </SafeAreaView>
@@ -714,60 +687,13 @@ const styles = StyleSheet.create({
     gap: 8,
     flexShrink: 0,
   },
-  viewButtonInline: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#3b82f6',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
-  },
-  viewButtonInlineText: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  moreButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    backgroundColor: '#f8fafc',
-    justifyContent: 'center',
-    alignItems: 'center',
+  editButtonInline: {
+    padding: 8,
   },
   branchUsername: {
     fontSize: 13,
     color: '#64748b',
     fontWeight: '500',
-  },
-  branchMenu: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-    marginTop: 4,
-    marginHorizontal: 20,
-  },
-  branchMenuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 10,
-  },
-  branchMenuItemEdit: {
-    backgroundColor: '#f59e0b',
-  },
-  branchMenuItemDelete: {
-    backgroundColor: '#ef4444',
-  },
-  branchMenuItemText: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 13,
   },
   paginationContainer: {
     flexDirection: 'row',
@@ -842,14 +768,6 @@ const styles = StyleSheet.create({
     color: '#64748b',
     lineHeight: 18,
   },
-  modalMessage: {
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 8,
-    fontSize: 14,
-    color: '#475569',
-    lineHeight: 20,
-  },
   closeButton: {
     width: 36,
     height: 36,
@@ -884,20 +802,20 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 12,
-    padding: 24,
-    paddingTop: 8,
-  },
-  modalButton: {
-    flex: 1,
-  },
   modalButtons: {
     flexDirection: 'row',
     gap: 12,
     padding: 24,
     paddingTop: 8,
+  },
+  statusToggleContainer: {
+    paddingHorizontal: 24,
+    paddingBottom: 8,
+  },
+  statusToggleButton: {
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
   },
   clearButton: {
     flex: 1,
@@ -919,13 +837,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: 0.3,
   },
-  deleteConfirmButton: {
+  deactivateConfirmButton: {
     paddingVertical: 16,
     borderRadius: 12,
-    backgroundColor: '#ef4444',
+    backgroundColor: '#f97316',
     alignItems: 'center',
   },
-  deleteConfirmButtonText: {
+  activateConfirmButton: {
+    paddingVertical: 16,
+    borderRadius: 12,
+    backgroundColor: '#22c55e',
+    alignItems: 'center',
+  },
+  statusConfirmButtonText: {
     color: '#ffffff',
     fontWeight: '700',
     fontSize: 16,

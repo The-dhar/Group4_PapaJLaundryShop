@@ -44,6 +44,43 @@ function formatInventoryStatus(status) {
     .join(' ');
 }
 
+function openAndAutoPrintPdf(doc) {
+  if (!doc) return;
+
+  try {
+    if (typeof doc.autoPrint === 'function') {
+      doc.autoPrint();
+    }
+  } catch {
+    // continue with fallback print trigger
+  }
+
+  const blobUrl = doc.output('bloburl');
+  const printWindow = window.open(blobUrl, '_blank');
+
+  if (!printWindow) {
+    Swal.fire({
+      title: 'Popup blocked',
+      text: 'Allow popups to auto-print the receipt.',
+      icon: 'info',
+      width: 420,
+    });
+    return;
+  }
+
+  const tryPrint = () => {
+    try {
+      printWindow.focus();
+      printWindow.print();
+    } catch {
+      // Browser PDF viewer may still use embedded print action.
+    }
+  };
+
+  setTimeout(tryPrint, 450);
+  setTimeout(tryPrint, 1300);
+}
+
 const Receiptmanagement = () => {
   const navigate = useNavigate();
   const { transactions, archiveTransaction, updateTransaction } = useTransactions();
@@ -164,9 +201,14 @@ const Receiptmanagement = () => {
     // Always use the detailed paid receipt layout here
     const extrasActive = txn.active_extras || {};
     const slist = txn.sub_extras || {};
+    const hasRush =
+      txn.is_rush === true ||
+      txn.is_rush === 1 ||
+      extrasActive.express ||
+      (txn.extra_charge_type && txn.extra_charge_type.includes('express'));
 
     let extraHeight = 0;
-    if (extrasActive.express || (txn.extra_charge_type && txn.extra_charge_type.includes('express'))) extraHeight += 4;
+    if (hasRush) extraHeight += 4;
     if (slist.extra_detergent) extraHeight += 4;
     if (slist.extra_softener) extraHeight += 4;
     if (slist.stain_removal) extraHeight += 4;
@@ -263,7 +305,7 @@ const Receiptmanagement = () => {
     doc.text(`P${computedSubtotal.toFixed(2)}`, 56, y, { align: 'right' });
     y += 4;
 
-    if (extrasActive.express || (txn.extra_charge_type && txn.extra_charge_type.includes('express'))) {
+    if (hasRush) {
       doc.text("Rush Charge:", 2, y);
       doc.text("P100.00", 56, y, { align: 'right' });
       y += 4;
@@ -358,8 +400,7 @@ const Receiptmanagement = () => {
     doc.setFontSize(6);
     centerText("This is not an official receipt.", y, 6);
 
-    const blobUrl = doc.output('bloburl');
-    window.open(blobUrl);
+    openAndAutoPrintPdf(doc);
   };
 
   const handleArchiveReceipt = () => {
@@ -637,7 +678,7 @@ const Receiptmanagement = () => {
                   <span>P{((selectedReceipt.services || []).reduce((sum, s) => sum + (s.rate || 0), 0)).toFixed(2)}</span>
                 </div>
 
-                {((selectedReceipt.active_extras || {}).express || (selectedReceipt.extra_charge_type && selectedReceipt.extra_charge_type.includes('express'))) && (
+                {(selectedReceipt.is_rush === true || selectedReceipt.is_rush === 1 || (selectedReceipt.active_extras || {}).express || (selectedReceipt.extra_charge_type && selectedReceipt.extra_charge_type.includes('express'))) && (
                   <div className="tr-row" style={{ fontSize: '0.9em', padding: '2px 0' }}>
                     <span>Rush Charge:</span>
                     <span>P100.00</span>

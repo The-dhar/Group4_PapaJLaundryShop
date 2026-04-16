@@ -14,6 +14,32 @@ use Illuminate\Validation\ValidationException;
 
 class TransactionController extends Controller
 {
+    protected function sanitizeDateOnly($value): ?string
+    {
+        if (! $value) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse((string) $value)->toDateString();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    protected function sanitizeDateTime($value): ?string
+    {
+        if (! $value) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse((string) $value)->toIso8601String();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     /**
      * Applies branch employee visibility rules to a transaction query.
      * Clerk: all transactions in current branch.
@@ -116,10 +142,23 @@ class TransactionController extends Controller
             'customer_last_name' => 'nullable|string|max:255',
             'services' => 'required|array',
             'amount' => 'required|numeric',
+            'due_date' => 'required|date_format:Y-m-d|after_or_equal:today',
         ]);
 
         // get logged in branch user
         $user = $request->user();
+
+        $dueDate = Carbon::createFromFormat('Y-m-d', (string) $request->input('due_date'))->startOfDay();
+        $today = now()->startOfDay();
+        $incomingRush = $request->boolean('is_rush');
+
+        if ($incomingRush && ! $dueDate->equalTo($today)) {
+            throw ValidationException::withMessages([
+                'due_date' => ['Rush orders must have due date set to today.'],
+            ]);
+        }
+
+        $isRush = $incomingRush || $dueDate->equalTo($today);
 
         $branchId = $this->resolveBranchIdForStore($request, $user);
 
@@ -179,9 +218,9 @@ class TransactionController extends Controller
 
                 'inventory_status' => 'in_shop',
 
-                'due_date' => $request->due_date,
+                'due_date' => $dueDate->toDateString(),
 
-                'is_rush' => $request->is_rush ?? false,
+                'is_rush' => $isRush,
 
             ]);
 
@@ -204,6 +243,7 @@ class TransactionController extends Controller
             DB::commit();
 
             return response()->json([
+                'id' => $transaction->id,
                 'receipt' => $receipt,
                 'customer_name' => $transaction->customer_name,
                 'customer_middle_name' => $transaction->customer_middle_name,
@@ -216,7 +256,9 @@ class TransactionController extends Controller
                 'penalty_override_reason' => $transaction->penalty_override_reason,
                 'payment_method' => $transaction->payment_method,
                 'inventory_status' => $transaction->inventory_status,
-                'due_date' => $transaction->due_date,
+                'due_date' => $this->sanitizeDateOnly($transaction->due_date),
+                'is_rush' => (bool) $transaction->is_rush,
+                'created_at' => $this->sanitizeDateTime($transaction->created_at),
             ]);
 
         } catch (\Exception $e) {
@@ -303,7 +345,7 @@ class TransactionController extends Controller
                 'payment_status' => $txn->payment_status,
                 'payment_method' => $txn->payment_method,
                 'inventory_status' => $txn->inventory_status,
-                'due_date' => $txn->due_date,
+                'due_date' => $this->sanitizeDateOnly($txn->due_date),
                 'archived' => (bool) $txn->archived,
                 'branch_id' => $txn->branch_id,
                 'branch_name' => optional($txn->branch)->name,
@@ -311,7 +353,7 @@ class TransactionController extends Controller
                 'created_by_user_id' => $txn->created_by_user_id,
                 'created_by_name' => $creatorName,
                 'created_by_role' => $creator?->role,
-                'created_at' => $txn->created_at,
+                'created_at' => $this->sanitizeDateTime($txn->created_at),
                 'receipt_items' => $txn->items->map(function ($item) {
                     return [
                         'id' => $item->id,
