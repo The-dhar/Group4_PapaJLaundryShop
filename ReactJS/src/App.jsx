@@ -13,6 +13,7 @@ import Unclaimed from './pages/UnclaimLaundry';
 import Express from './pages/Express'; 
 import Archive from './pages/Archive'; 
 import Reports from './pages/Reports';
+import Analytics from './pages/Analytics';
 function App() {
   return (
     <TransactionsProvider>
@@ -73,6 +74,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Reports />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/Analytics"
+            element={
+              <ProtectedRoute>
+                <Analytics />
               </ProtectedRoute>
             }
           />
