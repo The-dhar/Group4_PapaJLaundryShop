@@ -8,7 +8,10 @@ import { cacheDirectory, copyAsync } from "expo-file-system/legacy";
 import { EncodingType, readAsStringAsync } from "expo-file-system";
 import { Asset } from "expo-asset";
 import { Alert } from "react-native";
-import type { ClerkLogPdfRow } from "./clerkLogsPdfExport.types";
+import type {
+  ClerkLogPdfRow,
+  ClerkLogsExportContext,
+} from "./clerkLogsPdfExport.types";
 
 function escapeHtml(s: string): string {
   return String(s)
@@ -32,13 +35,17 @@ async function loadLogoDataUri(): Promise<string> {
   }
 }
 
-function buildPrintHtml(rows: ClerkLogPdfRow[], logoDataUri: string): string {
+function buildPrintHtml(
+  rows: ClerkLogPdfRow[],
+  context: ClerkLogsExportContext,
+  logoDataUri: string
+): string {
   const header =
-    "<tr><th>Receipt ID</th><th>Clerk</th><th>Branch</th><th>Customer</th><th>Amount</th><th>Payment</th><th>Inventory</th><th>Due</th></tr>";
+    "<tr><th>#</th><th>Receipt ID</th><th>Created</th><th>Due</th><th>Customer</th><th>Clerk</th><th>Branch</th><th>Payment</th><th>Inventory</th><th>Amount (PHP)</th></tr>";
   const body = rows
     .map(
       (r) =>
-        `<tr><td>${escapeHtml(r.receipt_id)}</td><td>${escapeHtml(r.clerk_name)}</td><td>${escapeHtml(r.branch)}</td><td>${escapeHtml(r.customer_name)}</td><td>${escapeHtml(String(r.amount))}</td><td>${escapeHtml(r.status)}</td><td>${escapeHtml(r.inventory_status)}</td><td>${escapeHtml(r.due_date)}</td></tr>`
+        `<tr><td>${escapeHtml(String(r.row_no))}</td><td>${escapeHtml(r.receipt_id)}</td><td>${escapeHtml(r.created_at)}</td><td>${escapeHtml(r.due_date)}</td><td>${escapeHtml(r.customer_name)}</td><td>${escapeHtml(r.clerk_name)}</td><td>${escapeHtml(r.branch)}</td><td>${escapeHtml(r.status)}</td><td>${escapeHtml(r.inventory_status)}</td><td class="num">${escapeHtml(Number(r.amount || 0).toFixed(2))}</td></tr>`
     )
     .join("");
   return `<!DOCTYPE html>
@@ -51,11 +58,16 @@ function buildPrintHtml(rows: ClerkLogPdfRow[], logoDataUri: string): string {
   .pdf-brand { display: flex; flex-direction: column; }
   .pdf-shop { margin: 0; font-size: 13px; font-weight: 700; color: #0f172a; }
   h2 { margin: 0 0 8px; font-size: 16px; }
-  .meta { color: #64748b; margin-bottom: 12px; font-size: 11px; }
+  .meta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; margin-bottom: 10px; font-size: 10px; color: #334155; }
+  .meta-grid strong { color: #0f172a; }
+  .summary { margin-bottom: 12px; padding: 8px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
+  .summary-title { margin: 0 0 4px; font-size: 11px; font-weight: 700; color: #0f172a; }
+  .summary-row { margin: 0; color: #334155; }
   table { width: 100%; border-collapse: collapse; }
   th, td { border: 1px solid #e2e8f0; padding: 6px 4px; text-align: left; }
   th { background: #f1f5f9; font-weight: 600; }
   tr:nth-child(even) td { background: #fafafa; }
+  .num { text-align: right; }
 </style></head><body>
 <div class="pdf-head">
   ${logoDataUri ? `<img class="pdf-logo" src="${logoDataUri}" alt="Papa J's logo" />` : ""}
@@ -63,15 +75,31 @@ function buildPrintHtml(rows: ClerkLogPdfRow[], logoDataUri: string): string {
     <p class="pdf-shop">Papa J's Laundry Shop</p>
   </div>
 </div>
-<h2>Clerk Logs</h2>
-<p class="meta">${rows.length} row(s)</p>
+<h2>Clerk Logs Export</h2>
+<div class="meta-grid">
+  <div><strong>Generated:</strong> ${escapeHtml(context.generated_at)}</div>
+  <div><strong>Requested by:</strong> ${escapeHtml(context.requested_by)}</div>
+  <div><strong>Branch:</strong> ${escapeHtml(context.branch_label)}</div>
+  <div><strong>Date range:</strong> ${escapeHtml(context.date_range_label)}</div>
+  <div><strong>Payment filter:</strong> ${escapeHtml(context.payment_label)}</div>
+  <div><strong>Inventory filter:</strong> ${escapeHtml(context.inventory_label)}</div>
+  <div><strong>Include archived:</strong> ${escapeHtml(context.include_archived_label)}</div>
+  <div><strong>Rows:</strong> ${escapeHtml(String(context.total_rows))}</div>
+</div>
+<div class="summary">
+  <p class="summary-title">Summary</p>
+  <p class="summary-row">Total exported amount: ${escapeHtml(`₱${Number(context.total_amount || 0).toFixed(2)}`)}</p>
+</div>
 <table><thead>${header}</thead><tbody>${body}</tbody></table>
 </body></html>`;
 }
 
-export async function exportClerkLogsPdf(rows: ClerkLogPdfRow[]): Promise<void> {
+export async function exportClerkLogsPdf(
+  rows: ClerkLogPdfRow[],
+  context: ClerkLogsExportContext
+): Promise<void> {
   const logoDataUri = await loadLogoDataUri();
-  const html = buildPrintHtml(rows, logoDataUri);
+  const html = buildPrintHtml(rows, context, logoDataUri);
   const { uri } = await Print.printToFileAsync({ html });
   const stamp = new Date().toISOString().slice(0, 10);
   const filename = `clerk-logs-${stamp}.pdf`;

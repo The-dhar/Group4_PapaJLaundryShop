@@ -23,6 +23,10 @@ import * as Sharing from "expo-sharing";
 import { cacheDirectory, writeAsStringAsync } from "expo-file-system/legacy";
 import * as XLSX from "xlsx";
 import { API_URL } from "../../config/api";
+import type {
+  ClerkLogPdfRow,
+  ClerkLogsExportContext,
+} from "../../lib/clerkLogsPdfExport.types";
 
 function toYmd(d: Date): string {
   const y = d.getFullYear();
@@ -45,6 +49,52 @@ function parseYmdToDate(s: string): Date | null {
   const [y, m, d] = t.split("-").map(Number);
   const dt = new Date(y, m - 1, d);
   return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+function toDateMaybe(value: unknown): Date | null {
+  const raw = String(value ?? "").trim();
+  if (!raw || raw === "—") return null;
+
+  const ymd = raw.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+    return parseYmdToDate(ymd);
+  }
+
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function sanitizeDateOnly(value: unknown): string {
+  const dt = toDateMaybe(value);
+  return dt ? toYmd(dt) : "—";
+}
+
+function sanitizeDateTimeLabel(value: unknown): string {
+  const dt = toDateMaybe(value);
+  if (!dt) return "—";
+
+  const hh = String(dt.getHours()).padStart(2, "0");
+  const mm = String(dt.getMinutes()).padStart(2, "0");
+  return `${toYmd(dt)} ${hh}:${mm}`;
+}
+
+function paymentFilterLabel(value: PaymentFilter): string {
+  if (value === "paid") return "Paid only";
+  if (value === "unpaid") return "Unpaid only";
+  return "All";
+}
+
+function inventoryFilterLabel(value: InventoryFilter): string {
+  if (value === "in_shop") return "In shop only";
+  if (value === "picked_up") return "Picked up only";
+  return "All";
+}
+
+function buildDateRangeLabel(dateFrom: string, dateTo: string): string {
+  const from = sanitizeDateOnly(dateFrom);
+  const to = sanitizeDateOnly(dateTo);
+  if (from === "—" && to === "—") return "All dates";
+  return `${from} to ${to}`;
 }
 
 /**
@@ -164,6 +214,7 @@ type FilterState = {
 type ClerkLog = {
   id: number;
   receipt_id: string;
+  created_at: string;
   clerk_name: string;
   branch: string;
   customer_name: string;
@@ -261,20 +312,87 @@ function uint8ToBase64(bytes: Uint8Array): string {
   throw new Error("Base64 encoding is not available.");
 }
 
-function buildClerkLogsXlsxBytes(rows: ClerkLog[]): Uint8Array {
-  const data = rows.map((r) => ({
-    "Receipt ID": r.receipt_id,
-    Clerk: r.clerk_name,
-    Branch: r.branch,
-    Customer: r.customer_name,
-    Amount: r.amount,
-    Payment: r.status,
-    Inventory: r.inventory_status,
-    Due: r.due_date,
+function buildExportRows(rows: ClerkLog[]): ClerkLogPdfRow[] {
+  return rows.map((r, index) => ({
+    row_no: index + 1,
+    receipt_id: String(r.receipt_id || "—"),
+    created_at: sanitizeDateTimeLabel(r.created_at),
+    clerk_name: String(r.clerk_name || "—"),
+    branch: String(r.branch || "—"),
+    customer_name: String(r.customer_name || "—"),
+    amount: Number(r.amount) || 0,
+    status: String(r.status || "—").toUpperCase(),
+    inventory_status: String(r.inventory_status || "—"),
+    due_date: sanitizeDateOnly(r.due_date),
   }));
-  const ws = XLSX.utils.json_to_sheet(data);
+}
+
+function buildClerkLogsXlsxBytes(
+  rows: ClerkLogPdfRow[],
+  context: ClerkLogsExportContext
+): Uint8Array {
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Clerk Logs");
+
+  const summaryData = [
+    ["Papa J's Laundry Shop"],
+    ["Clerk Logs Export"],
+    [],
+    ["Generated at", context.generated_at],
+    ["Requested by", context.requested_by],
+    ["Branch", context.branch_label],
+    ["Date range", context.date_range_label],
+    ["Payment filter", context.payment_label],
+    ["Inventory filter", context.inventory_label],
+    ["Include archived", context.include_archived_label],
+    ["Exported rows", String(context.total_rows)],
+    ["Total amount", context.total_amount],
+  ];
+  const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+  summarySheet["!cols"] = [{ wch: 24 }, { wch: 42 }];
+  XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
+
+  const txnHeader = [
+    "#",
+    "Receipt ID",
+    "Created",
+    "Due",
+    "Customer",
+    "Clerk",
+    "Branch",
+    "Payment",
+    "Inventory",
+    "Amount (PHP)",
+  ];
+  const txnBody = rows.map((r) => [
+    r.row_no,
+    r.receipt_id,
+    r.created_at,
+    r.due_date,
+    r.customer_name,
+    r.clerk_name,
+    r.branch,
+    r.status,
+    r.inventory_status,
+    Number(r.amount) || 0,
+  ]);
+  const transactionsSheet = XLSX.utils.aoa_to_sheet([txnHeader, ...txnBody]);
+  transactionsSheet["!cols"] = [
+    { wch: 5 },
+    { wch: 16 },
+    { wch: 18 },
+    { wch: 12 },
+    { wch: 22 },
+    { wch: 20 },
+    { wch: 20 },
+    { wch: 12 },
+    { wch: 16 },
+    { wch: 14 },
+  ];
+  transactionsSheet["!autofilter"] = {
+    ref: `A1:J${Math.max(1, txnBody.length + 1)}`,
+  };
+  XLSX.utils.book_append_sheet(wb, transactionsSheet, "Transactions");
+
   const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
   return new Uint8Array(out);
 }
@@ -299,8 +417,8 @@ function downloadBlobWeb(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-async function exportClerkLogsExcel(rows: ClerkLog[]) {
-  const bytes = buildClerkLogsXlsxBytes(rows);
+async function exportClerkLogsExcel(rows: ClerkLogPdfRow[], context: ClerkLogsExportContext) {
+  const bytes = buildClerkLogsXlsxBytes(rows, context);
   const stamp = new Date().toISOString().slice(0, 10);
   const filename = `clerk-logs-${stamp}.xlsx`;
   if (Platform.OS === "web") {
@@ -329,16 +447,16 @@ async function exportClerkLogsExcel(rows: ClerkLog[]) {
 }
 
 /**
- * PDF export: web uses pdf-lib (download). Native uses expo-print + share sheet — no pdf-lib on device (Metro/tslib safe).
+ * PDF export for web/native with the same structured content and active filter metadata.
  */
-async function exportClerkLogsPdf(rows: ClerkLog[]) {
+async function exportClerkLogsPdf(rows: ClerkLogPdfRow[], context: ClerkLogsExportContext) {
   if (Platform.OS === "web") {
     const { exportClerkLogsPdf: run } = await import("../../lib/clerkLogsPdfExport.web");
-    await run(rows);
+    await run(rows, context);
     return;
   }
   const { exportClerkLogsPdf: run } = await import("../../lib/clerkLogsPdfExport.native");
-  await run(rows);
+  await run(rows, context);
 }
 
 export default function ClerkLogsList() {
@@ -420,6 +538,25 @@ export default function ClerkLogsList() {
     return b?.name ?? "Branch";
   }, [draftFilters.branchId, branches]);
 
+  const activeBranchDisplayLabel = useMemo(() => {
+    if (!isOwner) return "Assigned branch scope";
+    if (filters.branchId == null) return "All branches";
+    const b = branches.find((x) => x.id === filters.branchId);
+    return b?.name ?? `Branch ${filters.branchId}`;
+  }, [branches, filters.branchId, isOwner]);
+
+  const requestedBy = useMemo(() => {
+    const name = String((user as { name?: string } | null)?.name ?? "").trim();
+    if (name) return name;
+    const email = String((user as { email?: string } | null)?.email ?? "").trim();
+    return email || "Unknown user";
+  }, [user]);
+
+  const totalFilteredAmount = useMemo(
+    () => filteredLogs.reduce((sum, row) => sum + (Number(row.amount) || 0), 0),
+    [filteredLogs]
+  );
+
   const runExport = useCallback(
     async (kind: "excel" | "pdf") => {
       setExportMenuOpen(false);
@@ -428,17 +565,41 @@ export default function ClerkLogsList() {
         return;
       }
       try {
+        // Export all filtered rows (not just the current page) with sanitized dates.
+        const exportRows = buildExportRows(filteredLogs);
+        const exportContext: ClerkLogsExportContext = {
+          generated_at: sanitizeDateTimeLabel(new Date().toISOString()),
+          requested_by: requestedBy,
+          branch_label: activeBranchDisplayLabel,
+          date_range_label: buildDateRangeLabel(filters.dateFrom, filters.dateTo),
+          payment_label: paymentFilterLabel(filters.payment),
+          inventory_label: inventoryFilterLabel(filters.inventory),
+          include_archived_label: filters.includeArchived ? "Yes" : "No",
+          total_rows: exportRows.length,
+          total_amount: totalFilteredAmount,
+        };
+
         if (kind === "excel") {
-          await exportClerkLogsExcel(filteredLogs);
+          await exportClerkLogsExcel(exportRows, exportContext);
         } else {
-          await exportClerkLogsPdf(filteredLogs);
+          await exportClerkLogsPdf(exportRows, exportContext);
         }
       } catch (e) {
         console.error(e);
         Alert.alert("Export failed", e instanceof Error ? e.message : "Could not export.");
       }
     },
-    [filteredLogs]
+    [
+      activeBranchDisplayLabel,
+      filteredLogs,
+      filters.dateFrom,
+      filters.dateTo,
+      filters.includeArchived,
+      filters.inventory,
+      filters.payment,
+      requestedBy,
+      totalFilteredAmount,
+    ]
   );
 
   const loadBranches = useCallback(async () => {
@@ -495,6 +656,7 @@ export default function ClerkLogsList() {
         return {
           id: Number(txn.id),
           receipt_id: txn.receipt || `REC-${txn.id}`,
+          created_at: sanitizeDateTimeLabel(txn.created_at),
           clerk_name: creatorName || "Unknown creator",
           branch: txn.branch_name || "Unknown branch",
           customer_name: txn.customer_name || "Unknown customer",
@@ -502,7 +664,7 @@ export default function ClerkLogsList() {
           status: String(txn.payment_status || "unpaid"),
           inventory_raw: invRaw,
           inventory_status: formatInventoryLabel(String(txn.inventory_status || "")),
-          due_date: txn.due_date || "—",
+          due_date: sanitizeDateOnly(txn.due_date),
         };
       });
 
