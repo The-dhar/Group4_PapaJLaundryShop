@@ -356,29 +356,23 @@ export default function AnalyticsPage() {
   return (
     <DashboardLayout>
       <div className="main-cards analytics-page">
-        <Card>
-          <div className="analytics-header">
-            <div>
-              <h2>Report Analytics</h2>
-              <p>Dashboard analytics filtered by branch.</p>
-            </div>
-            <div className="analytics-branch-filter">
-              <label htmlFor="analytics-branch-select">Branch</label>
-              <select
-                id="analytics-branch-select"
-                value={selectedBranchId}
-                onChange={(e) => setSelectedBranchId(e.target.value)}
-              >
-                {sortedBranches.map((branch) => (
-                  <option key={`analytics-branch-${branch.id}`} value={branch.id}>
-                    {branch.name || `Branch ${branch.id}`}
-                  </option>
-                ))}
-              </select>
-            </div>
+        <div className="analytics-branch-inline">
+          <div className="analytics-branch-filter">
+            <label htmlFor="analytics-branch-select">Branch</label>
+            <select
+              id="analytics-branch-select"
+              value={selectedBranchId}
+              onChange={(e) => setSelectedBranchId(e.target.value)}
+            >
+              {sortedBranches.map((branch) => (
+                <option key={`analytics-branch-${branch.id}`} value={branch.id}>
+                  {branch.name || `Branch ${branch.id}`}
+                </option>
+              ))}
+            </select>
           </div>
-          {!selectedBranchId && <p className="analytics-empty">No branches available for your account.</p>}
-        </Card>
+        </div>
+        {!selectedBranchId && <p className="analytics-empty">No branches available for your account.</p>}
 
         {selectedBranchId ? (
           <>
