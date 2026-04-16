@@ -71,6 +71,8 @@ const normalizeTransaction = (txn) => {
     amount: Number(txn.amount) || 0,
     subtotal: Number(txn.subtotal) || 0,
     extras: Number(txn.extras) || 0,
+    vat_amount: Number(txn.vat_amount ?? 0) || 0,
+    vat_rate: txn.vat_rate != null && txn.vat_rate !== '' ? Number(txn.vat_rate) : null,
     paid_amount: Number(txn.paid_amount) || 0,
     penalty_amount: penaltyAmount,
     penalty: penaltyAmount,
@@ -176,6 +178,10 @@ export const TransactionsProvider = ({ children }) => {
     payment_method = "",
     paid_amount = 0,
     subtotal = 0,
+    /** When set, used as the extras line (rush/discount/misc) instead of legacy recomputation. */
+    extras_line,
+    vat_amount = 0,
+    vat_rate = null,
     /** Required for owner (branches.id); clerk/staff omit — API uses their assigned branch. */
     branch_id,
   }) => {
@@ -201,12 +207,14 @@ export const TransactionsProvider = ({ children }) => {
 
       const isRush = Boolean(active_extras?.express) || isTodayInputDate(due_date);
       const extras =
-        (isRush ? RUSH_FEE : 0) +
-        ((sub_extras?.extra_detergent || 0) * 20) +
-        ((sub_extras?.extra_softener || 0) * 20) +
-        (sub_extras?.stain_removal ? 50 : 0) +
-        Number(additional_amount || 0) -
-        (discount_amount || 0);
+        extras_line !== undefined && extras_line !== null
+          ? Number(extras_line)
+          : (isRush ? RUSH_FEE : 0) +
+            ((sub_extras?.extra_detergent || 0) * 20) +
+            ((sub_extras?.extra_softener || 0) * 20) +
+            (sub_extras?.stain_removal ? 50 : 0) +
+            Number(additional_amount || 0) -
+            (discount_amount || 0);
 
       const payload = {
         customer_name,
@@ -236,6 +244,10 @@ export const TransactionsProvider = ({ children }) => {
         paid_amount: paid_amount || 0,
         due_date,
         is_rush: isRush,
+        vat_amount: Number(vat_amount) || 0,
+        ...(vat_rate != null && vat_rate !== '' && Number(vat_amount) > 0
+          ? { vat_rate: Number(vat_rate) }
+          : {}),
       };
 
       if (effectiveBranchId != null && effectiveBranchId !== "") {
@@ -264,6 +276,13 @@ export const TransactionsProvider = ({ children }) => {
         customer_middle_name: result.customer_middle_name ?? customer_middle_name ?? null,
         customer_address,
         amount: Number(result.amount ?? amount) || 0,
+        vat_amount: Number(result.vat_amount ?? vat_amount ?? 0) || 0,
+        vat_rate:
+          result.vat_rate != null && result.vat_rate !== ''
+            ? Number(result.vat_rate)
+            : vat_rate != null && vat_rate !== ''
+              ? Number(vat_rate)
+              : null,
         total_weight: Number(result.total_weight ?? weight) || 0,
         paid_amount: Number(result.paid_amount ?? paid_amount) || 0,
         penalty_amount: Number(result.penalty_amount ?? 0) || 0,

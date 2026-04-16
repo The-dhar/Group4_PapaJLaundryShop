@@ -204,6 +204,30 @@ const DEFAULT_SERVICE_ICONS = {
 
 const RUSH_FEE = 100;
 
+const POS_VAT_ENABLED_KEY = 'posVatEnabled';
+const POS_VAT_RATE_KEY = 'posVatRate';
+
+function readStoredVatEnabled() {
+  try {
+    const v = localStorage.getItem(POS_VAT_ENABLED_KEY);
+    if (v === null) return true;
+    return v === '1' || v === 'true';
+  } catch {
+    return true;
+  }
+}
+
+function readStoredVatRate() {
+  try {
+    const v = localStorage.getItem(POS_VAT_RATE_KEY);
+    if (v === null) return 12;
+    const n = parseFloat(v);
+    return Number.isFinite(n) && n >= 0 ? n : 12;
+  } catch {
+    return 12;
+  }
+}
+
 function isRushExtraName(name) {
   const raw = String(name || '').trim().toLowerCase();
   return raw.includes('rush') || raw.includes('express');
@@ -358,6 +382,32 @@ const POs = () => {
   const [amountPaid, setAmountPaid] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [pastSearches, setPastSearches] = useState([]);
+
+  const [vatEnabled, setVatEnabled] = useState(readStoredVatEnabled);
+  const [vatRatePercent, setVatRatePercent] = useState(() => String(readStoredVatRate()));
+
+  const isVatAdmin = sessionUser?.role === 'owner';
+
+  useEffect(() => {
+    if (!isVatAdmin) return;
+    try {
+      localStorage.setItem(POS_VAT_ENABLED_KEY, vatEnabled ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }, [vatEnabled, isVatAdmin]);
+
+  useEffect(() => {
+    if (!isVatAdmin) return;
+    const n = parseFloat(vatRatePercent);
+    if (Number.isFinite(n)) {
+      try {
+        localStorage.setItem(POS_VAT_RATE_KEY, String(n));
+      } catch {
+        // ignore
+      }
+    }
+  }, [vatRatePercent, isVatAdmin]);
 
   const [customerSearchInput, setCustomerSearchInput] = useState('');
   const [customerSuggestions, setCustomerSuggestions] = useState([]);
@@ -866,18 +916,40 @@ const POs = () => {
   const subtotal = useMemo(() => selectedServices.reduce((sum, s) => sum + (s.total || 0), 0), [selectedServices]);
   const totalWeight = useMemo(() => selectedServices.reduce((sum, s) => sum + Number(s.kilos || 0), 0), [selectedServices]);
 
-  const calculateExtras = () => {
-    let total = 0;
+  const dynamicExtrasTotal = useMemo(
+    () =>
+      dynamicExtras.reduce((sum, extra) => {
+        const qty = Number(selectedDynamicExtras[extra.id] || 0);
+        return sum + qty * Number(extra.price || 0);
+      }, 0),
+    [dynamicExtras, selectedDynamicExtras]
+  );
+
+  const extrasTotal = useMemo(() => {
+    let total = dynamicExtrasTotal;
     if (activeExtras.express) total += RUSH_FEE;
     if (activeExtras.discount) total -= Number(discountAmount || 0);
-    total += dynamicExtras.reduce((sum, extra) => {
-      const qty = Number(selectedDynamicExtras[extra.id] || 0);
-      return sum + qty * Number(extra.price || 0);
-    }, 0);
     return total;
-  };
+  }, [dynamicExtrasTotal, activeExtras.express, activeExtras.discount, discountAmount]);
 
-  const totalPayment = subtotal + calculateExtras();
+  const preTaxTotal = useMemo(() => subtotal + extrasTotal, [subtotal, extrasTotal]);
+
+  const vatRateNum = useMemo(() => {
+    const n = parseFloat(vatRatePercent);
+    if (!Number.isFinite(n) || String(vatRatePercent).trim() === '') return 12;
+    return Math.min(100, Math.max(0, n));
+  }, [vatRatePercent]);
+
+  const vatAmount = useMemo(() => {
+    if (!vatEnabled) return 0;
+    return Math.round(preTaxTotal * (vatRateNum / 100) * 100) / 100;
+  }, [vatEnabled, preTaxTotal, vatRateNum]);
+
+  const totalPayment = useMemo(() => preTaxTotal + vatAmount, [preTaxTotal, vatAmount]);
+
+  const amountPaidNum = Number(amountPaid) || 0;
+  const changeDue =
+    paymentStatus === 'full' ? Math.max(0, Math.round((amountPaidNum - totalPayment) * 100) / 100) : 0;
 
   const resetForm = () => {
     setSelectedServices([]);
@@ -901,7 +973,10 @@ const POs = () => {
     if (!txn) return;
     
     if (txn.payment_status === 'unpaid') {
-      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [58, 90] });
+      const vatAmt = Number(txn.vat_amount) || 0;
+      const discountAmt = Number(txn.discount_amount) || 0;
+      const stubH = 90 + (vatAmt > 0 ? 8 : 0) + (discountAmt > 0 ? 8 : 0);
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [58, stubH] });
       let y = 8;
       const centerText = (text, yPos, size = 8) => {
         doc.setFontSize(size);
@@ -924,6 +999,23 @@ const POs = () => {
       
       doc.text(`NAME: ${txn.customer_name}`, 2, y); y += 4;
       doc.text(`QTY: ${txn.weight}kg`, 2, y); y += 6;
+
+      if (vatAmt > 0) {
+        const vr = txn.vat_rate != null && txn.vat_rate !== '' ? Number(txn.vat_rate) : null;
+        doc.setFont('courier', 'normal');
+        doc.text(
+          `VAT${vr != null && Number.isFinite(vr) ? ` (${vr}%)` : ''}: P${vatAmt.toFixed(2)}`,
+          2,
+          y
+        );
+        y += 4;
+      }
+
+      if (discountAmt > 0) {
+        doc.setFont('courier', 'normal');
+        doc.text(`DISCOUNT: -P${discountAmt.toFixed(2)}`, 2, y);
+        y += 4;
+      }
 
       doc.setFont('courier', 'bold');
       doc.text(`TOTAL DUE: P${(txn.amount || 0).toFixed(2)}`, 2, y); y += 4;
@@ -954,6 +1046,7 @@ const POs = () => {
     if (slist.stain_removal) extraHeight += 4;
     if (txn.additional_amount > 0) extraHeight += 4;
     if (txn.discount_amount > 0) extraHeight += 4;
+    if (Number(txn.vat_amount) > 0) extraHeight += 4;
 
     const baseHeight = 130; 
     const itemHeight = txn.services.length * 12; 
@@ -1089,6 +1182,16 @@ const POs = () => {
       y += 4;
     }
 
+    const vatAmtPaid = Number(txn.vat_amount) || 0;
+    if (vatAmtPaid > 0) {
+      const vr = txn.vat_rate != null && txn.vat_rate !== '' ? Number(txn.vat_rate) : 12;
+      doc.setFont('courier', 'normal');
+      doc.setFontSize(8);
+      doc.text(`VAT (${Number.isFinite(vr) ? vr : 12}%):`, 2, y);
+      doc.text(`P${vatAmtPaid.toFixed(2)}`, 56, y, { align: 'right' });
+      y += 4;
+    }
+
     y += 2;
     doc.setFont('courier', 'bold');
     doc.setFontSize(10);
@@ -1142,15 +1245,6 @@ const POs = () => {
 
     openAndAutoPrintPdf(doc);
   };
-
-  const dynamicExtrasTotal = useMemo(
-    () =>
-      dynamicExtras.reduce((sum, extra) => {
-        const qty = Number(selectedDynamicExtras[extra.id] || 0);
-        return sum + qty * Number(extra.price || 0);
-      }, 0),
-    [dynamicExtras, selectedDynamicExtras]
-  );
 
   const selectedDynamicExtraNames = useMemo(
     () =>
@@ -1254,7 +1348,11 @@ const POs = () => {
         customer_address: fullAddress,
         services: selectedServices,
         weight: totalWeight,
+        subtotal,
+        extras_line: extrasTotal,
         amount: Number(totalPayment.toFixed(2)),
+        vat_amount: vatAmount,
+        vat_rate: vatEnabled ? vatRateNum : null,
         due_date: dueDate,
         extra_charge_type:
           [
@@ -1516,6 +1614,37 @@ const POs = () => {
                     <input type="number" className="for-receipt-customerinput" value={amountPaid} onChange={e => setAmountPaid(e.target.value)} />
                   </div>
                 )}
+                {isVatAdmin && (
+                  <div className="payment-amount-section" style={{ marginTop: 10 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        checked={vatEnabled}
+                        onChange={(e) => setVatEnabled(e.target.checked)}
+                      />
+                      <span>Apply VAT (sales tax)</span>
+                    </label>
+                    {vatEnabled && (
+                      <>
+                        <label style={{ display: 'block', marginTop: 8 }}>VAT rate (%)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          className="for-receipt-customerinput"
+                          value={vatRatePercent}
+                          onChange={(e) => setVatRatePercent(e.target.value)}
+                        />
+                      </>
+                    )}
+                  </div>
+                )}
+                {!isVatAdmin && vatEnabled && (
+                  <p style={{ marginTop: 10, fontSize: 12, color: '#64748b', lineHeight: 1.4 }}>
+                    VAT ({vatRateNum}%) is applied by shop settings. Ask an admin to change VAT options.
+                  </p>
+                )}
               </div>
 
               <div className="extras-box">
@@ -1672,7 +1801,38 @@ const POs = () => {
                   <div className="total-row" style={{ color: '#e53935', fontSize: '13px', margin: '2px 0' }}><span>Discount:</span><span>-P{Number(discountAmount).toFixed(2)}</span></div>
                 )}
 
+                {vatEnabled && (
+                  <>
+                    <div className="total-row" style={{ color: '#555', fontSize: '13px', margin: '2px 0' }}>
+                      <span>Amount (excl. VAT):</span>
+                      <span>P{preTaxTotal.toFixed(2)}</span>
+                    </div>
+                    <div className="total-row" style={{ color: '#555', fontSize: '13px', margin: '2px 0' }}>
+                      <span>VAT ({vatRateNum}%):</span>
+                      <span>P{vatAmount.toFixed(2)}</span>
+                    </div>
+                  </>
+                )}
+
                 <div className="total-row"><span>Total Payment:</span><strong>P{totalPayment.toFixed(2)}</strong></div>
+
+                {paymentStatus === 'full' && (
+                  <>
+                    <div className="total-row" style={{ marginTop: 4, fontSize: '13px' }}>
+                      <span>Amount received:</span>
+                      <span>P{amountPaidNum.toFixed(2)}</span>
+                    </div>
+                    <div className="total-row" style={{ fontSize: '13px', color: amountPaidNum < totalPayment + 0.005 ? '#b45309' : '#333' }}>
+                      <span>Change:</span>
+                      <span>P{changeDue.toFixed(2)}</span>
+                    </div>
+                    {amountPaidNum + 0.005 < totalPayment && (
+                      <div style={{ fontSize: 12, color: '#b45309', marginTop: 4 }}>
+                        Received amount is less than the total due.
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
 

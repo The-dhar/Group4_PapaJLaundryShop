@@ -143,6 +143,8 @@ class TransactionController extends Controller
             'services' => 'required|array',
             'amount' => 'required|numeric',
             'due_date' => 'required|date_format:Y-m-d|after_or_equal:today',
+            'vat_amount' => 'nullable|numeric|min:0',
+            'vat_rate' => 'nullable|numeric|min:0|max:100',
         ]);
 
         // get logged in branch user
@@ -194,6 +196,9 @@ class TransactionController extends Controller
             $receipt = 'RCPT-'.(10000 + Transaction::count() + 1);
 
             // Create transaction
+            $vatAmount = round((float) ($request->input('vat_amount') ?? 0), 2);
+            $vatRate = $request->filled('vat_rate') ? round((float) $request->input('vat_rate'), 2) : null;
+
             $transaction = Transaction::create([
 
                 'receipt_number' => $receipt,
@@ -210,6 +215,8 @@ class TransactionController extends Controller
                 'total_weight' => $request->weight ?? 0,
                 'subtotal' => $request->subtotal ?? 0,
                 'extras' => $request->extras ?? 0,
+                'vat_rate' => $vatAmount > 0 ? $vatRate : null,
+                'vat_amount' => $vatAmount,
                 'total_amount' => $request->amount,
 
                 'payment_status' => $request->payment_status,
@@ -250,6 +257,8 @@ class TransactionController extends Controller
                 'customer_address' => $transaction->customer_address,
                 'services' => $request->services,
                 'amount' => $transaction->total_amount,
+                'vat_amount' => (float) ($transaction->vat_amount ?? 0),
+                'vat_rate' => $transaction->vat_rate !== null ? (float) $transaction->vat_rate : null,
                 'paid_amount' => $transaction->paid_amount,
                 'penalty_amount' => (float) ($transaction->penalty_amount ?? 0),
                 'penalty_suggested_amount' => (float) ($transaction->penalty_suggested_amount ?? 0),
@@ -334,6 +343,8 @@ class TransactionController extends Controller
                 'amount' => $txn->total_amount,
                 'subtotal' => (float) $txn->subtotal,
                 'extras' => (float) $txn->extras,
+                'vat_rate' => $txn->vat_rate !== null ? (float) $txn->vat_rate : null,
+                'vat_amount' => (float) ($txn->vat_amount ?? 0),
                 'total_weight' => $txn->total_weight,
                 'is_rush' => (bool) $txn->is_rush,
                 'paid_amount' => $txn->paid_amount,
