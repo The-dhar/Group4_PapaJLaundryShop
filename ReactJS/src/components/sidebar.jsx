@@ -41,23 +41,29 @@ const Sidebar = ({ sidebarOpen, toggleSidebar, onNavigate }) => {
 
     const confirmLogout = async () => {
         const token = localStorage.getItem('token');
-        if (token) {
-            try {
-                await fetch(`${API_URL}/logout`, {
-                    method: 'POST',
-                    headers: {
-                        Accept: 'application/json',
-                        Authorization: `Bearer ${token}`,
-                    },
-                });
-            } catch {
-                /* still clear local session */
-            }
-        }
+        const logoutRequest = token
+            ? fetch(`${API_URL}/logout`, {
+                  method: 'POST',
+                  headers: {
+                      Accept: 'application/json',
+                      Authorization: `Bearer ${token}`,
+                  },
+              }).catch(() => null)
+            : Promise.resolve(null);
+
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         setShowLogoutConfirm(false);
-        navigate('/');
+        navigate('/', { replace: true });
+        if (typeof window !== 'undefined') {
+            window.setTimeout(() => {
+                if (window.location.pathname !== '/') {
+                    window.location.replace('/');
+                }
+            }, 50);
+        }
+
+        await logoutRequest;
     };
 
     const handleNavClick = () => {

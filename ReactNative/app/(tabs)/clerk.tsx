@@ -331,6 +331,10 @@ function buildClerkLogsXlsxBytes(
   context: ClerkLogsExportContext
 ): Uint8Array {
   const wb = XLSX.utils.book_new();
+  const formattedTotalAmount = Number(context.total_amount || 0).toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
   const summaryData = [
     ["CLERK LOGS EXPORT", "", "", "", "", ""],
@@ -341,7 +345,7 @@ function buildClerkLogsXlsxBytes(
     [],
     ["SUMMARY", "", "", "", "", ""],
     ["Total exported rows", String(context.total_rows), "", "", "", ""],
-    ["Total exported amount (PHP)", Number(context.total_amount || 0).toFixed(2), "", "", "", ""],
+    ["Total exported amount (₱)", `₱${formattedTotalAmount}`, "", "", "", ""],
     ["Payment filter", context.payment_label, "", "", "", ""],
     ["Inventory filter", context.inventory_label, "", "", "", ""],
     ["Include archived", context.include_archived_label, "", "", "", ""],
@@ -375,7 +379,7 @@ function buildClerkLogsXlsxBytes(
     "Branch",
     "Payment",
     "Inventory",
-    "Amount (PHP)",
+    "Amount (₱)",
   ];
   const txnBody = rows.map((r) => [
     r.row_no,

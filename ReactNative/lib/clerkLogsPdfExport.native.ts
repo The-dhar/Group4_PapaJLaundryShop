@@ -13,6 +13,13 @@ import type {
   ClerkLogsExportContext,
 } from "./clerkLogsPdfExport.types";
 
+function formatAmount(value: number): string {
+  return Number(value || 0).toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 function escapeHtml(s: string): string {
   return String(s)
     .replace(/&/g, "&amp;")
@@ -41,11 +48,11 @@ function buildPrintHtml(
   logoDataUri: string
 ): string {
   const header =
-    "<tr><th>#</th><th>Receipt ID</th><th>Created</th><th>Due</th><th>Customer</th><th>Clerk</th><th>Branch</th><th>Payment</th><th>Inventory</th><th>Amount (PHP)</th></tr>";
+    "<tr><th>#</th><th>Receipt ID</th><th>Created</th><th>Due</th><th>Customer</th><th>Clerk</th><th>Branch</th><th>Payment</th><th>Inventory</th><th>Amount (₱)</th></tr>";
   const body = rows
     .map(
       (r) =>
-        `<tr><td>${escapeHtml(String(r.row_no))}</td><td>${escapeHtml(r.receipt_id)}</td><td>${escapeHtml(r.created_at)}</td><td>${escapeHtml(r.due_date)}</td><td>${escapeHtml(r.customer_name)}</td><td>${escapeHtml(r.clerk_name)}</td><td>${escapeHtml(r.branch)}</td><td>${escapeHtml(r.status)}</td><td>${escapeHtml(r.inventory_status)}</td><td class="num">${escapeHtml(Number(r.amount || 0).toFixed(2))}</td></tr>`
+        `<tr><td>${escapeHtml(String(r.row_no))}</td><td>${escapeHtml(r.receipt_id)}</td><td>${escapeHtml(r.created_at)}</td><td>${escapeHtml(r.due_date)}</td><td>${escapeHtml(r.customer_name)}</td><td>${escapeHtml(r.clerk_name)}</td><td>${escapeHtml(r.branch)}</td><td>${escapeHtml(r.status)}</td><td>${escapeHtml(r.inventory_status)}</td><td class="num">${escapeHtml(formatAmount(r.amount || 0))}</td></tr>`
     )
     .join("");
   return `<!DOCTYPE html>
@@ -95,7 +102,7 @@ function buildPrintHtml(
   </div>
   <div class="summary-card">
     <p class="summary-card-k">Total exported amount</p>
-    <p class="summary-card-v">${escapeHtml(`₱${Number(context.total_amount || 0).toFixed(2)}`)}</p>
+    <p class="summary-card-v">${escapeHtml(`₱${formatAmount(context.total_amount || 0)}`)}</p>
   </div>
 </div>
 <p class="summary-note">This file contains all rows matching the active filters at export time.</p>

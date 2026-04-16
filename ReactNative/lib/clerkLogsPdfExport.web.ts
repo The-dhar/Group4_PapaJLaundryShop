@@ -11,6 +11,13 @@ import type {
   ClerkLogsExportContext,
 } from "./clerkLogsPdfExport.types";
 
+function formatAmount(value: number): string {
+  return Number(value || 0).toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 function uint8ToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const out = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(out).set(bytes);
@@ -60,7 +67,7 @@ function buildClerkLogsPdfBytes(
 
   const pageWidth = doc.internal.pageSize.getWidth();
 
-  let tableTop = 146;
+  let tableTop = 162;
   if (logoDataUrl) {
     try {
       doc.addImage(logoDataUrl, "PNG", 24, 20, 28, 28);
@@ -90,10 +97,10 @@ function buildClerkLogsPdfBytes(
   doc.line(24, 112, pageWidth - 24, 112);
 
   const summaryTop = 118;
-  const cardW = 138;
-  const cardH = 24;
+  const cardW = 168;
+  const cardH = 32;
   const cardGap = 10;
-  const totalAmountText = `PHP ${Number(context.total_amount || 0).toFixed(2)}`;
+  const totalAmountText = `₱${formatAmount(context.total_amount || 0)}`;
 
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(203, 213, 225);
@@ -102,16 +109,16 @@ function buildClerkLogsPdfBytes(
 
   doc.setFontSize(8);
   doc.setTextColor(71, 85, 105);
-  doc.text("Total Exported Rows", 28, summaryTop + 7);
-  doc.text("Total Exported Amount", 28 + cardW + cardGap, summaryTop + 7);
+  doc.text("Total Exported Rows", 28, summaryTop + 10);
+  doc.text("Total Exported Amount", 28 + cardW + cardGap, summaryTop + 10);
 
-  doc.setFontSize(15);
+  doc.setFontSize(14);
   doc.setTextColor(15, 23, 42);
-  doc.text(String(context.total_rows), 28, summaryTop + 18);
-  doc.text(totalAmountText, 28 + cardW + cardGap, summaryTop + 18);
+  doc.text(String(context.total_rows), 28, summaryTop + 25);
+  doc.text(totalAmountText, 28 + cardW + cardGap, summaryTop + 25);
 
   autoTable(doc, {
-    head: [["#", "Receipt ID", "Created", "Due", "Customer", "Clerk", "Branch", "Payment", "Inventory", "Amount (PHP)"]],
+    head: [["#", "Receipt ID", "Created", "Due", "Customer", "Clerk", "Branch", "Payment", "Inventory", "Amount (₱)"]],
     body: rows.map((r) => [
       String(r.row_no),
       r.receipt_id,
@@ -122,7 +129,7 @@ function buildClerkLogsPdfBytes(
       r.branch,
       r.status,
       r.inventory_status,
-      Number(r.amount || 0).toFixed(2),
+      formatAmount(r.amount || 0),
     ]),
     styles: { fontSize: 7, cellPadding: 2, textColor: [30, 41, 59] },
     headStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: "bold" },
