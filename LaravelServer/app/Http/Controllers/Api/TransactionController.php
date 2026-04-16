@@ -116,10 +116,23 @@ class TransactionController extends Controller
             'customer_last_name' => 'nullable|string|max:255',
             'services' => 'required|array',
             'amount' => 'required|numeric',
+            'due_date' => 'required|date_format:Y-m-d|after_or_equal:today',
         ]);
 
         // get logged in branch user
         $user = $request->user();
+
+        $dueDate = Carbon::createFromFormat('Y-m-d', (string) $request->input('due_date'))->startOfDay();
+        $today = now()->startOfDay();
+        $incomingRush = $request->boolean('is_rush');
+
+        if ($incomingRush && ! $dueDate->equalTo($today)) {
+            throw ValidationException::withMessages([
+                'due_date' => ['Rush orders must have due date set to today.'],
+            ]);
+        }
+
+        $isRush = $incomingRush || $dueDate->equalTo($today);
 
         $branchId = $this->resolveBranchIdForStore($request, $user);
 
@@ -179,9 +192,9 @@ class TransactionController extends Controller
 
                 'inventory_status' => 'in_shop',
 
-                'due_date' => $request->due_date,
+                'due_date' => $dueDate->toDateString(),
 
-                'is_rush' => $request->is_rush ?? false,
+                'is_rush' => $isRush,
 
             ]);
 
@@ -217,6 +230,7 @@ class TransactionController extends Controller
                 'payment_method' => $transaction->payment_method,
                 'inventory_status' => $transaction->inventory_status,
                 'due_date' => $transaction->due_date,
+                'is_rush' => (bool) $transaction->is_rush,
             ]);
 
         } catch (\Exception $e) {

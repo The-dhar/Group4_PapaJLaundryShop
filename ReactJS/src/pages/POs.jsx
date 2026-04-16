@@ -143,6 +143,21 @@ const DEFAULT_SERVICE_ICONS = {
   drying: '/pictures/male-clothes.png',
 };
 
+const RUSH_FEE = 100;
+
+function isRushExtraName(name) {
+  const raw = String(name || '').trim().toLowerCase();
+  return raw.includes('rush') || raw.includes('express');
+}
+
+function todayInputDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function parseChargeTypeFromDescription(raw) {
   const text = String(raw || '').trim();
   const m = text.match(/^\[(?:charge_)?type:(fixed|incremental)\]\s*/i);
@@ -177,7 +192,7 @@ const POs = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingServiceId, setEditingServiceId] = useState(null); // Tracks if we are editing an item
 
-  const [activeExtras, setActiveExtras] = useState({ discount: false });
+  const [activeExtras, setActiveExtras] = useState({ discount: false, express: false });
   const [discountAmount, setDiscountAmount] = useState(0);
   const [dynamicExtras, setDynamicExtras] = useState([]);
   const [selectedDynamicExtras, setSelectedDynamicExtras] = useState({});
@@ -214,6 +229,7 @@ const POs = () => {
   const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [suggestionOpen, setSuggestionOpen] = useState(false);
   const searchWrapRef = useRef(null);
+  const todayDate = useMemo(() => todayInputDate(), []);
 
   useEffect(() => {
     setPastSearches(JSON.parse(localStorage.getItem('pastSearches') || '[]'));
@@ -347,7 +363,7 @@ const POs = () => {
               type: parsed.type,
             };
           })
-          .filter((row) => row.name);
+          .filter((row) => row.name && !isRushExtraName(row.name));
         if (!cancelled) setDynamicExtras(miscRows);
       } catch {
         if (!cancelled) setDynamicExtras([]);
@@ -599,6 +615,14 @@ const POs = () => {
     else setPaymentMethod('');
   }, [paymentStatus]);
 
+  useEffect(() => {
+    const shouldRush = dueDate === todayDate;
+    setActiveExtras((prev) => {
+      if (prev.express === shouldRush) return prev;
+      return { ...prev, express: shouldRush };
+    });
+  }, [dueDate, todayDate]);
+
   // --- Handlers ---
 
   const handleCustomerSearchKeyDown = (e) => {
@@ -709,6 +733,7 @@ const POs = () => {
 
   const calculateExtras = () => {
     let total = 0;
+    if (activeExtras.express) total += RUSH_FEE;
     if (activeExtras.discount) total -= Number(discountAmount || 0);
     total += dynamicExtras.reduce((sum, extra) => {
       const qty = Number(selectedDynamicExtras[extra.id] || 0);
@@ -730,7 +755,7 @@ const POs = () => {
     setCustomerSuggestions([]);
     setSuggestionOpen(false);
     setDueDate('');
-    setActiveExtras({ discount: false });
+    setActiveExtras({ discount: false, express: false });
     setDiscountAmount(0);
     setPaymentStatus('later');
     setAmountPaid('');
@@ -782,9 +807,14 @@ const POs = () => {
     
     const extrasActive = txn.active_extras || {};
     const slist = txn.sub_extras || {};
+    const hasRush =
+      txn.is_rush === true ||
+      txn.is_rush === 1 ||
+      extrasActive.express ||
+      (txn.extra_charge_type && txn.extra_charge_type.includes('express'));
     
     let extraHeight = 0;
-    if (extrasActive.express || (txn.extra_charge_type && txn.extra_charge_type.includes('express'))) extraHeight += 4;
+    if (hasRush) extraHeight += 4;
     if (slist.extra_detergent) extraHeight += 4;
     if (slist.extra_softener) extraHeight += 4;
     if (slist.stain_removal) extraHeight += 4;
@@ -881,7 +911,7 @@ const POs = () => {
     doc.text(`P${computedSubtotal.toFixed(2)}`, 56, y, { align: 'right' });
     y += 4;
 
-    if (extrasActive.express || (txn.extra_charge_type && txn.extra_charge_type.includes('express'))) {
+    if (hasRush) {
       doc.text("Rush Charge:", 2, y);
       doc.text("P100.00", 56, y, { align: 'right' });
       y += 4;
@@ -1027,6 +1057,15 @@ const POs = () => {
       Swal.fire({ title: "Missing Information", text: "Due date is required.", icon: "warning", width: 350 });
       return;
     }
+    if (dueDate < todayDate) {
+      Swal.fire({
+        title: 'Invalid due date',
+        text: 'Past dates are not allowed for due date.',
+        icon: 'warning',
+        width: 360,
+      });
+      return;
+    }
     if (selectedServices.length === 0) {
       Swal.fire({ title: "Missing Information", text: "Add at least one laundry service.", icon: "warning", width: 350 });
       return;
@@ -1034,6 +1073,10 @@ const POs = () => {
 
     const fullName = buildFullName(firstName, middleName, lastName);
     const fullAddress = `${street.trim()}, ${barangay.trim()}, ${city.trim()}`;
+    const normalizedExtras = {
+      ...activeExtras,
+      express: dueDate === todayDate || activeExtras.express,
+    };
 
     try {
       setIsSaving(true);
@@ -1059,12 +1102,12 @@ const POs = () => {
         due_date: dueDate,
         extra_charge_type:
           [
-            ...Object.keys(activeExtras).filter((k) => activeExtras[k]),
+            ...Object.keys(normalizedExtras).filter((k) => normalizedExtras[k]),
             ...selectedDynamicExtraNames,
           ].join(', ') || 'none',
-        discount_amount: activeExtras.discount ? Number(discountAmount) : 0,
+        discount_amount: normalizedExtras.discount ? Number(discountAmount) : 0,
         additional_amount: dynamicExtrasTotal,
-        active_extras: activeExtras,
+        active_extras: normalizedExtras,
         sub_extras: {},
         payment_status: paymentStatus === 'full' ? 'paid' : 'unpaid',
         payment_method: paymentMethod,
@@ -1196,7 +1239,13 @@ const POs = () => {
                 <div className="for-receipt-bottom">
                   <div className="for-receipt-calendar">
                     <span style={{ fontSize: 12, color: '#666' }}>Laundry to be claimed on:</span> <br />
-                    <input type="date" className="for-receipt-date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                    <input
+                      type="date"
+                      className="for-receipt-date"
+                      value={dueDate}
+                      min={todayDate}
+                      onChange={e => setDueDate(e.target.value)}
+                    />
                   </div>
                 </div>
               </div>
@@ -1312,6 +1361,22 @@ const POs = () => {
                 <h3>Extra Charges</h3>
                 <div className="payment-options">
                   <label className="payment-option">
+                    <input
+                      type="checkbox"
+                      checked={activeExtras.express}
+                      disabled={dueDate === todayDate && activeExtras.express}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setDueDate(todayDate);
+                          setActiveExtras((prev) => ({ ...prev, express: true }));
+                          return;
+                        }
+                        setActiveExtras((prev) => ({ ...prev, express: false }));
+                      }}
+                    />
+                    <span>Rush (Express) + P{RUSH_FEE.toFixed(2)}</span>
+                  </label>
+                  <label className="payment-option">
                     <input 
                       type="checkbox" 
                       checked={activeExtras.discount} 
@@ -1319,6 +1384,11 @@ const POs = () => {
                     />
                     <span>Discount</span>
                   </label>
+                  {dueDate === todayDate && (
+                    <small style={{ marginLeft: '10px', color: '#64748b', fontWeight: 500 }}>
+                      Rush is automatically enabled when due date is today.
+                    </small>
+                  )}
                   {dynamicExtras.map((extra) => {
                     const qty = Number(selectedDynamicExtras[extra.id] || 0);
                     const isIncremental = extra.type === 'incremental';
@@ -1416,6 +1486,13 @@ const POs = () => {
             <div className="container-information">
               <div className="for-receipt-totals">
                 <div className="total-row"><span>Subtotal:</span><span>P{subtotal.toFixed(2)}</span></div>
+
+                {activeExtras.express && (
+                  <div className="total-row" style={{ color: '#555', fontSize: '13px', margin: '2px 0' }}>
+                    <span>Rush (Express):</span>
+                    <span>P{RUSH_FEE.toFixed(2)}</span>
+                  </div>
+                )}
                 
                 {dynamicExtras
                   .filter((extra) => Number(selectedDynamicExtras[extra.id] || 0) > 0)

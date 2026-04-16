@@ -164,9 +164,14 @@ const Receiptmanagement = () => {
     // Always use the detailed paid receipt layout here
     const extrasActive = txn.active_extras || {};
     const slist = txn.sub_extras || {};
+    const hasRush =
+      txn.is_rush === true ||
+      txn.is_rush === 1 ||
+      extrasActive.express ||
+      (txn.extra_charge_type && txn.extra_charge_type.includes('express'));
 
     let extraHeight = 0;
-    if (extrasActive.express || (txn.extra_charge_type && txn.extra_charge_type.includes('express'))) extraHeight += 4;
+    if (hasRush) extraHeight += 4;
     if (slist.extra_detergent) extraHeight += 4;
     if (slist.extra_softener) extraHeight += 4;
     if (slist.stain_removal) extraHeight += 4;
@@ -263,7 +268,7 @@ const Receiptmanagement = () => {
     doc.text(`P${computedSubtotal.toFixed(2)}`, 56, y, { align: 'right' });
     y += 4;
 
-    if (extrasActive.express || (txn.extra_charge_type && txn.extra_charge_type.includes('express'))) {
+    if (hasRush) {
       doc.text("Rush Charge:", 2, y);
       doc.text("P100.00", 56, y, { align: 'right' });
       y += 4;
@@ -637,7 +642,7 @@ const Receiptmanagement = () => {
                   <span>P{((selectedReceipt.services || []).reduce((sum, s) => sum + (s.rate || 0), 0)).toFixed(2)}</span>
                 </div>
 
-                {((selectedReceipt.active_extras || {}).express || (selectedReceipt.extra_charge_type && selectedReceipt.extra_charge_type.includes('express'))) && (
+                {(selectedReceipt.is_rush === true || selectedReceipt.is_rush === 1 || (selectedReceipt.active_extras || {}).express || (selectedReceipt.extra_charge_type && selectedReceipt.extra_charge_type.includes('express'))) && (
                   <div className="tr-row" style={{ fontSize: '0.9em', padding: '2px 0' }}>
                     <span>Rush Charge:</span>
                     <span>P100.00</span>
