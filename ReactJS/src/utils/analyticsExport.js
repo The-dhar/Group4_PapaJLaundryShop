@@ -22,10 +22,6 @@ export function buildAnalyticsCsv(payload) {
     branchName,
     branchId,
     viewTypeLabel,
-    rangeStartDate,
-    rangeEndDate,
-    viewWindowStartIso,
-    viewWindowEndIso,
     paidTotal,
     totalRevenue,
     unpaidAmountTotal = 0,
@@ -58,10 +54,6 @@ export function buildAnalyticsCsv(payload) {
   lines.push(csvRow(['Branch name', branchName]));
   lines.push(csvRow(['Branch ID', branchId]));
   lines.push(csvRow(['Chart period', viewTypeLabel]));
-  lines.push(csvRow(['Custom range from', rangeStartDate || '—']));
-  lines.push(csvRow(['Custom range to', rangeEndDate || '—']));
-  lines.push(csvRow(['Filter window start (UTC)', viewWindowStartIso]));
-  lines.push(csvRow(['Filter window end (UTC)', viewWindowEndIso]));
   lines.push([]);
   lines.push(csvRow(['SUMMARY']));
   lines.push(csvRow(['Metric', 'Value']));
@@ -154,10 +146,6 @@ export function exportAnalyticsPdf(payload) {
     branchName,
     branchId,
     viewTypeLabel,
-    rangeStartDate,
-    rangeEndDate,
-    viewWindowStartIso,
-    viewWindowEndIso,
     paidTotal,
     totalRevenue,
     unpaidAmountTotal = 0,
@@ -201,12 +189,7 @@ export function exportAnalyticsPdf(payload) {
   doc.text(`Generated: ${new Date().toLocaleString()}`, margin, y);
   y += lh + 2;
 
-  const metaLines = [
-    `Branch: ${branchName} (ID: ${branchId})`,
-    `Chart period: ${viewTypeLabel}`,
-    `Custom range: ${rangeStartDate || '—'} to ${rangeEndDate || '—'}`,
-    `Filter window: ${viewWindowStartIso} → ${viewWindowEndIso}`,
-  ];
+  const metaLines = [`Branch: ${branchName} (ID: ${branchId})`, `Chart period: ${viewTypeLabel}`];
   metaLines.forEach((line) => {
     const parts = doc.splitTextToSize(line, maxW);
     parts.forEach((p) => {
