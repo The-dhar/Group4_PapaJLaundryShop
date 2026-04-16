@@ -44,6 +44,43 @@ function formatInventoryStatus(status) {
     .join(' ');
 }
 
+function openAndAutoPrintPdf(doc) {
+  if (!doc) return;
+
+  try {
+    if (typeof doc.autoPrint === 'function') {
+      doc.autoPrint();
+    }
+  } catch {
+    // continue with fallback print trigger
+  }
+
+  const blobUrl = doc.output('bloburl');
+  const printWindow = window.open(blobUrl, '_blank');
+
+  if (!printWindow) {
+    Swal.fire({
+      title: 'Popup blocked',
+      text: 'Allow popups to auto-print the receipt.',
+      icon: 'info',
+      width: 420,
+    });
+    return;
+  }
+
+  const tryPrint = () => {
+    try {
+      printWindow.focus();
+      printWindow.print();
+    } catch {
+      // Browser PDF viewer may still use embedded print action.
+    }
+  };
+
+  setTimeout(tryPrint, 450);
+  setTimeout(tryPrint, 1300);
+}
+
 const Receiptmanagement = () => {
   const navigate = useNavigate();
   const { transactions, archiveTransaction, updateTransaction } = useTransactions();
@@ -363,8 +400,7 @@ const Receiptmanagement = () => {
     doc.setFontSize(6);
     centerText("This is not an official receipt.", y, 6);
 
-    const blobUrl = doc.output('bloburl');
-    window.open(blobUrl);
+    openAndAutoPrintPdf(doc);
   };
 
   const handleArchiveReceipt = () => {
