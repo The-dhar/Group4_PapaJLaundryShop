@@ -260,6 +260,19 @@
 }
 
 @media print {
+  /* Multi-page print: scroll/height constraints otherwise clip to one viewport (1 “page”). */
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .dashboard-layout {
+    height: auto !important;
+    min-height: 0 !important;
+    display: block !important;
+  }
+
   #sidebar,
   .mobile-menu-btn,
   .sidebar-overlay,
@@ -272,14 +285,41 @@
   .dashboard-layout.is-mobile .main-wrapper {
     margin-left: 0 !important;
     width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
   }
 
   .main-content {
     padding: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  .main-cards {
+    height: auto !important;
+    overflow: visible !important;
   }
 
   .analytics-page {
-    break-inside: avoid;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  .analytics-page .custom-card,
+  .analytics-page .custom-card .card-content {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  .analytics-table-wrap {
+    overflow: visible !important;
   }
 
   .analytics-print-meta {
