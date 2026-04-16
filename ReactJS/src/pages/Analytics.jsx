@@ -24,7 +24,7 @@ import Card from '../components/card';
 import DashboardLayout from '../components/dashboardlayout';
 import { useTransactions } from '../context/transactionsContext';
 import { API_URL } from '../config/api';
-import { buildAnalyticsCsv, downloadAnalyticsCsv, exportAnalyticsPdf } from '../utils/analyticsExport';
+import { downloadAnalyticsXlsx, exportAnalyticsPdf } from '../utils/analyticsExport';
 import '../styles/dashboardstyle.css';
 import '../styles/analyticsstyle.css';
 
@@ -642,12 +642,12 @@ export default function AnalyticsPage() {
     ]
   );
 
-  const handleExportCsv = useCallback(() => {
-    downloadAnalyticsCsv(buildAnalyticsCsv(exportPayload), 'branch-report');
+  const handleExportXlsx = useCallback(() => {
+    downloadAnalyticsXlsx(exportPayload, 'branch-report');
   }, [exportPayload]);
 
-  const handleExportPdf = useCallback(() => {
-    exportAnalyticsPdf(exportPayload);
+  const handleExportPdf = useCallback(async () => {
+    await exportAnalyticsPdf(exportPayload);
   }, [exportPayload]);
 
   const handlePrint = useCallback(() => {
@@ -670,8 +670,8 @@ export default function AnalyticsPage() {
               <h1 className="analytics-page-heading">Report</h1>
               <div className="analytics-export-toolbar">
                 <span className="analytics-export-label">Export</span>
-                <button type="button" className="analytics-export-btn" onClick={handleExportCsv}>
-                  CSV
+                <button type="button" className="analytics-export-btn" onClick={handleExportXlsx}>
+                  XLSX
                 </button>
                 <button type="button" className="analytics-export-btn" onClick={handleExportPdf}>
                   PDF
