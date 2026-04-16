@@ -578,8 +578,8 @@ export default function AnalyticsPage() {
     () => DISPUTE_CHART_CONFIG[disputeChartType] || DISPUTE_CHART_CONFIG.refund,
     [disputeChartType]
   );
-  const revenueYAxisTick = useCallback((v) => `P${v}`, []);
-  const pesoTooltipFormatter = useCallback((v) => formatPeso(v), []);
+  const revenueYAxisTick = useCallback((v) => formatPeso(v, 2), []);
+  const pesoTooltipFormatter = useCallback((v) => formatPeso(v, 2), []);
   const growthCountTooltipFormatter = useCallback((v) => `${Number(v ?? 0)} new customers`, []);
   const onRangeStartDateChange = useCallback((e) => setRangeStartDate(e.target.value), []);
   const onRangeEndDateChange = useCallback((e) => setRangeEndDate(e.target.value), []);
