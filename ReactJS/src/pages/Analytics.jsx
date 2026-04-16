@@ -735,7 +735,7 @@ export default function AnalyticsPage() {
               <Card title={`Loss & quality — ${selectedBranch?.name || 'Branch'}`}>
                 <p className="analytics-card-sub">
                   Resolved dispute amounts by month (refunds vs backjobs). The system records two resolution types:
-                  refund and replacement (backjob).
+                  refund and backjobs.
                 </p>
                 <ResponsiveContainer width="100%" height={260}>
                   <BarChart data={monthlyLossStack12} margin={{ top: 8, right: 12, left: 4, bottom: 8 }}>
@@ -748,7 +748,7 @@ export default function AnalyticsPage() {
                     <Bar
                       dataKey="backjob"
                       stackId="loss"
-                      name="Backjobs (replacement)"
+                      name="Backjobs"
                       fill="#7c3aed"
                       radius={[4, 4, 0, 0]}
                     />
