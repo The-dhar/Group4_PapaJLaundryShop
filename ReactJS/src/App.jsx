@@ -7,7 +7,7 @@ import Inventory from './pages/Inventorymanagement';
 import Receipt from './pages/Receiptmanagement';
 import Dashboardlayout from './components/dashboardlayout';
 import ProtectedRoute from './components/ProtectedRoute';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { TransactionsProvider } from './context/transactionsContext';
 import Unclaimed from './pages/UnclaimLaundry';
 import Express from './pages/Express'; 
@@ -78,13 +78,14 @@ function App() {
             }
           />
           <Route
-            path="/Analytics"
+            path="/Report"
             element={
               <ProtectedRoute>
                 <Analytics />
               </ProtectedRoute>
             }
           />
+          <Route path="/Analytics" element={<Navigate to="/Report" replace />} />
           <Route
             path="/Express"
             element={

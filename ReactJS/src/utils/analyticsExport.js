@@ -1,5 +1,5 @@
 /**
- * CSV + PDF export for Branch Analytics (same data as on-screen filters).
+ * CSV + PDF export for the Report page (same data as on-screen filters).
  */
 import { jsPDF } from 'jspdf';
 
@@ -27,6 +27,11 @@ export function buildAnalyticsCsv(payload) {
     viewWindowStartIso,
     viewWindowEndIso,
     paidTotal,
+    totalRevenue,
+    unpaidAmountTotal = 0,
+    refundLossTotal = 0,
+    totalLosses: totalLossesRaw,
+    branchPerformancePct = 0,
     debitCount,
     inShopCount,
     overdueCount,
@@ -38,7 +43,13 @@ export function buildAnalyticsCsv(payload) {
     recentTransactions,
   } = payload;
 
-  lines.push(csvRow(['Papa J Laundry Shop - Branch Analytics']));
+  const revenue = Number(totalRevenue ?? paidTotal);
+  const losses =
+    totalLossesRaw != null && totalLossesRaw !== ''
+      ? Number(totalLossesRaw)
+      : Number(unpaidAmountTotal) + Number(refundLossTotal);
+
+  lines.push(csvRow(['Papa J Laundry Shop - Branch Report']));
   lines.push(csvRow(['Generated', new Date().toISOString()]));
   lines.push([]);
   lines.push(csvRow(['Branch name', branchName]));
@@ -51,7 +62,11 @@ export function buildAnalyticsCsv(payload) {
   lines.push([]);
   lines.push(csvRow(['SUMMARY']));
   lines.push(csvRow(['Metric', 'Value']));
-  lines.push(csvRow(['Total sales (paid, PHP)', Number(paidTotal).toFixed(2)]));
+  lines.push(csvRow(['Total revenue (paid orders, PHP)', revenue.toFixed(2)]));
+  lines.push(csvRow(['Total losses (PHP)', losses.toFixed(2)]));
+  lines.push(csvRow(['Losses — unpaid debit (PHP)', Number(unpaidAmountTotal).toFixed(2)]));
+  lines.push(csvRow(['Losses — resolved refunds (PHP)', Number(refundLossTotal).toFixed(2)]));
+  lines.push(csvRow(['Branch performance (%)', Number(branchPerformancePct).toFixed(2)]));
   lines.push(csvRow(['Debit sales (unpaid orders count)', debitCount]));
   lines.push(csvRow(['Items in shop (count)', inShopCount]));
   lines.push(csvRow(['Overdue items (count)', overdueCount]));
@@ -90,7 +105,7 @@ export function buildAnalyticsCsv(payload) {
   return `\uFEFF${body}`;
 }
 
-export function downloadAnalyticsCsv(csvString, filenameBase = 'branch-analytics') {
+export function downloadAnalyticsCsv(csvString, filenameBase = 'branch-report') {
   const stamp = new Date().toISOString().slice(0, 10);
   const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -122,6 +137,11 @@ export function exportAnalyticsPdf(payload) {
     viewWindowStartIso,
     viewWindowEndIso,
     paidTotal,
+    totalRevenue,
+    unpaidAmountTotal = 0,
+    refundLossTotal = 0,
+    totalLosses: totalLossesRaw,
+    branchPerformancePct = 0,
     debitCount,
     inShopCount,
     overdueCount,
@@ -133,6 +153,12 @@ export function exportAnalyticsPdf(payload) {
     recentTransactions,
   } = payload;
 
+  const revenue = Number(totalRevenue ?? paidTotal);
+  const losses =
+    totalLossesRaw != null && totalLossesRaw !== ''
+      ? Number(totalLossesRaw)
+      : Number(unpaidAmountTotal) + Number(refundLossTotal);
+
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -143,7 +169,7 @@ export function exportAnalyticsPdf(payload) {
 
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text('Branch Analytics Report', margin, y);
+  doc.text('Branch Report', margin, y);
   y += 8;
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
@@ -172,7 +198,11 @@ export function exportAnalyticsPdf(payload) {
   y += lh + 2;
   doc.setFont('helvetica', 'normal');
   const summaryRows = [
-    ['Total sales (paid)', `PHP ${Number(paidTotal).toFixed(2)}`],
+    ['Total revenue (paid)', `PHP ${revenue.toFixed(2)}`],
+    ['Total losses', `PHP ${losses.toFixed(2)}`],
+    ['  — unpaid debit', `PHP ${Number(unpaidAmountTotal).toFixed(2)}`],
+    ['  — resolved refunds', `PHP ${Number(refundLossTotal).toFixed(2)}`],
+    ['Branch performance', `${Number(branchPerformancePct).toFixed(1)}%`],
     ['Debit sales (count)', String(debitCount)],
     ['Items in shop', String(inShopCount)],
     ['Overdue items', String(overdueCount)],
@@ -237,5 +267,5 @@ export function exportAnalyticsPdf(payload) {
   });
 
   const stamp = new Date().toISOString().slice(0, 10);
-  doc.save(`branch-analytics-${stamp}.pdf`);
+  doc.save(`branch-report-${stamp}.pdf`);
 }

@@ -119,8 +119,8 @@ const Sidebar = ({ sidebarOpen, toggleSidebar, onNavigate }) => {
                 </li>
 
                 <li className='sidebar-list-items'>
-                    <NavLink to="/Analytics" onClick={handleNavClick}>
-                        <BsBarChartLine className='icon'/><span>Analytics</span>
+                    <NavLink to="/Report" onClick={handleNavClick}>
+                        <BsBarChartLine className='icon'/><span>Report</span>
                     </NavLink>
                 </li>
 

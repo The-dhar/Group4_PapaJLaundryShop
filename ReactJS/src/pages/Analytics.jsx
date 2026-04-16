@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { BsBoxSeam, BsCreditCard, BsExclamationTriangle } from 'react-icons/bs';
+import { BsBoxSeam, BsCreditCard, BsExclamationTriangle, BsGraphDownArrow, BsGraphUpArrow, BsPercent } from 'react-icons/bs';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import Card from '../components/card';
 import DashboardLayout from '../components/dashboardlayout';
@@ -166,7 +166,7 @@ export default function AnalyticsPage() {
         setIssueReports(Array.isArray(data) ? data : []);
       }
     } catch (e) {
-      console.error('Analytics data fetch:', e);
+      console.error('Report page data fetch:', e);
     }
   }, []);
 
@@ -241,6 +241,25 @@ export default function AnalyticsPage() {
     });
   }, [issueReports, viewBounds, disputeChartType, selectedBranchId, rangeStartDate, rangeEndDate]);
 
+  /** Resolved refund disputes in the same date window (for total losses KPI, independent of chart type). */
+  const resolvedRefundDisputesInView = useMemo(() => {
+    const { start, end } = viewBounds;
+    const hasStartDate = Boolean(rangeStartDate);
+    const hasEndDate = Boolean(rangeEndDate);
+    const startDate = hasStartDate ? new Date(`${rangeStartDate}T00:00:00`) : null;
+    const endDate = hasEndDate ? new Date(`${rangeEndDate}T23:59:59.999`) : null;
+    return issueReports.filter((r) => {
+      if (!selectedBranchId || String(r.branch_id) !== String(selectedBranchId)) return false;
+      if (String(r.status || '').toLowerCase() !== 'resolved') return false;
+      if (String(r.resolution_type || '').toLowerCase() !== 'refund') return false;
+      const dt = new Date(r.resolved_at || r.updated_at || 0);
+      if (dt < start || dt > end) return false;
+      if (startDate && dt < startDate) return false;
+      if (endDate && dt > endDate) return false;
+      return true;
+    });
+  }, [issueReports, viewBounds, selectedBranchId, rangeStartDate, rangeEndDate]);
+
   const paidTotal = useMemo(
     () =>
       filteredTransactions
@@ -248,6 +267,30 @@ export default function AnalyticsPage() {
         .reduce((sum, t) => sum + (Number(t.amount) || 0), 0),
     [filteredTransactions]
   );
+
+  const totalRevenue = paidTotal;
+
+  const unpaidAmountTotal = useMemo(
+    () =>
+      filteredTransactions
+        .filter((t) => t.payment_status === 'unpaid')
+        .reduce((sum, t) => sum + (Number(t.amount) || 0), 0),
+    [filteredTransactions]
+  );
+
+  const refundLossTotal = useMemo(
+    () => resolvedRefundDisputesInView.reduce((sum, r) => sum + disputeAmountFromReport(r), 0),
+    [resolvedRefundDisputesInView]
+  );
+
+  const totalLosses = unpaidAmountTotal + refundLossTotal;
+
+  const branchPerformancePct = useMemo(() => {
+    const denom = totalRevenue + totalLosses;
+    if (denom <= 0) return totalRevenue > 0 ? 100 : 0;
+    return (100 * totalRevenue) / denom;
+  }, [totalRevenue, totalLosses]);
+
   const debitCount = useMemo(
     () => filteredTransactions.filter((t) => t.payment_status === 'unpaid').length,
     [filteredTransactions]
@@ -394,6 +437,11 @@ export default function AnalyticsPage() {
       viewWindowStartIso: viewBounds.start.toISOString(),
       viewWindowEndIso: viewBounds.end.toISOString(),
       paidTotal,
+      totalRevenue,
+      unpaidAmountTotal,
+      refundLossTotal,
+      totalLosses,
+      branchPerformancePct,
       debitCount,
       inShopCount,
       overdueCount,
@@ -413,6 +461,11 @@ export default function AnalyticsPage() {
       viewBounds.start,
       viewBounds.end,
       paidTotal,
+      totalRevenue,
+      unpaidAmountTotal,
+      refundLossTotal,
+      totalLosses,
+      branchPerformancePct,
       debitCount,
       inShopCount,
       overdueCount,
@@ -426,7 +479,7 @@ export default function AnalyticsPage() {
   );
 
   const handleExportCsv = useCallback(() => {
-    downloadAnalyticsCsv(buildAnalyticsCsv(exportPayload), 'branch-analytics');
+    downloadAnalyticsCsv(buildAnalyticsCsv(exportPayload), 'branch-report');
   }, [exportPayload]);
 
   const handleExportPdf = useCallback(() => {
@@ -457,6 +510,8 @@ export default function AnalyticsPage() {
               </button>
             </div>
 
+            <h1 className="analytics-page-heading">Report</h1>
+
             <p className="analytics-print-meta">
               Branch: {selectedBranch?.name || '—'} · Chart period: {VIEW_TYPE_LABELS[viewType] || viewType}
               {(rangeStartDate || rangeEndDate) && (
@@ -464,11 +519,34 @@ export default function AnalyticsPage() {
               )}
             </p>
 
-            <div className="card-small">
-              <div className="card-total">
-                <div className="chart-title">Total Sales</div>
-                <div className="icon-value"><span>{formatPeso(paidTotal)}</span></div>
+            <div className="analytics-kpi-primary">
+              <div className="analytics-kpi-tile analytics-kpi-revenue">
+                <div className="chart-title">Total revenue</div>
+                <div className="icon-value">
+                  <BsGraphUpArrow className="icon" />
+                  <span>{formatPeso(totalRevenue)}</span>
+                </div>
+                <p className="analytics-kpi-caption">Paid orders in this period</p>
               </div>
+              <div className="analytics-kpi-tile analytics-kpi-loss">
+                <div className="chart-title">Total losses</div>
+                <div className="icon-value">
+                  <BsGraphDownArrow className="icon" />
+                  <span>{formatPeso(totalLosses)}</span>
+                </div>
+                <p className="analytics-kpi-caption">Unpaid debit + resolved refunds</p>
+              </div>
+              <div className="analytics-kpi-tile analytics-kpi-performance">
+                <div className="chart-title">Branch performance</div>
+                <div className="icon-value">
+                  <BsPercent className="icon" />
+                  <span>{branchPerformancePct.toFixed(1)}%</span>
+                </div>
+                <p className="analytics-kpi-caption">Revenue ÷ (revenue + losses)</p>
+              </div>
+            </div>
+
+            <div className="card-small analytics-secondary-kpis">
               <div className="chart-pending">
                 <div className="chart-title">Debit Sales</div>
                 <div className="icon-value"><BsCreditCard className="icon" /><span>{debitCount}</span></div>
