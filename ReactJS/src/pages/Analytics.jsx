@@ -1,6 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { BsBoxSeam, BsCreditCard, BsExclamationTriangle, BsGraphDownArrow, BsGraphUpArrow, BsPercent } from 'react-icons/bs';
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import {
+  BsBasket,
+  BsBoxSeam,
+  BsCreditCard,
+  BsExclamationTriangle,
+  BsGraphDownArrow,
+  BsGraphUpArrow,
+  BsPercent,
+} from 'react-icons/bs';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import Card from '../components/card';
 import DashboardLayout from '../components/dashboardlayout';
 import { useTransactions } from '../context/transactionsContext';
@@ -150,6 +169,11 @@ function buildDisputeSeries(viewType, reports) {
     yearRows[dt.getMonth()].amount += disputeAmountFromReport(r);
   });
   return yearRows;
+}
+
+/** Stable key for “first visit” heuristics (transactions only; no separate CRM id). */
+function customerIdentityKey(t) {
+  return `${String(t.customer_name || '').trim().toLowerCase()}|${String(t.customer_address || '').trim().toLowerCase()}`;
 }
 
 export default function AnalyticsPage() {
@@ -329,6 +353,84 @@ export default function AnalyticsPage() {
     return (100 * totalRevenue) / denom;
   }, [totalRevenue, totalLosses]);
 
+  const totalWeightProcessed = useMemo(
+    () =>
+      filteredTransactions.reduce((sum, t) => sum + (Number(t.weight ?? t.total_weight) || 0), 0),
+    [filteredTransactions]
+  );
+
+  const branchScopedTxns = useMemo(
+    () =>
+      activeTransactions
+        .filter((t) => String(t.branch_id) === String(selectedBranchId))
+        .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0)),
+    [activeTransactions, selectedBranchId]
+  );
+
+  const monthlyLossStack12 = useMemo(() => {
+    if (!selectedBranchId) return [];
+    const now = new Date();
+    const rows = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const label = d.toLocaleString('en-PH', { month: 'short', year: '2-digit' });
+      rows.push({
+        name: label,
+        y: d.getFullYear(),
+        m: d.getMonth(),
+        refund: 0,
+        backjob: 0,
+      });
+    }
+    issueReports.forEach((r) => {
+      if (String(r.branch_id) !== String(selectedBranchId)) return;
+      if (String(r.status || '').toLowerCase() !== 'resolved') return;
+      const dt = new Date(r.resolved_at || r.updated_at || 0);
+      if (Number.isNaN(dt.getTime())) return;
+      const row = rows.find((x) => x.y === dt.getFullYear() && x.m === dt.getMonth());
+      if (!row) return;
+      const rt = String(r.resolution_type || '').toLowerCase();
+      const amt = disputeAmountFromReport(r);
+      if (rt === 'refund') row.refund += amt;
+      else if (rt === 'replacement') row.backjob += amt;
+    });
+    return rows;
+  }, [issueReports, selectedBranchId]);
+
+  const showLossQualitySection = useMemo(
+    () => monthlyLossStack12.some((r) => r.refund > 0.005 || r.backjob > 0.005),
+    [monthlyLossStack12]
+  );
+
+  const newCustomersByMonth12 = useMemo(() => {
+    const firstMonthByCustomer = new Map();
+    for (const t of branchScopedTxns) {
+      const k = customerIdentityKey(t);
+      if (!firstMonthByCustomer.has(k)) {
+        const d = new Date(t.created_at || t.updated_at || Date.now());
+        firstMonthByCustomer.set(
+          k,
+          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+        );
+      }
+    }
+    const countByMonth = {};
+    firstMonthByCustomer.forEach((ym) => {
+      countByMonth[ym] = (countByMonth[ym] || 0) + 1;
+    });
+    const now = new Date();
+    const out = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = d.toLocaleString('en-PH', { month: 'short', year: '2-digit' });
+      out.push({ name: label, count: countByMonth[ym] || 0 });
+    }
+    return out;
+  }, [branchScopedTxns]);
+
+  const showGrowthTrendsSection = useMemo(() => branchScopedTxns.length > 0, [branchScopedTxns]);
+
   const debitCount = useMemo(
     () => filteredTransactions.filter((t) => t.payment_status === 'unpaid').length,
     [filteredTransactions]
@@ -469,6 +571,7 @@ export default function AnalyticsPage() {
   );
   const revenueYAxisTick = useCallback((v) => `P${v}`, []);
   const pesoTooltipFormatter = useCallback((v) => formatPeso(v), []);
+  const growthCountTooltipFormatter = useCallback((v) => `${Number(v ?? 0)} new customers`, []);
   const onRangeStartDateChange = useCallback((e) => setRangeStartDate(e.target.value), []);
   const onRangeEndDateChange = useCallback((e) => setRangeEndDate(e.target.value), []);
   const onDisputeChartTypeChange = useCallback((e) => setDisputeChartType(e.target.value), []);
@@ -571,7 +674,8 @@ export default function AnalyticsPage() {
               )}
             </p>
 
-            <div className="analytics-kpi-primary">
+            <h2 className="analytics-section-title">Executive summary</h2>
+            <div className="analytics-kpi-primary analytics-kpi-exec">
               <div className="analytics-kpi-tile analytics-kpi-revenue">
                 <div className="chart-title">Total revenue</div>
                 <div className="icon-value">
@@ -596,6 +700,20 @@ export default function AnalyticsPage() {
                 </div>
                 <p className="analytics-kpi-caption">Revenue ÷ (revenue + losses)</p>
               </div>
+              <div className="analytics-kpi-tile analytics-kpi-weight">
+                <div className="chart-title">Total weight processed</div>
+                <div className="icon-value">
+                  <BsBasket className="icon" />
+                  <span>
+                    {totalWeightProcessed.toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}{' '}
+                    kg
+                  </span>
+                </div>
+                <p className="analytics-kpi-caption">Sum of order weights in this period</p>
+              </div>
             </div>
 
             <div className="card-small analytics-secondary-kpis">
@@ -612,6 +730,57 @@ export default function AnalyticsPage() {
                 <div className="icon-value"><BsExclamationTriangle className="icon" /><span>{overdueCount}</span></div>
               </div>
             </div>
+
+            {showLossQualitySection ? (
+              <Card title={`Loss & quality — ${selectedBranch?.name || 'Branch'}`}>
+                <p className="analytics-card-sub">
+                  Resolved dispute amounts by month (refunds vs backjobs). The system records two resolution types:
+                  refund and replacement (backjob).
+                </p>
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={monthlyLossStack12} margin={{ top: 8, right: 12, left: 4, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 11 }} />
+                    <YAxis tickFormatter={revenueYAxisTick} tick={{ fill: '#64748b', fontSize: 11 }} />
+                    <Tooltip formatter={pesoTooltipFormatter} />
+                    <Legend />
+                    <Bar dataKey="refund" stackId="loss" name="Refunds" fill="#0d9488" radius={[0, 0, 0, 0]} />
+                    <Bar
+                      dataKey="backjob"
+                      stackId="loss"
+                      name="Backjobs (replacement)"
+                      fill="#7c3aed"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </Card>
+            ) : null}
+
+            {showGrowthTrendsSection ? (
+              <Card title={`Growth trends — ${selectedBranch?.name || 'Branch'}`}>
+                <p className="analytics-card-sub">
+                  New customers by first transaction month (last 12 months), based on name + address from orders.
+                </p>
+                <ResponsiveContainer width="100%" height={240}>
+                  <LineChart data={newCustomersByMonth12} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <Legend verticalAlign="top" align="center" iconType="circle" iconSize={10} wrapperStyle={{ paddingBottom: 8 }} />
+                    <XAxis dataKey="name" />
+                    <YAxis allowDecimals={false} tick={{ fill: '#64748b', fontSize: 11 }} />
+                    <Tooltip formatter={growthCountTooltipFormatter} />
+                    <Line
+                      type="monotone"
+                      dataKey="count"
+                      name="New customers"
+                      stroke="#185BCB"
+                      strokeWidth={3}
+                      dot={{ r: 4 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </Card>
+            ) : null}
 
             <Card title={`Revenue and Debit Sales — ${selectedBranch?.name || 'Branch'}`}>
               <div className="chart-controls">
