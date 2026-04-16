@@ -232,7 +232,7 @@ const BranchList = () => {
                   onPress={handleDelete}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.deleteButtonText}>Archive</Text>
+                  <Text style={styles.deleteButtonText}>Deactivate</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity

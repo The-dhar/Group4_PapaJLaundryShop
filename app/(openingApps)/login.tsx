@@ -1,6 +1,9 @@
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Image } from 'react-native';
+import { useState } from 'react';
+import { Dimensions, Image, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+
+const { width } = Dimensions.get('window');
+
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -8,72 +11,81 @@ export default function LoginScreen() {
 
   const handleLogin = () => {
     console.log('Login attempted with:', { email, password });
-
-    router.replace('/(tabs)/dashboard'); // Navigate to main app screen
+    router.replace('/(tabs)/dashboard');
   };
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.container}
       >
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-        {/* Logo */}
-       <View style={styles.logoContainer}>
-  <View style={styles.logoCircle}>
-    <Image
-      source={require('../../assets/images/papaj logo.png')} 
-      style={styles.logoImage}
-    />
-  </View>
+          {/* 3D Floating Logo Container */}
+          <View style={styles.headerContainer}>
+            <View style={styles.logoWrapper}>
+              <Image
+                source={require('../../assets/images/papaj logo.png')}
+                style={styles.logoImage}
+              />
+            </View>
+            <Text style={styles.brandName}>PAPA J's</Text>
+            <Text style={styles.brandSubtitle}>Laundry Shop</Text>
+          </View>
 
-  <View style={styles.logoTextContainer}>
-    <Text style={styles.brandName}>PAPA J&apos;s</Text>
-    <Text style={styles.brandSubtitle}>Laundry Shop</Text>
-  </View>
-</View>
+          {/* 3D Login Card */}
+          <View style={styles.card}>
+            <Text style={styles.welcomeText}>Welcome Back</Text>
+            <Text style={styles.welcomeSubtext}>Please sign in to continue</Text>
 
-        {/* Welcome Text */}
-        <Text style={styles.welcomeText}>Welcome Back</Text>
-        <Text style={styles.welcomeSubtext}>to Papa J&apos;s</Text>
+            {/* Email Input */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Email</Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="name@example.com"
+                  placeholderTextColor="#A0ABC0"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+            </View>
 
-        {/* Email Input */}
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Email....."
-            placeholderTextColor="#999"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-        </View>
+            {/* Password Input */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="••••••••"
+                  placeholderTextColor="#A0ABC0"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+            </View>
 
-        {/* Password Input */}
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Password...."
-            placeholderTextColor="#999"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-        </View>
 
-          {/* Login Button */}
-          <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-            <Text style={styles.loginButtonText}>Log In</Text>
-          </TouchableOpacity>
+            {/* 3D Button */}
+            <TouchableOpacity
+              style={styles.loginButton}
+              onPress={handleLogin}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.loginButtonText}>Log In</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -83,112 +95,139 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#E6F0FA', // Light blue background to match splash screen
   },
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   scrollContent: {
     flexGrow: 1,
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 40,
   },
-  logoContainer: {
-    flexDirection: 'row',
+  headerContainer: {
     alignItems: 'center',
-    marginBottom: 50,
+    marginBottom: 40,
   },
-
-  logoInner: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#fff',
+  logoWrapper: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#FF6B6B',
+    shadowColor: '#005AAA',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 15,
+    marginBottom: 15,
+    borderWidth: 4,
+    borderColor: '#E6F0FA',
+    overflow: 'hidden',
   },
-  logoText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#4169E1',
-  },
-  logoTextContainer: {
-    justifyContent: 'center',
+  logoImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
   brandName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2c3e50',
+    fontSize: 32,
+    fontWeight: '900',
+    color: '#005AAA',
+    letterSpacing: 2,
+    textShadowColor: 'rgba(0, 90, 170, 0.15)',
+    textShadowOffset: { width: 1, height: 2 },
+    textShadowRadius: 4,
   },
   brandSubtitle: {
-    fontSize: 14,
-    color: '#4169E1',
-    marginTop: -2,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#3498DB',
+    letterSpacing: 3,
+    textTransform: 'uppercase',
+    marginTop: 4,
+  },
+  card: {
+    width: width * 0.9,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 30,
+    padding: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 15 },
+    shadowOpacity: 0.1,
+    shadowRadius: 30,
+    elevation: 20,
   },
   welcomeText: {
-    fontSize: 32,
-    fontWeight: '600',
-    color: '#2c3e50',
-    marginBottom: 4,
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#1A365D',
+    marginBottom: 5,
   },
   welcomeSubtext: {
-    fontSize: 32,
-    fontWeight: '600',
-    color: '#2c3e50',
-    marginBottom: 40,
+    fontSize: 15,
+    color: '#718096',
+    marginBottom: 30,
+    fontWeight: '500',
   },
   inputContainer: {
     width: '100%',
     marginBottom: 20,
   },
   label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2c3e50',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4A5568',
     marginBottom: 8,
+    marginLeft: 4,
+  },
+  inputWrapper: {
+    backgroundColor: '#F7FAFC',
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
   },
   input: {
-    width: '100%',
-    height: 50,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 16,
+    height: 55,
+    paddingHorizontal: 20,
     fontSize: 16,
-    backgroundColor: '#fff',
-    color: '#2c3e50',
+    color: '#2D3748',
+    fontWeight: '500',
+  },
+  forgotPassword: {
+    alignSelf: 'flex-end',
+    marginBottom: 30,
+  },
+  forgotPasswordText: {
+    color: '#3498DB',
+    fontSize: 14,
+    fontWeight: '700',
   },
   loginButton: {
     width: '100%',
-    height: 50,
-    backgroundColor: '#4169E1',
-    borderRadius: 8,
+    height: 60,
+    backgroundColor: '#005AAA',
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 10,
+    shadowColor: '#005AAA',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 15,
+    elevation: 10,
   },
   loginButtonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '800',
+    letterSpacing: 1,
   },
-  logoCircle: {
-  width: 80,
-  height: 80,
-  borderRadius: 40,
-  overflow: 'hidden', // important so the image stays circular
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-
-logoImage: {
-  width: '100%',
-  height: '100%',
-  resizeMode: 'cover',
-},
 });
