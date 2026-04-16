@@ -131,6 +131,15 @@ export default function AnalyticsPage() {
   const [issueReports, setIssueReports] = useState([]);
   const [disputeChartType, setDisputeChartType] = useState('refund');
 
+  const storedUser = useMemo(() => {
+    try {
+      const raw = localStorage.getItem('user');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const fetchBranchesAndReports = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
@@ -169,20 +178,13 @@ export default function AnalyticsPage() {
   );
 
   const selectedBranchId = useMemo(() => {
-    const rawUser = localStorage.getItem('user');
-    let userBranchId = '';
-    try {
-      const parsed = rawUser ? JSON.parse(rawUser) : null;
-      const fromRoot = parsed?.branch_id;
-      const fromNested = parsed?.branch?.id;
-      userBranchId = String(fromRoot ?? fromNested ?? '').trim();
-    } catch {
-      userBranchId = '';
-    }
+    const fromRoot = storedUser?.branch_id;
+    const fromNested = storedUser?.branch?.id;
+    const userBranchId = String(fromRoot ?? fromNested ?? '').trim();
     if (userBranchId && sortedBranches.some((b) => String(b.id) === userBranchId)) return userBranchId;
     if (sortedBranches.length > 0) return String(sortedBranches[0].id);
     return '';
-  }, [sortedBranches]);
+  }, [sortedBranches, storedUser]);
 
   const activeTransactions = useMemo(
     () => transactions.filter((t) => !t.archived),
@@ -360,7 +362,19 @@ export default function AnalyticsPage() {
     [filteredTransactions]
   );
 
-  const selectedBranch = sortedBranches.find((b) => String(b.id) === String(selectedBranchId));
+  const selectedBranch = useMemo(
+    () => sortedBranches.find((b) => String(b.id) === String(selectedBranchId)),
+    [sortedBranches, selectedBranchId]
+  );
+  const disputeConfig = useMemo(
+    () => DISPUTE_CHART_CONFIG[disputeChartType] || DISPUTE_CHART_CONFIG.refund,
+    [disputeChartType]
+  );
+  const revenueYAxisTick = useCallback((v) => `P${v}`, []);
+  const pesoTooltipFormatter = useCallback((v) => formatPeso(v), []);
+  const onRangeStartDateChange = useCallback((e) => setRangeStartDate(e.target.value), []);
+  const onRangeEndDateChange = useCallback((e) => setRangeEndDate(e.target.value), []);
+  const onDisputeChartTypeChange = useCallback((e) => setDisputeChartType(e.target.value), []);
 
   return (
     <DashboardLayout>
@@ -395,9 +409,9 @@ export default function AnalyticsPage() {
                 <button className={`chart-toggle-btn ${viewType === 'month' ? 'active' : ''}`} onClick={() => setViewType('month')}>Monthly</button>
                 <button className={`chart-toggle-btn ${viewType === 'year' ? 'active' : ''}`} onClick={() => setViewType('year')}>Yearly</button>
                 <div className="chart-date-range">
-                  <input type="date" className="chart-year-date" value={rangeStartDate} onChange={(e) => setRangeStartDate(e.target.value)} />
+                  <input type="date" className="chart-year-date" value={rangeStartDate} onChange={onRangeStartDateChange} />
                   <span className="chart-date-range-sep">to</span>
-                  <input type="date" className="chart-year-date" value={rangeEndDate} onChange={(e) => setRangeEndDate(e.target.value)} />
+                  <input type="date" className="chart-year-date" value={rangeEndDate} onChange={onRangeEndDateChange} />
                 </div>
               </div>
               <ResponsiveContainer width="100%" height={220}>
@@ -405,8 +419,8 @@ export default function AnalyticsPage() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <Legend verticalAlign="top" align="center" iconType="circle" iconSize={10} wrapperStyle={{ paddingBottom: 8 }} />
                   <XAxis dataKey="name" />
-                  <YAxis tickFormatter={(v) => `P${v}`} />
-                  <Tooltip formatter={(v) => formatPeso(v)} />
+                  <YAxis tickFormatter={revenueYAxisTick} />
+                  <Tooltip formatter={pesoTooltipFormatter} />
                   <Line type="monotone" dataKey="revenue" name="Revenue" stroke="#185BCB" strokeWidth={3} dot={{ r: 4 }} />
                   <Line type="monotone" dataKey="unpaid" name="Debit sales" stroke="#E63946" strokeWidth={3} dot={{ r: 4 }} />
                 </LineChart>
@@ -416,14 +430,14 @@ export default function AnalyticsPage() {
             <Card>
               <div className="refund-card-header">
                 <h3 className="refund-card-title">
-                  {`${DISPUTE_CHART_CONFIG[disputeChartType]?.pluralLabel || 'Refunds'} — ${selectedBranch?.name || 'Branch'}`}
+                  {`${disputeConfig.pluralLabel} — ${selectedBranch?.name || 'Branch'}`}
                 </h3>
                 <div className="refund-type-filter">
                   <label htmlFor="analytics-dispute-type">Type</label>
                   <select
                     id="analytics-dispute-type"
                     value={disputeChartType}
-                    onChange={(e) => setDisputeChartType(e.target.value)}
+                    onChange={onDisputeChartTypeChange}
                   >
                     <option value="refund">Refund</option>
                     <option value="backjob">Backjob</option>
@@ -449,13 +463,13 @@ export default function AnalyticsPage() {
                   <LineChart data={disputeStats.chart} margin={{ top: 12, right: 12, left: 2, bottom: 28 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                     <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 12 }} />
-                    <YAxis tickFormatter={(v) => `P${v}`} tick={{ fill: '#64748b', fontSize: 11 }} />
-                    <Tooltip formatter={(v) => formatPeso(v)} />
+                    <YAxis tickFormatter={revenueYAxisTick} tick={{ fill: '#64748b', fontSize: 11 }} />
+                    <Tooltip formatter={pesoTooltipFormatter} />
                     <Line
                       type="monotone"
                       dataKey="amount"
-                      name={DISPUTE_CHART_CONFIG[disputeChartType]?.label || 'Refund'}
-                      stroke={DISPUTE_CHART_CONFIG[disputeChartType]?.lineColor || '#0d9488'}
+                      name={disputeConfig.label}
+                      stroke={disputeConfig.lineColor}
                       strokeWidth={3}
                       dot={{ r: 3, strokeWidth: 2, fill: '#fff' }}
                     />
