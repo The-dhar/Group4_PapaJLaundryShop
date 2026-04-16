@@ -72,11 +72,17 @@
 
 .analytics-table-wrap {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: min(280px, 42vh);
+  -webkit-overflow-scrolling: touch;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
 }
 
 .analytics-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .analytics-table th,
@@ -91,6 +97,10 @@
   color: #334155;
   font-weight: 700;
   background: #f8fafc;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  box-shadow: 0 1px 0 #e2e8f0;
 }
 
 .analytics-page-header {
@@ -364,6 +374,8 @@
 
   .analytics-table-wrap {
     overflow: visible !important;
+    max-height: none !important;
+    border: none !important;
   }
 
   .analytics-print-meta {
@@ -390,6 +402,8 @@
   }
 
   .analytics-table th {
+    position: static !important;
+    box-shadow: none !important;
     background: #f1f5f9 !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
