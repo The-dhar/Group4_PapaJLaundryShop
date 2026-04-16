@@ -497,20 +497,21 @@ export default function AnalyticsPage() {
 
         {selectedBranchId ? (
           <>
-            <div className="analytics-export-toolbar">
-              <span className="analytics-export-label">Export</span>
-              <button type="button" className="analytics-export-btn" onClick={handleExportCsv}>
-                CSV
-              </button>
-              <button type="button" className="analytics-export-btn" onClick={handleExportPdf}>
-                PDF
-              </button>
-              <button type="button" className="analytics-export-btn" onClick={handlePrint}>
-                Print
-              </button>
+            <div className="analytics-page-header">
+              <h1 className="analytics-page-heading">Report</h1>
+              <div className="analytics-export-toolbar">
+                <span className="analytics-export-label">Export</span>
+                <button type="button" className="analytics-export-btn" onClick={handleExportCsv}>
+                  CSV
+                </button>
+                <button type="button" className="analytics-export-btn" onClick={handleExportPdf}>
+                  PDF
+                </button>
+                <button type="button" className="analytics-export-btn" onClick={handlePrint}>
+                  Print
+                </button>
+              </div>
             </div>
-
-            <h1 className="analytics-page-heading">Report</h1>
 
             <p className="analytics-print-meta">
               Branch: {selectedBranch?.name || '—'} · Chart period: {VIEW_TYPE_LABELS[viewType] || viewType}
