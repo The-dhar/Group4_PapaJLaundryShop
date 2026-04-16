@@ -41,6 +41,9 @@ export function buildAnalyticsCsv(payload) {
     chartData,
     disputeChartData,
     recentTransactions,
+    totalWeightProcessed = 0,
+    monthlyLossStack12 = [],
+    newCustomersByMonth12 = [],
   } = payload;
 
   const revenue = Number(totalRevenue ?? paidTotal);
@@ -67,6 +70,7 @@ export function buildAnalyticsCsv(payload) {
   lines.push(csvRow(['Losses — unpaid debit (PHP)', Number(unpaidAmountTotal).toFixed(2)]));
   lines.push(csvRow(['Losses — resolved refunds (PHP)', Number(refundLossTotal).toFixed(2)]));
   lines.push(csvRow(['Branch performance (%)', Number(branchPerformancePct).toFixed(2)]));
+  lines.push(csvRow(['Total weight processed (kg, this period)', Number(totalWeightProcessed).toFixed(2)]));
   lines.push(csvRow(['Debit sales (unpaid orders count)', debitCount]));
   lines.push(csvRow(['Items in shop (count)', inShopCount]));
   lines.push(csvRow(['Overdue items (count)', overdueCount]));
@@ -84,6 +88,24 @@ export function buildAnalyticsCsv(payload) {
   lines.push(csvRow(['Period', 'Amount (PHP)']));
   (disputeChartData || []).forEach((row) => {
     lines.push(csvRow([row.name, Number(row.amount || 0).toFixed(2)]));
+  });
+  lines.push([]);
+  lines.push(csvRow(['LOSS & QUALITY (last 12 months, resolved disputes by month)']));
+  lines.push(csvRow(['Month', 'Refunds (PHP)', 'Backjobs / replacement (PHP)']));
+  (monthlyLossStack12 || []).forEach((row) => {
+    lines.push(
+      csvRow([
+        row.name,
+        Number(row.refund || 0).toFixed(2),
+        Number(row.backjob || 0).toFixed(2),
+      ])
+    );
+  });
+  lines.push([]);
+  lines.push(csvRow(['GROWTH TRENDS (last 12 months, new customers by first order month)']));
+  lines.push(csvRow(['Month', 'New customers (count)']));
+  (newCustomersByMonth12 || []).forEach((row) => {
+    lines.push(csvRow([row.name, String(row.count ?? 0)]));
   });
   lines.push([]);
   lines.push(csvRow(['RECENT TRANSACTIONS (up to 8, same as screen)']));
@@ -151,6 +173,9 @@ export function exportAnalyticsPdf(payload) {
     chartData,
     disputeChartData,
     recentTransactions,
+    totalWeightProcessed = 0,
+    monthlyLossStack12 = [],
+    newCustomersByMonth12 = [],
   } = payload;
 
   const revenue = Number(totalRevenue ?? paidTotal);
@@ -203,6 +228,7 @@ export function exportAnalyticsPdf(payload) {
     ['  — unpaid debit', `PHP ${Number(unpaidAmountTotal).toFixed(2)}`],
     ['  — resolved refunds', `PHP ${Number(refundLossTotal).toFixed(2)}`],
     ['Branch performance', `${Number(branchPerformancePct).toFixed(1)}%`],
+    ['Total weight processed (kg, this period)', Number(totalWeightProcessed).toFixed(2)],
     ['Debit sales (count)', String(debitCount)],
     ['Items in shop', String(inShopCount)],
     ['Overdue items', String(overdueCount)],
@@ -242,6 +268,39 @@ export function exportAnalyticsPdf(payload) {
   doc.setFontSize(8);
   (disputeChartData || []).forEach((row) => {
     const line = `${row.name}: PHP ${Number(row.amount || 0).toFixed(2)}`;
+    y = ensureSpace(doc, y, lh, pageH, margin);
+    doc.text(line, margin, y);
+    y += lh;
+  });
+  doc.setFontSize(9);
+  y += 4;
+
+  y = ensureSpace(doc, y, 25, pageH, margin);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Loss & quality (12 months)', margin, y);
+  y += lh + 2;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  (monthlyLossStack12 || []).forEach((row) => {
+    const line = `${row.name}: Refunds PHP ${Number(row.refund || 0).toFixed(2)} | Backjobs PHP ${Number(row.backjob || 0).toFixed(2)}`;
+    const parts = doc.splitTextToSize(line, maxW);
+    parts.forEach((p) => {
+      y = ensureSpace(doc, y, lh, pageH, margin);
+      doc.text(p, margin, y);
+      y += lh;
+    });
+  });
+  doc.setFontSize(9);
+  y += 4;
+
+  y = ensureSpace(doc, y, 22, pageH, margin);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Growth trends (12 months)', margin, y);
+  y += lh + 2;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  (newCustomersByMonth12 || []).forEach((row) => {
+    const line = `${row.name}: ${Number(row.count ?? 0)} new customers`;
     y = ensureSpace(doc, y, lh, pageH, margin);
     doc.text(line, margin, y);
     y += lh;

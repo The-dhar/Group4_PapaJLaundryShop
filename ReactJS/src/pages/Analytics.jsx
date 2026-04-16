@@ -600,6 +600,9 @@ export default function AnalyticsPage() {
       chartData,
       disputeChartData: disputeStats.chart,
       recentTransactions,
+      totalWeightProcessed,
+      monthlyLossStack12,
+      newCustomersByMonth12,
     }),
     [
       selectedBranch,
@@ -624,6 +627,9 @@ export default function AnalyticsPage() {
       chartData,
       disputeStats.chart,
       recentTransactions,
+      totalWeightProcessed,
+      monthlyLossStack12,
+      newCustomersByMonth12,
     ]
   );
 
