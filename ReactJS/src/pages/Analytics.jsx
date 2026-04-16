@@ -29,7 +29,16 @@ import '../styles/dashboardstyle.css';
 import '../styles/analyticsstyle.css';
 
 const POLL_MS = 45_000;
-const formatPeso = (value) => `P${Number(value || 0).toLocaleString()}`;
+const formatPeso = (value, fractionDigits) => {
+  const n = Number(value || 0);
+  if (fractionDigits != null && Number.isFinite(Number(fractionDigits))) {
+    return `P${n.toLocaleString(undefined, {
+      minimumFractionDigits: Number(fractionDigits),
+      maximumFractionDigits: Number(fractionDigits),
+    })}`;
+  }
+  return `P${n.toLocaleString()}`;
+};
 
 const DISPUTE_CHART_CONFIG = {
   refund: { label: 'Refund', pluralLabel: 'Refunds', resolutionType: 'refund', lineColor: '#0d9488' },
@@ -686,7 +695,7 @@ export default function AnalyticsPage() {
                 <div className="chart-title">Total revenue</div>
                 <div className="icon-value">
                   <BsGraphUpArrow className="icon" />
-                  <span>{formatPeso(totalRevenue)}</span>
+                  <span>{formatPeso(totalRevenue, 2)}</span>
                 </div>
                 <p className="analytics-kpi-caption">Paid orders in this period</p>
               </div>
