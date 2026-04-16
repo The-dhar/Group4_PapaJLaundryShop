@@ -689,7 +689,20 @@ export default function AnalyticsPage() {
               )}
             </p>
 
-            <h2 className="analytics-section-title">Executive summary</h2>
+            <div className="analytics-exec-header">
+              <h2 className="analytics-section-title">Executive summary</h2>
+              <div className="chart-controls analytics-chart-controls">
+                <button className={`chart-toggle-btn ${viewType === 'today' ? 'active' : ''}`} onClick={() => setViewType('today')}>Today</button>
+                <button className={`chart-toggle-btn ${viewType === 'week' ? 'active' : ''}`} onClick={() => setViewType('week')}>Weekly</button>
+                <button className={`chart-toggle-btn ${viewType === 'month' ? 'active' : ''}`} onClick={() => setViewType('month')}>Monthly</button>
+                <button className={`chart-toggle-btn ${viewType === 'year' ? 'active' : ''}`} onClick={() => setViewType('year')}>Yearly</button>
+                <div className="chart-date-range">
+                  <input type="date" className="chart-year-date" value={rangeStartDate} onChange={onRangeStartDateChange} />
+                  <span className="chart-date-range-sep">to</span>
+                  <input type="date" className="chart-year-date" value={rangeEndDate} onChange={onRangeEndDateChange} />
+                </div>
+              </div>
+            </div>
             <div className="analytics-kpi-primary analytics-kpi-exec">
               <div className="analytics-kpi-tile analytics-kpi-revenue">
                 <div className="chart-title">Total revenue</div>
@@ -802,17 +815,6 @@ export default function AnalyticsPage() {
             ) : null}
 
             <Card title={`Revenue and Debit Sales — ${selectedBranch?.name || 'Branch'}`}>
-              <div className="chart-controls">
-                <button className={`chart-toggle-btn ${viewType === 'today' ? 'active' : ''}`} onClick={() => setViewType('today')}>Today</button>
-                <button className={`chart-toggle-btn ${viewType === 'week' ? 'active' : ''}`} onClick={() => setViewType('week')}>Weekly</button>
-                <button className={`chart-toggle-btn ${viewType === 'month' ? 'active' : ''}`} onClick={() => setViewType('month')}>Monthly</button>
-                <button className={`chart-toggle-btn ${viewType === 'year' ? 'active' : ''}`} onClick={() => setViewType('year')}>Yearly</button>
-                <div className="chart-date-range">
-                  <input type="date" className="chart-year-date" value={rangeStartDate} onChange={onRangeStartDateChange} />
-                  <span className="chart-date-range-sep">to</span>
-                  <input type="date" className="chart-year-date" value={rangeEndDate} onChange={onRangeEndDateChange} />
-                </div>
-              </div>
               <ResponsiveContainer width="100%" height={220}>
                 <LineChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
                   <CartesianGrid strokeDasharray="3 3" />
