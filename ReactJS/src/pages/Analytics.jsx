@@ -128,7 +128,6 @@ export default function AnalyticsPage() {
   const [rangeStartDate, setRangeStartDate] = useState('');
   const [rangeEndDate, setRangeEndDate] = useState('');
   const [branches, setBranches] = useState([]);
-  const [selectedBranchId, setSelectedBranchId] = useState('');
   const [issueReports, setIssueReports] = useState([]);
   const [disputeChartType, setDisputeChartType] = useState('refund');
 
@@ -169,11 +168,21 @@ export default function AnalyticsPage() {
     [branches]
   );
 
-  useEffect(() => {
-    if (!selectedBranchId && sortedBranches.length > 0) {
-      setSelectedBranchId(String(sortedBranches[0].id));
+  const selectedBranchId = useMemo(() => {
+    const rawUser = localStorage.getItem('user');
+    let userBranchId = '';
+    try {
+      const parsed = rawUser ? JSON.parse(rawUser) : null;
+      const fromRoot = parsed?.branch_id;
+      const fromNested = parsed?.branch?.id;
+      userBranchId = String(fromRoot ?? fromNested ?? '').trim();
+    } catch {
+      userBranchId = '';
     }
-  }, [sortedBranches, selectedBranchId]);
+    if (userBranchId && sortedBranches.some((b) => String(b.id) === userBranchId)) return userBranchId;
+    if (sortedBranches.length > 0) return String(sortedBranches[0].id);
+    return '';
+  }, [sortedBranches]);
 
   const activeTransactions = useMemo(
     () => transactions.filter((t) => !t.archived),
@@ -356,22 +365,6 @@ export default function AnalyticsPage() {
   return (
     <DashboardLayout>
       <div className="main-cards analytics-page">
-        <div className="analytics-branch-inline">
-          <div className="analytics-branch-filter">
-            <label htmlFor="analytics-branch-select">Branch</label>
-            <select
-              id="analytics-branch-select"
-              value={selectedBranchId}
-              onChange={(e) => setSelectedBranchId(e.target.value)}
-            >
-              {sortedBranches.map((branch) => (
-                <option key={`analytics-branch-${branch.id}`} value={branch.id}>
-                  {branch.name || `Branch ${branch.id}`}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
         {!selectedBranchId && <p className="analytics-empty">No branches available for your account.</p>}
 
         {selectedBranchId ? (
