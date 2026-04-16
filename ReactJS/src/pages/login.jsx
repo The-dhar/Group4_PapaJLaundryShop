@@ -128,44 +128,60 @@ export default function LoginPage() {
 
   return (
 
-    <div className="login-container">
+    <div className="login-scene">
+      <div className="login-bubbles" aria-hidden="true">
+        <span className="bubble bubble-1" />
+        <span className="bubble bubble-2" />
+        <span className="bubble bubble-3" />
+        <span className="bubble bubble-4" />
+        <span className="bubble bubble-5" />
+        <span className="bubble bubble-6" />
+      </div>
 
-      <div className="login-left">
+      <div className="login-panel">
+        <div className="login-brand-stack">
+          <div className="login-logo-wrap">
+            <img src="/pictures/Papa(1).png" alt="Papa J logo" className="login-logo" />
+          </div>
+          <h1 className="login-brand-title">PAPA J&apos;s</h1>
+          <p className="login-brand-subtitle">Laundry Shop</p>
+        </div>
 
-        <div className="login-form-wrapper">
-
-          <h2 className="login-title">Welcome Back!</h2>
+        <div className="login-card">
+          <h2 className="login-title">Welcome Back</h2>
+          <p className="login-subtitle">Please sign in to continue</p>
 
           <form onSubmit={handleLogin} className="login-form">
-
             <div className="form-group">
-
-              <label>Email</label>
-
-              <input
-                type="text"
-                name="email"
-                placeholder="Enter your Email..."
-                value={formData.email}
-                onChange={handleChange}
-                className="form-input"
-              />
-
+              <label htmlFor="email">Email</label>
+              <div className="input-shell">
+                <input
+                  id="email"
+                  type="text"
+                  name="email"
+                  placeholder="name@example.com"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="form-input"
+                  autoComplete="username"
+                />
+              </div>
             </div>
 
             <div className="form-group">
-
-              <label>Password</label>
-
-              <input
-                type="password"
-                name="password"
-                placeholder="Enter your Password..."
-                value={formData.password}
-                onChange={handleChange}
-                className="form-input"
-              />
-
+              <label htmlFor="password">Password</label>
+              <div className="input-shell">
+                <input
+                  id="password"
+                  type="password"
+                  name="password"
+                  placeholder="Password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  className="form-input"
+                  autoComplete="current-password"
+                />
+              </div>
             </div>
 
             <button type="submit" className="login-button" disabled={isLoading}>
@@ -178,17 +194,8 @@ export default function LoginPage() {
                 "Log In"
               )}
             </button>
-
           </form>
-
         </div>
-
-      </div>
-
-      <div className="login-right">
-
-        <img src="/pictures/Papa(1).png" alt="Login" />
-
       </div>
 
     </div>

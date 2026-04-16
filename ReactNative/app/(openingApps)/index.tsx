@@ -1,52 +1,164 @@
 import { router } from "expo-router";
-import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View, Image } from "react-native";
+import React, { useEffect, useMemo, useRef } from "react";
+import {
+  Animated,
+  Dimensions,
+  Easing,
+  Image,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+const { width, height } = Dimensions.get("window");
+
+type BubbleProps = {
+  size: number;
+  top: number;
+  left: number;
+  opacity: number;
+  delay: number;
+};
+
+function Bubble({ size, top, left, opacity, delay }: BubbleProps) {
+  const animatedValue = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(animatedValue, {
+          toValue: 1,
+          duration: 3000,
+          delay,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(animatedValue, {
+          toValue: 0,
+          duration: 3000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [animatedValue, delay]);
+
+  const translateY = animatedValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -20],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.bubble,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          top,
+          left,
+          opacity,
+          transform: [{ translateY }],
+        },
+      ]}
+    >
+      <View
+        style={[
+          styles.bubbleHighlight,
+          {
+            width: size * 0.35,
+            height: size * 0.15,
+            top: size * 0.1,
+            left: size * 0.2,
+            borderRadius: size * 0.1,
+          },
+        ]}
+      />
+      <View
+        style={[
+          styles.bubbleReflection,
+          {
+            width: size * 0.8,
+            height: size * 0.8,
+            borderRadius: size * 0.4,
+            bottom: -size * 0.05,
+            right: -size * 0.05,
+          },
+        ]}
+      />
+    </Animated.View>
+  );
+}
+
 export default function LaundryWelcomeScreen() {
-  const handleGetStarted = () => {
-    router.push("/(openingApps)/login");
-  };
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      router.replace("/(openingApps)/login");
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const backLayer = useMemo(
+    () => [
+      { size: 30, top: height * 0.05, left: width * 0.1, opacity: 0.3, delay: 0 },
+      { size: 45, top: height * 0.15, left: width * 0.6, opacity: 0.3, delay: 700 },
+      { size: 25, top: height * 0.3, left: width * 0.8, opacity: 0.3, delay: 1200 },
+      { size: 35, top: height * 0.4, left: width * 0.2, opacity: 0.3, delay: 500 },
+      { size: 50, top: height * 0.6, left: width * 0.9, opacity: 0.2, delay: 1800 },
+      { size: 40, top: height * 0.75, left: width * 0.1, opacity: 0.3, delay: 300 },
+      { size: 60, top: height * 0.85, left: width * 0.7, opacity: 0.2, delay: 900 },
+    ],
+    []
+  );
+
+  const middleLayer = useMemo(
+    () => [
+      { size: 70, top: height * 0.1, left: width * 0.2, opacity: 0.5, delay: 200 },
+      { size: 85, top: height * 0.25, left: width * 0.8, opacity: 0.4, delay: 1000 },
+      { size: 65, top: height * 0.45, left: width * 0.1, opacity: 0.5, delay: 400 },
+      { size: 90, top: height * 0.65, left: width * 0.8, opacity: 0.4, delay: 1400 },
+      { size: 75, top: height * 0.8, left: width * 0.3, opacity: 0.5, delay: 600 },
+    ],
+    []
+  );
+
+  const frontLayer = useMemo(
+    () => [
+      { size: 110, top: height * 0.15, left: width * -0.1, opacity: 0.6, delay: 800 },
+      { size: 130, top: height * 0.5, left: width * 0.75, opacity: 0.5, delay: 2000 },
+      { size: 100, top: height * 0.7, left: width * -0.05, opacity: 0.6, delay: 1100 },
+      { size: 140, top: height * 0.35, left: width * 0.4, opacity: 0.4, delay: 100 },
+    ],
+    []
+  );
 
   return (
     <SafeAreaView style={styles.safeArea}>
-    <View style={styles.container}>
-      {/* Decorative circles */}
-      <View style={styles.circleTopLeft} />
-      <View style={styles.circleTopRight} />
-      <View style={styles.circleMidLeft} />
-      <View style={styles.sunBottomLeft} />
-      <View style={styles.clockBottomRight} />
+      <View style={styles.container}>
+        {backLayer.map((b, idx) => (
+          <Bubble key={`back-${idx}`} {...b} />
+        ))}
+        {middleLayer.map((b, idx) => (
+          <Bubble key={`mid-${idx}`} {...b} />
+        ))}
+        {frontLayer.map((b, idx) => (
+          <Bubble key={`front-${idx}`} {...b} />
+        ))}
 
-      {/* Character Illustration Placeholder */}
-      <View style={styles.characterContainer}>
-        <Image
-          source={require("../../assets/images/papaj.png")} // FIXED PATH
-          style={styles.characterImage}
-          resizeMode="contain"
-        />
+        <View style={styles.logoContainer}>
+          <View style={styles.imageWrapper}>
+            <Image
+              source={require("../../assets/images/papaj logo.png")}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </View>
+          <Text style={styles.brandName}>Papa J</Text>
+          <Text style={styles.brandSubtitle}>Laundry Shop</Text>
+        </View>
       </View>
-
-      {/* Main Content */}
-      <View style={styles.contentContainer}>
-        <Text style={styles.heading}>
-          Fresh, clean, and perfectly folded that&apos;s how we do laundry.
-        </Text>
-        
-        <Text style={styles.subheading}>
-          Welcome to Papa J&apos;s where clean clothes meet convenience.
-        </Text>
-
-        {/* Get Started Button */}
-        <TouchableOpacity 
-          style={styles.button}
-          onPress={handleGetStarted}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.buttonText}>Get Started</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
     </SafeAreaView>
   );
 }
@@ -54,134 +166,80 @@ export default function LaundryWelcomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#E8F4F8',
+    backgroundColor: "#E6F0FA",
   },
   container: {
     flex: 1,
-    backgroundColor: '#E8F4F8',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 60,
-    paddingBottom: 40,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  circleTopLeft: {
-    position: 'absolute',
-    top: 80,
-    left: 30,
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#A8D5E2',
-    opacity: 0.6,
+  bubble: {
+    position: "absolute",
+    backgroundColor: "rgba(255, 255, 255, 0.35)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255, 255, 255, 0.9)",
+    borderBottomColor: "rgba(255, 255, 255, 0.2)",
+    borderRightColor: "rgba(255, 255, 255, 0.2)",
+    shadowColor: "#3498DB",
+    shadowOffset: { width: -5, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 15,
+    elevation: 8,
+    overflow: "hidden",
   },
-  circleTopRight: {
-    position: 'absolute',
-    top: 100,
-    right: 40,
-    width: 100,
-    height: 80,
-    borderRadius: 50,
-    backgroundColor: '#87CEEB',
-    opacity: 0.7,
+  bubbleHighlight: {
+    position: "absolute",
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    transform: [{ rotate: "-45deg" }],
   },
-  circleMidLeft: {
-    position: 'absolute',
-    top: 180,
-    right: 60,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#FFB347',
-    opacity: 0.6,
+  bubbleReflection: {
+    position: "absolute",
+    borderWidth: 2,
+    borderColor: "rgba(135, 206, 235, 0.6)",
+    borderTopColor: "transparent",
+    borderLeftColor: "transparent",
   },
-  sunBottomLeft: {
-    position: 'absolute',
-    bottom: 180,
-    left: 20,
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#FFA500',
-    opacity: 0.7,
+  logoContainer: {
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 10,
   },
-  clockBottomRight: {
-    position: 'absolute',
-    bottom: 200,
-    right: 30,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#FF6B6B',
-    opacity: 0.6,
-  },
-  characterContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  characterPlaceholder: {
-    width: 200,
-    height: 200,
-    backgroundColor: '#FFF',
-    borderRadius: 100,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  placeholderText: {
-    fontSize: 80,
-  },
-  placeholderSubtext: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 10,
-    paddingHorizontal: 20,
-  },
-  contentContainer: {
-    width: '100%',
-    paddingHorizontal: 30,
-    alignItems: 'center',
-  },
-  heading: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#000',
-    textAlign: 'center',
-    marginBottom: 15,
-    lineHeight: 30,
-  },
-  subheading: {
-    fontSize: 14,
-    color: '#333',
-    textAlign: 'center',
-    marginBottom: 30,
-    lineHeight: 20,
-  },
-  button: {
-    backgroundColor: '#5B9FD7',
-    paddingVertical: 16,
-    paddingHorizontal: 80,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
+  imageWrapper: {
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#005AAA",
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 5,
+    shadowRadius: 15,
+    elevation: 10,
+    marginBottom: 20,
+    borderWidth: 4,
+    borderColor: "#E6F0FA",
   },
-  buttonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '600',
+  logoImage: {
+    width: 160,
+    height: 160,
   },
-    characterImage: {
-    width: 500,
-    height: 500,
+  brandName: {
+    fontSize: 42,
+    fontWeight: "900",
+    color: "#005AAA",
+    letterSpacing: 1,
+    textShadowColor: "rgba(0, 90, 170, 0.1)",
+    textShadowOffset: { width: 1, height: 2 },
+    textShadowRadius: 3,
+  },
+  brandSubtitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#3498DB",
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    marginTop: 5,
   },
 });
 
