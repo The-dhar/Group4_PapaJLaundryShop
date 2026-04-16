@@ -88,7 +88,8 @@ body {
 .login-panel {
   position: relative;
   z-index: 2;
-  width: min(100%, 520px);
+  width: 100%;
+  max-width: 520px;
 }
 
 .login-brand-stack {
@@ -257,15 +258,74 @@ body {
 
 @media (max-width: 560px) {
   .login-scene {
-    padding: 18px 12px;
+    padding: 14px 10px;
+  }
+
+  .login-panel {
+    max-width: 100%;
+  }
+
+  .login-brand-stack {
+    margin-bottom: 16px;
+  }
+
+  .login-logo-wrap {
+    width: 98px;
+    height: 98px;
+    border-radius: 49px;
+  }
+
+  .login-brand-title {
+    margin-top: 10px;
+    letter-spacing: 0.06em;
+    font-size: 28px;
+  }
+
+  .login-brand-subtitle {
+    letter-spacing: 0.14em;
+    font-size: 13px;
   }
 
   .login-card {
-    border-radius: 22px;
-    padding: 22px;
+    border-radius: 20px;
+    padding: 18px;
+  }
+
+  .login-title {
+    font-size: 25px;
+  }
+
+  .login-subtitle {
+    margin-bottom: 18px;
+    font-size: 14px;
+  }
+
+  .form-input {
+    height: 50px;
+    padding: 0 14px;
+  }
+
+  .login-button {
+    height: 52px;
+    font-size: 16px;
+    border-radius: 14px;
   }
 
   .bubble-3 {
     left: 68%;
+  }
+}
+
+@media (max-width: 360px) {
+  .login-brand-title {
+    font-size: 24px;
+  }
+
+  .login-brand-subtitle {
+    font-size: 12px;
+  }
+
+  .bubble {
+    opacity: 0.2;
   }
 }

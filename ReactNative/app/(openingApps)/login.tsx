@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -22,7 +21,6 @@ import { API_URL } from "../../config/api";
 
 /** Shop owner only on mobile; clerks/staff use the web app. */
 const MOBILE_ALLOWED_ROLES = ['owner'];
-const { width } = Dimensions.get("window");
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -200,6 +198,9 @@ const styles = StyleSheet.create({
 
   scrollContent: {
     flexGrow: 1,
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 60,
@@ -255,7 +256,8 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    width: Math.min(width * 0.9, 460),
+    width: '100%',
+    maxWidth: 460,
     backgroundColor: '#FFFFFF',
     borderRadius: 30,
     padding: 30,

@@ -29,15 +29,18 @@ import '../styles/dashboardstyle.css';
 import '../styles/analyticsstyle.css';
 
 const POLL_MS = 45_000;
-const formatPeso = (value, fractionDigits) => {
+const formatPeso = (value, fractionDigits = 2) => {
   const n = Number(value || 0);
-  if (fractionDigits != null && Number.isFinite(Number(fractionDigits))) {
+  if (Number.isFinite(Number(fractionDigits))) {
     return `P${n.toLocaleString(undefined, {
       minimumFractionDigits: Number(fractionDigits),
       maximumFractionDigits: Number(fractionDigits),
     })}`;
   }
-  return `P${n.toLocaleString()}`;
+  return `P${n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 };
 
 const DISPUTE_CHART_CONFIG = {
