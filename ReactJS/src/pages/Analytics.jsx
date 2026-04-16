@@ -24,6 +24,28 @@ const VIEW_TYPE_LABELS = {
   year: 'Yearly',
 };
 
+/** Same key as Dashboard — instant branch list when navigating between pages. */
+const BRANCHES_SESSION_KEY = 'dashboard_refunds_branches_v1';
+
+function readBranchesCache() {
+  try {
+    const raw = sessionStorage.getItem(BRANCHES_SESSION_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeBranchesCache(rows) {
+  try {
+    sessionStorage.setItem(BRANCHES_SESSION_KEY, JSON.stringify(rows));
+  } catch {
+    // ignore
+  }
+}
+
 function getViewDateBounds(viewType, referenceDate = new Date()) {
   const now = new Date(referenceDate);
   const start = new Date(now);
@@ -135,9 +157,11 @@ export default function AnalyticsPage() {
   const [viewType, setViewType] = useState('week');
   const [rangeStartDate, setRangeStartDate] = useState('');
   const [rangeEndDate, setRangeEndDate] = useState('');
-  const [branches, setBranches] = useState([]);
+  const [branches, setBranches] = useState(() => readBranchesCache());
   const [issueReports, setIssueReports] = useState([]);
   const [disputeChartType, setDisputeChartType] = useState('refund');
+  /** Avoid flashing "no branches" before the first /branches response (same idea as Dashboard). */
+  const [branchListFetchDone, setBranchListFetchDone] = useState(false);
 
   const storedUser = useMemo(() => {
     try {
@@ -158,15 +182,27 @@ export default function AnalyticsPage() {
         fetch(`${API_URL}/issue-reports`, { headers }),
       ]);
       if (brRes.ok) {
-        const data = await brRes.json().catch(() => []);
-        setBranches(Array.isArray(data) ? data : []);
+        const ct = String(brRes.headers.get('content-type') || '').toLowerCase();
+        if (ct.includes('application/json')) {
+          const data = await brRes.json();
+          const rows = Array.isArray(data) ? data : [];
+          setBranches(rows);
+          writeBranchesCache(rows);
+        }
       }
       if (irRes.ok) {
-        const data = await irRes.json().catch(() => []);
-        setIssueReports(Array.isArray(data) ? data : []);
+        const ct = String(irRes.headers.get('content-type') || '').toLowerCase();
+        if (ct.includes('application/json')) {
+          const data = await irRes.json();
+          setIssueReports(Array.isArray(data) ? data : []);
+        }
+      } else if (irRes.status === 401 || irRes.status === 403) {
+        setIssueReports([]);
       }
     } catch (e) {
       console.error('Report page data fetch:', e);
+    } finally {
+      setBranchListFetchDone(true);
     }
   }, []);
 
@@ -191,6 +227,8 @@ export default function AnalyticsPage() {
     const userBranchId = String(fromRoot ?? fromNested ?? '').trim();
     if (userBranchId && sortedBranches.some((b) => String(b.id) === userBranchId)) return userBranchId;
     if (sortedBranches.length > 0) return String(sortedBranches[0].id);
+    // When /branches is still loading or returned empty (some roles), use branch from login — same source as sidebar.
+    if (userBranchId) return userBranchId;
     return '';
   }, [sortedBranches, storedUser]);
 
@@ -413,10 +451,18 @@ export default function AnalyticsPage() {
     [filteredTransactions]
   );
 
-  const selectedBranch = useMemo(
-    () => sortedBranches.find((b) => String(b.id) === String(selectedBranchId)),
-    [sortedBranches, selectedBranchId]
-  );
+  const selectedBranch = useMemo(() => {
+    const fromList = sortedBranches.find((b) => String(b.id) === String(selectedBranchId));
+    if (fromList) return fromList;
+    const ub = storedUser?.branch;
+    if (ub && String(ub.id) === String(selectedBranchId)) {
+      return { id: ub.id, name: ub.name || 'Branch' };
+    }
+    if (selectedBranchId) {
+      return { id: selectedBranchId, name: 'Branch' };
+    }
+    return undefined;
+  }, [sortedBranches, selectedBranchId, storedUser]);
   const disputeConfig = useMemo(
     () => DISPUTE_CHART_CONFIG[disputeChartType] || DISPUTE_CHART_CONFIG.refund,
     [disputeChartType]
@@ -493,7 +539,12 @@ export default function AnalyticsPage() {
   return (
     <DashboardLayout>
       <div className="main-cards analytics-page">
-        {!selectedBranchId && <p className="analytics-empty">No branches available for your account.</p>}
+        {!selectedBranchId &&
+          (!branchListFetchDone ? (
+            <p className="analytics-empty">Loading branch data…</p>
+          ) : (
+            <p className="analytics-empty">No branches available for your account.</p>
+          ))}
 
         {selectedBranchId ? (
           <>
