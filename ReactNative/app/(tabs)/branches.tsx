@@ -439,29 +439,6 @@ const BranchAccountManager = () => {
 
             </View>
 
-            {editingBranch && (
-              <View style={styles.statusToggleContainer}>
-                <TouchableOpacity
-                  onPress={toggleEditingBranchStatus}
-                  style={[
-                    styles.statusToggleButton,
-                    editingBranch.is_active === false
-                      ? styles.activateConfirmButton
-                      : styles.deactivateConfirmButton,
-                  ]}
-                  disabled={isUpdatingStatus}
-                >
-                  {isUpdatingStatus ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.statusConfirmButtonText}>
-                      {editingBranch.is_active === false ? 'Reactivate branch' : 'Deactivate branch'}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            )}
-
             <View style={styles.modalButtons}>
 
               <TouchableOpacity
@@ -486,6 +463,33 @@ const BranchAccountManager = () => {
               </TouchableOpacity>
 
             </View>
+
+            {editingBranch && (
+              <TouchableOpacity
+                onPress={toggleEditingBranchStatus}
+                style={[
+                  editingBranch.is_active === false
+                    ? styles.reactivateBranchButton
+                    : styles.deactivateBranchButton,
+                  isUpdatingStatus && styles.buttonDisabled,
+                ]}
+                disabled={isUpdatingStatus}
+              >
+                {isUpdatingStatus ? (
+                  <ActivityIndicator color={editingBranch.is_active === false ? '#22c55e' : '#ef4444'} />
+                ) : (
+                  <Text
+                    style={
+                      editingBranch.is_active === false
+                        ? styles.reactivateBranchText
+                        : styles.deactivateBranchText
+                    }
+                  >
+                    {editingBranch.is_active === false ? 'Reactivate branch' : 'Deactivate branch'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
 
           </View>
 
@@ -808,15 +812,6 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingTop: 8,
   },
-  statusToggleContainer: {
-    paddingHorizontal: 24,
-    paddingBottom: 8,
-  },
-  statusToggleButton: {
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
   clearButton: {
     flex: 1,
     paddingVertical: 16,
@@ -837,23 +832,38 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: 0.3,
   },
-  deactivateConfirmButton: {
-    paddingVertical: 16,
+  deactivateBranchButton: {
+    marginHorizontal: 24,
+    marginBottom: 24,
+    paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: '#f97316',
+    borderWidth: 2,
+    borderColor: '#ef4444',
     alignItems: 'center',
   },
-  activateConfirmButton: {
-    paddingVertical: 16,
-    borderRadius: 12,
-    backgroundColor: '#22c55e',
-    alignItems: 'center',
-  },
-  statusConfirmButtonText: {
-    color: '#ffffff',
+  deactivateBranchText: {
+    color: '#ef4444',
     fontWeight: '700',
     fontSize: 16,
     letterSpacing: 0.3,
+  },
+  reactivateBranchButton: {
+    marginHorizontal: 24,
+    marginBottom: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#22c55e',
+    alignItems: 'center',
+  },
+  reactivateBranchText: {
+    color: '#22c55e',
+    fontWeight: '700',
+    fontSize: 16,
+    letterSpacing: 0.3,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   confirmButton: {
     flex: 1,
