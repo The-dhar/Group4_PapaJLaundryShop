@@ -186,30 +186,69 @@ function openAndAutoPrintPdf(doc) {
     // continue with manual print trigger fallback
   }
 
-  const blobUrl = doc.output('bloburl');
-  const printWindow = window.open(blobUrl, '_blank');
+  const blob = doc.output('blob');
+  const blobUrl = URL.createObjectURL(blob);
 
-  if (!printWindow) {
-    Swal.fire({
-      title: 'Popup blocked',
-      text: 'Allow popups to auto-print the receipt.',
-      icon: 'info',
-      width: 420,
-    });
-    return;
-  }
+  const frame = document.createElement('iframe');
+  frame.style.position = 'fixed';
+  frame.style.right = '0';
+  frame.style.bottom = '0';
+  frame.style.width = '0';
+  frame.style.height = '0';
+  frame.style.border = '0';
+  frame.setAttribute('aria-hidden', 'true');
 
-  const tryPrint = () => {
+  let loaded = false;
+  let printed = false;
+
+  const printFromFrame = () => {
+    if (printed) return;
+    printed = true;
     try {
-      printWindow.focus();
-      printWindow.print();
+      const target = frame.contentWindow;
+      target?.focus();
+      target?.print();
     } catch {
-      // Browser PDF viewer may still use embedded print action from autoPrint.
+      // ignore print errors; fallback is handled below
     }
   };
 
-  setTimeout(tryPrint, 450);
-  setTimeout(tryPrint, 1300);
+  const cleanup = () => {
+    setTimeout(() => {
+      try {
+        URL.revokeObjectURL(blobUrl);
+      } catch {
+        // ignore
+      }
+      if (frame.parentNode) {
+        frame.parentNode.removeChild(frame);
+      }
+    }, 4000);
+  };
+
+  frame.onload = () => {
+    loaded = true;
+    setTimeout(printFromFrame, 220);
+    setTimeout(cleanup, 5000);
+  };
+
+  document.body.appendChild(frame);
+  frame.src = blobUrl;
+
+  // If embedded PDF never loads in the hidden iframe, fallback to a visible tab.
+  setTimeout(() => {
+    if (loaded || printed) return;
+    const popup = window.open(blobUrl, '_blank');
+    if (!popup) {
+      Swal.fire({
+        title: 'Print preview blocked',
+        text: 'Please allow popups, then try printing again.',
+        icon: 'info',
+        width: 420,
+      });
+    }
+    cleanup();
+  }, 2600);
 }
 
 const POs = () => {
@@ -1126,6 +1165,7 @@ const POs = () => {
         setIsSaving(false);
         return;
       }
+
       const newTransaction = await createTransaction({
         customer_name: fullName,
         customer_first_name: firstName.trim(),
@@ -1152,7 +1192,12 @@ const POs = () => {
       });
 
       printThermalReceipt(newTransaction);
-      Swal.fire({ title: "Transaction Saved!", icon: "success", width: 350 });
+      Swal.fire({
+        title: "Transaction Saved!",
+        text: "Print dialog should open automatically.",
+        icon: "success",
+        width: 400,
+      });
       resetForm();
     } catch (error) {
       Swal.fire({

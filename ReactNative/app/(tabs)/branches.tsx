@@ -352,8 +352,7 @@ const BranchAccountManager = () => {
                               }}
                               style={styles.editButtonInline}
                             >
-                              <Ionicons name="create-outline" size={14} color="#fff" />
-                              <Text style={styles.editButtonInlineText}>Edit</Text>
+                              <Ionicons name="create-outline" size={16} color="#fff" />
                             </TouchableOpacity>
                           </View>
                         </View>
@@ -689,18 +688,12 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   editButtonInline: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
+    width: 34,
+    height: 34,
     backgroundColor: '#f59e0b',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
     borderRadius: 10,
-  },
-  editButtonInlineText: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   branchUsername: {
     fontSize: 13,

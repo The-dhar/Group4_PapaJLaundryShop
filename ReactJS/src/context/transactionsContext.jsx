@@ -25,6 +25,32 @@ function isTodayInputDate(value) {
   return raw === today;
 }
 
+function sanitizeDateOnly(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+
+  const ymd = raw.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+    return ymd;
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return '';
+
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function sanitizeDateTime(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toISOString();
+}
+
 const normalizeTransaction = (txn) => {
   const services = Array.isArray(txn.receipt_items)
     ? txn.receipt_items.map((item) => ({
@@ -50,6 +76,11 @@ const normalizeTransaction = (txn) => {
     penalty: penaltyAmount,
     penalty_suggested_amount: penaltySuggestedAmount,
     penalty_override_reason: txn.penalty_override_reason || "",
+    due_date: sanitizeDateOnly(txn.due_date),
+    created_at:
+      sanitizeDateTime(txn.created_at) ||
+      sanitizeDateTime(txn.updated_at) ||
+      '',
     weight: txn.total_weight ?? txn.weight ?? 0,
     services,
   };
@@ -239,9 +270,9 @@ export const TransactionsProvider = ({ children }) => {
         payment_status: result.payment_status ?? payment_status ?? "unpaid",
         payment_method: result.payment_method ?? payment_method ?? "",
         inventory_status: result.inventory_status ?? "in_shop",
-        due_date: result.due_date ?? due_date,
+        due_date: sanitizeDateOnly(result.due_date ?? due_date),
         archived: false,
-        created_at: result.created_at ?? new Date().toISOString(),
+        created_at: sanitizeDateTime(result.created_at) || new Date().toISOString(),
         receipt_items: Array.isArray(result.receipt_items) && result.receipt_items.length > 0
           ? result.receipt_items
           : (services || []).map((s, idx) => ({
