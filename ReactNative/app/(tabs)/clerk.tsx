@@ -55,9 +55,8 @@ function toDateMaybe(value: unknown): Date | null {
   const raw = String(value ?? "").trim();
   if (!raw || raw === "—") return null;
 
-  const ymd = raw.slice(0, 10);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
-    return parseYmdToDate(ymd);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return parseYmdToDate(raw);
   }
 
   const parsed = new Date(raw);
@@ -334,21 +333,36 @@ function buildClerkLogsXlsxBytes(
   const wb = XLSX.utils.book_new();
 
   const summaryData = [
-    ["Papa J's Laundry Shop"],
-    ["Clerk Logs Export"],
+    ["CLERK LOGS EXPORT", "", "", "", "", ""],
+    [`Generated: ${context.generated_at}`, "", "", "", "", ""],
+    [`Requested by: ${context.requested_by}`, "", "", "", "", ""],
+    [`Branch: ${context.branch_label}`, "", "", "", "", ""],
+    [`Date range: ${context.date_range_label}`, "", "", "", "", ""],
     [],
-    ["Generated at", context.generated_at],
-    ["Requested by", context.requested_by],
-    ["Branch", context.branch_label],
-    ["Date range", context.date_range_label],
-    ["Payment filter", context.payment_label],
-    ["Inventory filter", context.inventory_label],
-    ["Include archived", context.include_archived_label],
-    ["Exported rows", String(context.total_rows)],
-    ["Total amount", context.total_amount],
+    ["SUMMARY", "", "", "", "", ""],
+    ["Total exported rows", String(context.total_rows), "", "", "", ""],
+    ["Total exported amount (PHP)", Number(context.total_amount || 0).toFixed(2), "", "", "", ""],
+    ["Payment filter", context.payment_label, "", "", "", ""],
+    ["Inventory filter", context.inventory_label, "", "", "", ""],
+    ["Include archived", context.include_archived_label, "", "", "", ""],
   ];
   const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-  summarySheet["!cols"] = [{ wch: 24 }, { wch: 42 }];
+  summarySheet["!cols"] = [
+    { wch: 34 },
+    { wch: 26 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 18 },
+  ];
+  summarySheet["!merges"] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } },
+    { s: { r: 2, c: 0 }, e: { r: 2, c: 5 } },
+    { s: { r: 3, c: 0 }, e: { r: 3, c: 5 } },
+    { s: { r: 4, c: 0 }, e: { r: 4, c: 5 } },
+    { s: { r: 6, c: 0 }, e: { r: 6, c: 5 } },
+  ];
   XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
 
   const txnHeader = [

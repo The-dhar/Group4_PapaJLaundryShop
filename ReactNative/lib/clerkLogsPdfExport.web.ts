@@ -60,7 +60,7 @@ function buildClerkLogsPdfBytes(
 
   const pageWidth = doc.internal.pageSize.getWidth();
 
-  let tableTop = 130;
+  let tableTop = 146;
   if (logoDataUrl) {
     try {
       doc.addImage(logoDataUrl, "PNG", 24, 20, 28, 28);
@@ -84,18 +84,38 @@ function buildClerkLogsPdfBytes(
   doc.text(`Payment: ${context.payment_label}`, 510, 76);
   doc.text(`Inventory: ${context.inventory_label}`, 510, 88);
   doc.text(`Include archived: ${context.include_archived_label}`, 510, 100);
-  doc.text(`Rows: ${context.total_rows}`, 24, 100);
-  doc.text(`Total amount: ₱${Number(context.total_amount || 0).toFixed(2)}`, 250, 100);
+  doc.text("All rows matching the active filters are included.", 24, 100);
 
   doc.setDrawColor(226, 232, 240);
   doc.line(24, 112, pageWidth - 24, 112);
+
+  const summaryTop = 118;
+  const cardW = 138;
+  const cardH = 24;
+  const cardGap = 10;
+  const totalAmountText = `PHP ${Number(context.total_amount || 0).toFixed(2)}`;
+
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.rect(24, summaryTop, cardW, cardH, "FD");
+  doc.rect(24 + cardW + cardGap, summaryTop, cardW, cardH, "FD");
+
+  doc.setFontSize(8);
+  doc.setTextColor(71, 85, 105);
+  doc.text("Total Exported Rows", 28, summaryTop + 7);
+  doc.text("Total Exported Amount", 28 + cardW + cardGap, summaryTop + 7);
+
+  doc.setFontSize(15);
+  doc.setTextColor(15, 23, 42);
+  doc.text(String(context.total_rows), 28, summaryTop + 18);
+  doc.text(totalAmountText, 28 + cardW + cardGap, summaryTop + 18);
 
   autoTable(doc, {
     head: [["#", "Receipt ID", "Created", "Due", "Customer", "Clerk", "Branch", "Payment", "Inventory", "Amount (PHP)"]],
     body: rows.map((r) => [
       String(r.row_no),
       r.receipt_id,
-      r.created_at,
+      r.created_at.slice(0, 16).replace("T", " "),
       r.due_date,
       r.customer_name,
       r.clerk_name,

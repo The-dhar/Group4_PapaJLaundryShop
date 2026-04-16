@@ -60,9 +60,11 @@ function buildPrintHtml(
   h2 { margin: 0 0 8px; font-size: 16px; }
   .meta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; margin-bottom: 10px; font-size: 10px; color: #334155; }
   .meta-grid strong { color: #0f172a; }
-  .summary { margin-bottom: 12px; padding: 8px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
-  .summary-title { margin: 0 0 4px; font-size: 11px; font-weight: 700; color: #0f172a; }
-  .summary-row { margin: 0; color: #334155; }
+  .summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .summary-card { border: 1px solid #cbd5e1; border-radius: 10px; background: #f8fafc; padding: 8px 10px; }
+  .summary-card-k { margin: 0 0 3px; font-size: 10px; color: #475569; }
+  .summary-card-v { margin: 0; font-size: 16px; font-weight: 800; color: #0f172a; }
+  .summary-note { margin: 0 0 12px; color: #475569; font-size: 10px; }
   table { width: 100%; border-collapse: collapse; }
   th, td { border: 1px solid #e2e8f0; padding: 6px 4px; text-align: left; }
   th { background: #f1f5f9; font-weight: 600; }
@@ -86,10 +88,17 @@ function buildPrintHtml(
   <div><strong>Include archived:</strong> ${escapeHtml(context.include_archived_label)}</div>
   <div><strong>Rows:</strong> ${escapeHtml(String(context.total_rows))}</div>
 </div>
-<div class="summary">
-  <p class="summary-title">Summary</p>
-  <p class="summary-row">Total exported amount: ${escapeHtml(`₱${Number(context.total_amount || 0).toFixed(2)}`)}</p>
+<div class="summary-grid">
+  <div class="summary-card">
+    <p class="summary-card-k">Total exported rows</p>
+    <p class="summary-card-v">${escapeHtml(String(context.total_rows))}</p>
+  </div>
+  <div class="summary-card">
+    <p class="summary-card-k">Total exported amount</p>
+    <p class="summary-card-v">${escapeHtml(`₱${Number(context.total_amount || 0).toFixed(2)}`)}</p>
+  </div>
 </div>
+<p class="summary-note">This file contains all rows matching the active filters at export time.</p>
 <table><thead>${header}</thead><tbody>${body}</tbody></table>
 </body></html>`;
 }
