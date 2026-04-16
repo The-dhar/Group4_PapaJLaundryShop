@@ -97,7 +97,7 @@ export const TransactionsProvider = ({ children }) => {
   const fetchTransactions = useCallback(async () => {
     try {
       const token = localStorage.getItem("token");
-      if (!token) return;
+      if (!token) return [];
 
       const res = await fetch(`${API_URL}/transactions?include_archived=1`, {
         headers: {
@@ -108,22 +108,25 @@ export const TransactionsProvider = ({ children }) => {
 
       if (res.status === 401 || res.status === 403) {
         setTransactions([]);
-        return;
+        return [];
       }
 
       if (!res.ok) {
-        return;
+        return [];
       }
 
       const contentType = String(res.headers.get("content-type") || "").toLowerCase();
       if (!contentType.includes("application/json")) {
-        return;
+        return [];
       }
 
       const data = await res.json();
-      setTransactions(Array.isArray(data) ? data.map(normalizeTransaction) : []);
+      const list = Array.isArray(data) ? data.map(normalizeTransaction) : [];
+      setTransactions(list);
+      return list;
     } catch (error) {
       console.error("Error fetching transactions:", error);
+      return [];
     }
   }, []);
 

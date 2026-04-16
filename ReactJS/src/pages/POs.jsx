@@ -37,6 +37,65 @@ function buildFullName(first, middle, last) {
     .join(' ');
 }
 
+/** Normalize for comparing first/last name (case-insensitive, trim, collapse spaces). */
+function normalizePersonNamePart(s) {
+  return String(s || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+function transactionOutstandingBalance(t) {
+  if (t.archived) return 0;
+  if (String(t.payment_status || '').toLowerCase() === 'paid') return 0;
+  const amt = Number(t.amount) || 0;
+  const paid = Number(t.paid_amount) || 0;
+  return Math.max(0, amt - paid);
+}
+
+function transactionNameFirstLastForMatch(t) {
+  const cf = t.customer_first_name;
+  const cl = t.customer_last_name;
+  if (
+    cf != null &&
+    String(cf).trim() !== '' &&
+    cl != null &&
+    String(cl).trim() !== ''
+  ) {
+    return {
+      first: normalizePersonNamePart(cf),
+      last: normalizePersonNamePart(cl),
+    };
+  }
+  const sp = splitFullName(t.customer_name);
+  return {
+    first: normalizePersonNamePart(sp.first),
+    last: normalizePersonNamePart(sp.last),
+  };
+}
+
+/**
+ * Block new POS orders if the same customer (first + last name) already has an unpaid balance at this branch.
+ */
+function findBlockingUnpaidTransaction(transactionsList, firstName, lastName, branchId) {
+  const nf = normalizePersonNamePart(firstName);
+  const nl = normalizePersonNamePart(lastName);
+  if (!nf || !nl) return null;
+  if (branchId == null || branchId === '') return null;
+
+  for (const t of transactionsList || []) {
+    if (t.archived) continue;
+    if (transactionOutstandingBalance(t) <= 0.005) continue;
+    if (String(t.branch_id ?? '') !== String(branchId)) continue;
+
+    const { first, last } = transactionNameFirstLastForMatch(t);
+    if (first === nf && last === nl) {
+      return t;
+    }
+  }
+  return null;
+}
+
 /** Split POS address string "street, barangay, city" */
 function splitAddressLine(address) {
   const raw = String(address || '').trim();
@@ -252,7 +311,7 @@ function openAndAutoPrintPdf(doc) {
 }
 
 const POs = () => {
-  const { createTransaction, transactions } = useTransactions();
+  const { createTransaction, transactions, fetchTransactions } = useTransactions();
 
   const [sessionUser, setSessionUser] = useState(() => getUserFromStorage());
   const [branches, setBranches] = useState([]);
@@ -1161,6 +1220,27 @@ const POs = () => {
           text: 'Choose which branch this sale belongs to.',
           icon: 'warning',
           width: 350,
+        });
+        setIsSaving(false);
+        return;
+      }
+
+      const posBranchId =
+        sessionUser?.role === 'owner' ? ownerBranchId : sessionUser?.branch?.id ?? null;
+      const freshList = await fetchTransactions();
+      const listForCheck = Array.isArray(freshList) ? freshList : transactions;
+      const blocking = findBlockingUnpaidTransaction(listForCheck, firstName, lastName, posBranchId);
+      if (blocking) {
+        const receiptLabel = blocking.receipt || `TXN-${blocking.id}`;
+        const bal = transactionOutstandingBalance(blocking);
+        Swal.fire({
+          title: 'Unpaid previous order',
+          html: `This customer still has an unpaid balance of <strong>P${bal.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}</strong> on receipt <strong>${receiptLabel}</strong>. Please settle that transaction before creating a new one.`,
+          icon: 'warning',
+          width: 440,
         });
         setIsSaving(false);
         return;
