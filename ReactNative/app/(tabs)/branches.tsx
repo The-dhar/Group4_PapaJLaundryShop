@@ -601,6 +601,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
     alignItems: 'center',
+    justifyContent: 'flex-start',
   },
   sortButton: {
     flexDirection: 'row',

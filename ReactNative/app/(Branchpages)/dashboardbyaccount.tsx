@@ -409,7 +409,9 @@ const styles = StyleSheet.create({
   revenueHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    gap: 12,
     marginBottom: 20,
   },
 
@@ -422,7 +424,10 @@ const styles = StyleSheet.create({
 
   filterRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
     gap: 8,
+    minWidth: 0,
   },
 
   filterButton: {

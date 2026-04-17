@@ -71,6 +71,16 @@ function mondayOfCalendarWeek(d: Date): Date {
   return copy;
 }
 
+function formatBranchLabel(name: unknown): string {
+  return String(name || "")
+    .replace(/[-_]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z])([A-Z][a-z])/g, "$1 $2")
+    .replace(/([.\/,:;!?])(\S)/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 type PeriodPreset = "weekly" | "monthly" | "yearly" | "range";
 
 function rangeForPreset(preset: Exclude<PeriodPreset, "range">): [string, string] {
@@ -97,9 +107,13 @@ const chartWidth = screenWidth - chartPadding;
 
 // Responsive chart width helper: ensures enough horizontal space for x-axis labels on small screens
 const getResponsiveChartWidth = (labels: string[]) => {
-  const perLabel = isSmallScreen ? 36 : 56; // pixels per label
-  const computed = labels.length * perLabel + 80; // extra padding
-  return Math.max(chartWidth, computed);
+  const basePadding = 100;
+  const estimated = labels.reduce((sum, label) => {
+    const len = label.length;
+    const widthPerChar = isSmallScreen ? 10 : 8;
+    return sum + Math.max(len * widthPerChar, isSmallScreen ? 50 : 80);
+  }, 0);
+  return Math.max(chartWidth, estimated + basePadding);
 };
 
 export default function DashboardAnalytics() {
@@ -220,7 +234,7 @@ export default function DashboardAnalytics() {
   const currentLabels = dailyRevenue.labels;
   const currentRevenue = dailyRevenue.values;
 
-  const branchNames = branches.map((b) => b.name);
+  const branchNames = branches.map((b) => formatBranchLabel(b.name));
   const currentBranchLabels = branchNames.length > 0 ? branchNames : ["No Branches"];
 
   const currentBranchValues = useMemo(() => {
@@ -764,7 +778,7 @@ export default function DashboardAnalytics() {
         {/* OVERALL DISPUTES (ALL BRANCHES) */}
         <View style={styles.chartBox}>
           <View style={styles.disputeHeaderRow}>
-            <Text style={styles.chartTitle}>Disputes (All Branches)</Text>
+            <Text style={styles.chartTitle}>Disputes</Text>
             <View style={styles.disputeTypeRow}>
               <TouchableOpacity
                 style={[styles.disputeTypeChip, disputeChartType === "refund" && styles.disputeTypeChipActive]}
@@ -1091,12 +1105,16 @@ const styles = StyleSheet.create({
   disputeHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
     marginBottom: 8,
     gap: 10,
   },
   disputeTypeRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "flex-end",
     gap: 8,
   },
   disputeTypeChip: {
@@ -1118,6 +1136,7 @@ const styles = StyleSheet.create({
   },
   disputeKpiRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
     marginBottom: 8,
   },

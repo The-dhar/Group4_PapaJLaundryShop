@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState, useEffect } from "react";
 import {
   Modal,
   ScrollView,
@@ -26,6 +26,11 @@ type TransactionRow = {
   due_date: string;
   branch_name: string;
   created_by_name: string;
+  subtotal?: number;
+  vat?: number;
+  discount?: number;
+  payment_received?: number;
+  total?: number;
 };
 
 const getPaymentColor = (status: string) =>
@@ -41,6 +46,11 @@ export default function TransactionDeviceList() {
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
+  const [showAmountDetails, setShowAmountDetails] = useState(false);
+
+  useEffect(() => {
+    setShowAmountDetails(false);
+  }, [selected]);
 
   const totalPages = Math.max(1, Math.ceil(transactions.length / ROWS_PER_PAGE));
   const startIndex = (page - 1) * ROWS_PER_PAGE;
@@ -75,7 +85,12 @@ export default function TransactionDeviceList() {
           customer_name: String(txn.customer_name || "Unknown"),
           payment_status: String(txn.payment_status || "unpaid"),
           inventory_status: String(txn.inventory_status || "in_shop"),
-          amount: Number(txn.amount || 0),
+          amount: Number(txn.amount ?? txn.total ?? 0),
+          subtotal: Number(txn.subtotal ?? txn.sub_total ?? 0),
+          vat: Number(txn.vat ?? txn.tax ?? 0),
+          discount: Number(txn.discount ?? 0),
+          payment_received: Number(txn.payment_received ?? txn.amount_paid ?? txn.paid_amount ?? txn.paid ?? 0),
+          total: Number(txn.total ?? txn.amount ?? 0),
           due_date: String(txn.due_date || "N/A"),
           branch_name: String(txn.branch_name || "Unknown branch"),
           created_by_name: String(txn.created_by_name || "Unknown creator"),
@@ -99,7 +114,7 @@ export default function TransactionDeviceList() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={{ flex: 1 }}>
+      <ScrollView style={{ flex: 1 }} scrollEnabled={true}>
         <View style={styles.container}>
           <View style={styles.header}>
             <View style={styles.headerContent}>
@@ -113,58 +128,43 @@ export default function TransactionDeviceList() {
           </View>
 
           <View style={styles.tableContainer}>
-            <View style={styles.tableHeader}>
-              <Text style={styles.colReceipt}>Receipt</Text>
-              <Text style={styles.colName}>Customer</Text>
-              <Text style={styles.colAmt}>Amount</Text>
-              <Text style={styles.colStatus}>Status</Text>
-              <Text style={styles.colAction}>Action</Text>
-            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.tableInner}>
+                <View style={styles.tableHeader}>
+                  <Text style={styles.colReceipt}>Receipt</Text>
+                  <Text style={styles.colName}>Customer</Text>
+                  <Text style={styles.colAmt}>Amount</Text>
+                </View>
 
-            <View style={styles.tableBody}>
-              {pageData.map((item, index) => (
-                <View
-                  key={item.id}
-                  style={[
-                    styles.tableRow,
-                    index < pageData.length - 1 && styles.rowDivider,
-                  ]}
-                >
-                  <Text style={styles.colReceiptText}>{item.receipt}</Text>
-                  <Text style={styles.colNameText}>{item.customer_name}</Text>
-                  <Text style={styles.colAmtText}>P {item.amount.toFixed(2)}</Text>
-
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      { backgroundColor: getPaymentColor(item.payment_status) + "20" },
-                    ]}
-                  >
-                    <Text
+                <View style={styles.tableBody}>
+                  {pageData.map((item, index) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      activeOpacity={0.6}
+                      onPress={() => setSelected(item)}
                       style={[
-                        styles.statusText,
-                        { color: getPaymentColor(item.payment_status) },
+                        styles.tableRow,
+                        index < pageData.length - 1 && styles.rowDivider,
                       ]}
                     >
-                      {item.payment_status.toUpperCase()}
-                    </Text>
-                  </View>
-
-                  <View style={styles.colActionContainer}>
-                    <TouchableOpacity
-                      style={styles.actionBtn}
-                      onPress={() => setSelected(item)}
-                    >
-                      <Ionicons name="eye-outline" size={20} color="#1e293b" />
+                      <View
+                        style={[
+                          styles.statusIndicator,
+                          { backgroundColor: getPaymentColor(item.payment_status) },
+                        ]}
+                      />
+                      <Text style={styles.colReceiptText}>{item.receipt}</Text>
+                      <Text style={styles.colNameText}>{item.customer_name}</Text>
+                      <Text style={styles.colAmtText}>₱{item.amount.toFixed(2)}</Text>
                     </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
+                  ))}
 
-              {pageData.length === 0 && !isLoading && (
-                <Text style={styles.emptyText}>No transactions found.</Text>
-              )}
-            </View>
+                  {pageData.length === 0 && !isLoading && (
+                    <Text style={styles.emptyText}>No transactions found.</Text>
+                  )}
+                </View>
+              </View>
+            </ScrollView>
 
             <View style={styles.pagination}>
               <TouchableOpacity
@@ -234,10 +234,44 @@ export default function TransactionDeviceList() {
                         <Text style={styles.modalLabel}>Created By:</Text>
                         <Text style={styles.modalValue}>{selected.created_by_name}</Text>
                       </View>
-                      <View style={styles.modalRow}>
+                      <TouchableOpacity
+                        style={styles.modalRow}
+                        activeOpacity={0.8}
+                        onPress={() => setShowAmountDetails((s) => !s)}
+                      >
                         <Text style={styles.modalLabel}>Amount:</Text>
-                        <Text style={styles.modalValue}>P {selected.amount.toFixed(2)}</Text>
-                      </View>
+                        <View style={{ flexDirection: "row", alignItems: "center" }}>
+                          <Text style={styles.modalValue}>₱{selected.amount.toFixed(2)}</Text>
+                          <Ionicons
+                            name={showAmountDetails ? "chevron-up" : "chevron-down"}
+                            size={18}
+                            color="#64748b"
+                            style={{ marginLeft: 8 }}
+                          />
+                        </View>
+                      </TouchableOpacity>
+                      {showAmountDetails && (
+                        <View style={styles.modalBreakdown}>
+                          <View style={styles.modalBreakdownRow}>
+                            <Text style={styles.modalBreakdownLabel}>Subtotal</Text>
+                            <Text style={styles.modalBreakdownValue}>
+                              ₱{((selected.subtotal ?? (selected.amount - (selected.vat ?? 0) + (selected.discount ?? 0))) || 0).toFixed(2)}
+                            </Text>
+                          </View>
+                          <View style={styles.modalBreakdownRow}>
+                            <Text style={styles.modalBreakdownLabel}>VAT</Text>
+                            <Text style={styles.modalBreakdownValue}>₱{(selected.vat ?? 0).toFixed(2)}</Text>
+                          </View>
+                          <View style={styles.modalBreakdownRow}>
+                            <Text style={styles.modalBreakdownLabel}>Discount</Text>
+                            <Text style={styles.modalBreakdownValue}>₱{(selected.discount ?? 0).toFixed(2)}</Text>
+                          </View>
+                          <View style={styles.modalBreakdownRow}>
+                            <Text style={styles.modalBreakdownLabel}>Payment Received</Text>
+                            <Text style={styles.modalBreakdownValue}>₱{(selected.payment_received ?? 0).toFixed(2)}</Text>
+                          </View>
+                        </View>
+                      )}
                       <View style={styles.modalRow}>
                         <Text style={styles.modalLabel}>Payment:</Text>
                         <View
@@ -345,35 +379,43 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 12,
   },
+  tableInner: {
+    minWidth: "100%",
+  },
   tableHeader: {
     flexDirection: "row",
-    paddingVertical: 18,
-    paddingHorizontal: 20,
+    paddingVertical: 11,
+    paddingHorizontal: 0,
+    paddingLeft: 12,
     backgroundColor: "#f8fafc",
     borderBottomWidth: 2,
     borderBottomColor: "#e2e8f0",
+    gap: 11,
+    alignItems: "center",
   },
   tableBody: { paddingVertical: 8 },
   tableRow: {
     flexDirection: "row",
-    paddingVertical: 18,
-    paddingHorizontal: 20,
+    paddingVertical: 13,
+    paddingHorizontal: 12,
+    paddingLeft: 0,
     alignItems: "center",
     backgroundColor: "#ffffff",
+    gap: 11,
+  },
+  statusIndicator: {
+    width: 3,
+    height: "100%",
+    minHeight: 55,
+    borderRadius: 0,
   },
   rowDivider: { borderBottomWidth: 1, borderBottomColor: "#e2e8f0" },
-  colReceipt: { width: "25%", fontWeight: "700", fontSize: 13, color: "#475569" },
-  colName: { width: "30%", fontWeight: "700", fontSize: 13, color: "#475569" },
-  colAmt: { width: "18%", fontWeight: "700", fontSize: 13, color: "#475569" },
-  colStatus: { width: "17%", fontWeight: "700", fontSize: 13, color: "#475569" },
-  colAction: { width: "10%", fontWeight: "700", fontSize: 13, color: "#475569", textAlign: "center" },
-  colReceiptText: { width: "25%", fontSize: 12, color: "#1e293b", fontWeight: "600" },
-  colNameText: { width: "30%", fontSize: 12, color: "#1e293b", fontWeight: "500" },
-  colAmtText: { width: "18%", fontSize: 12, color: "#1e293b", fontWeight: "700" },
-  statusBadge: { width: "17%", paddingVertical: 6, borderRadius: 8, alignItems: "center" },
-  statusText: { fontSize: 10, fontWeight: "700", letterSpacing: 0.5 },
-  colActionContainer: { width: "10%", justifyContent: "center", alignItems: "center" },
-  actionBtn: { padding: 8, backgroundColor: "#f1f5f9", borderRadius: 10 },
+  colReceipt: { width: 98, fontWeight: "700", fontSize: 11, color: "#475569" },
+  colName: { width: 108, fontWeight: "700", fontSize: 11, color: "#475569" },
+  colAmt: { width: 90, fontWeight: "700", fontSize: 11, color: "#475569", textAlign: "right" },
+  colReceiptText: { width: 98, fontSize: 11, color: "#1e293b", fontWeight: "600" },
+  colNameText: { width: 108, fontSize: 11, color: "#1e293b", fontWeight: "500" },
+  colAmtText: { width: 90, fontSize: 12, color: "#1e293b", fontWeight: "700", textAlign: "right" },
   emptyText: {
     paddingVertical: 16,
     textAlign: "center",
@@ -454,4 +496,20 @@ const styles = StyleSheet.create({
   modalValue: { fontSize: 14, fontWeight: "700", color: "#1e293b" },
   modalStatusBadge: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8 },
   modalStatusText: { fontSize: 11, fontWeight: "700", letterSpacing: 0.5 },
+  modalBreakdown: {
+    paddingTop: 8,
+    paddingBottom: 12,
+    paddingHorizontal: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+    marginBottom: 8,
+  },
+  modalBreakdownRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 6,
+  },
+  modalBreakdownLabel: { fontSize: 12, color: "#64748b" },
+  modalBreakdownValue: { fontSize: 13, fontWeight: "700", color: "#1e293b" },
 });
