@@ -33,6 +33,7 @@ const BranchAccountManager = () => {
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoadingBranches, setIsLoadingBranches] = useState(true);
+  const [staffUsers, setStaffUsers] = useState<any[]>([]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [branchName, setBranchName] = useState('');
@@ -63,17 +64,17 @@ const BranchAccountManager = () => {
       }
 
       setIsLoadingBranches(true);
-      const response = await fetch(`${API_URL}/branches`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json"
-        }
-      });
+      const headers = { Authorization: `Bearer ${token}`, Accept: "application/json" };
+      const [branchesRes, staffRes] = await Promise.all([
+        fetch(`${API_URL}/branches`, { headers }),
+        fetch(`${API_URL}/staff-accounts`, { headers }).catch(() => ({ ok: false }))
+      ]);
 
-      if (!response.ok) return;
+      const brData = branchesRes.ok ? await branchesRes.json() : [];
+      const staffData = staffRes && staffRes.ok ? await staffRes.json() : [];
 
-      const data = await response.json();
-      setBranches(Array.isArray(data) ? data : []);
+      setBranches(Array.isArray(brData) ? brData : []);
+      setStaffUsers(Array.isArray(staffData) ? staffData : []);
     } catch (error) {
       console.log(error);
     } finally {
@@ -358,7 +359,20 @@ const BranchAccountManager = () => {
                         </View>
                         <Text style={styles.branchUsername} numberOfLines={1}>
                           {branch.is_active === false ? 'Inactive · ' : ''}
-                          Clerk label: {branch.clerk_username?.trim() ? `@${branch.clerk_username}` : '—'}
+                          Clerk: {
+                            (() => {
+                              // Try to resolve clerk to a staff account by username first
+                              const byUsername = staffUsers.find((s) =>
+                                String(s.username || "").toLowerCase() === String(branch.clerk_username || "").toLowerCase()
+                              );
+                              if (byUsername) return byUsername.name || `@${byUsername.username || branch.clerk_username}`;
+                              // Fallback: find staff assigned to this branch
+                              const byBranch = staffUsers.find((s) => Number(s.branch_id) === Number(branch.id));
+                              if (byBranch) return byBranch.name || `@${byBranch.username || byBranch.email?.split('@')[0]}`;
+                              // Last fallback: show clerk_username if present
+                              return branch.clerk_username?.trim() ? `@${branch.clerk_username}` : '—';
+                            })()
+                          }
                         </Text>
                       </View>
 

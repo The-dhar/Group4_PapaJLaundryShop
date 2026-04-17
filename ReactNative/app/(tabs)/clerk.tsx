@@ -21,7 +21,7 @@ import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Sharing from "expo-sharing";
 import { cacheDirectory, writeAsStringAsync } from "expo-file-system/legacy";
-import * as XLSX from "xlsx";
+// switched Excel -> CSV export; no XLSX needed
 import { API_URL } from "../../config/api";
 import type {
   ClerkLogPdfRow,
@@ -294,21 +294,11 @@ function applyClientFilters(
   });
 }
 
-function uint8ToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  if (typeof btoa !== "undefined") {
-    return btoa(binary);
-  }
-  const g = globalThis as unknown as {
-    Buffer?: { from: (data: Uint8Array) => { toString: (enc: string) => string } };
-  };
-  if (g.Buffer) {
-    return g.Buffer.from(Uint8Array.from(bytes)).toString("base64");
-  }
-  throw new Error("Base64 encoding is not available.");
+// helper: escape CSV field by doubling quotes and wrapping in quotes
+function csvEscape(value: unknown): string {
+  const s = value == null ? "" : String(value);
+  const escaped = s.replace(/"/g, '""');
+  return `"${escaped}"`;
 }
 
 function buildExportRows(rows: ClerkLog[]): ClerkLogPdfRow[] {
@@ -326,48 +316,29 @@ function buildExportRows(rows: ClerkLog[]): ClerkLogPdfRow[] {
   }));
 }
 
-function buildClerkLogsXlsxBytes(
-  rows: ClerkLogPdfRow[],
-  context: ClerkLogsExportContext
-): Uint8Array {
-  const wb = XLSX.utils.book_new();
+function buildClerkLogsCsvContent(rows: ClerkLogPdfRow[], context: ClerkLogsExportContext): string {
   const formattedTotalAmount = Number(context.total_amount || 0).toLocaleString("en-PH", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 
-  const summaryData = [
-    ["CLERK LOGS EXPORT", "", "", "", "", ""],
-    [`Generated: ${context.generated_at}`, "", "", "", "", ""],
-    [`Requested by: ${context.requested_by}`, "", "", "", "", ""],
-    [`Branch: ${context.branch_label}`, "", "", "", "", ""],
-    [`Date range: ${context.date_range_label}`, "", "", "", "", ""],
-    [],
-    ["SUMMARY", "", "", "", "", ""],
-    ["Total exported rows", String(context.total_rows), "", "", "", ""],
-    ["Total exported amount (₱)", `₱${formattedTotalAmount}`, "", "", "", ""],
-    ["Payment filter", context.payment_label, "", "", "", ""],
-    ["Inventory filter", context.inventory_label, "", "", "", ""],
-    ["Include archived", context.include_archived_label, "", "", "", ""],
-  ];
-  const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-  summarySheet["!cols"] = [
-    { wch: 34 },
-    { wch: 26 },
-    { wch: 18 },
-    { wch: 18 },
-    { wch: 18 },
-    { wch: 18 },
-  ];
-  summarySheet["!merges"] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } },
-    { s: { r: 2, c: 0 }, e: { r: 2, c: 5 } },
-    { s: { r: 3, c: 0 }, e: { r: 3, c: 5 } },
-    { s: { r: 4, c: 0 }, e: { r: 4, c: 5 } },
-    { s: { r: 6, c: 0 }, e: { r: 6, c: 5 } },
-  ];
-  XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
+  const lines: string[] = [];
+  lines.push(csvEscape("CLERK LOGS EXPORT"));
+  lines.push([csvEscape("Generated"), csvEscape(context.generated_at)].join(","));
+  lines.push([csvEscape("Requested by"), csvEscape(context.requested_by)].join(","));
+  lines.push([csvEscape("Branch"), csvEscape(context.branch_label)].join(","));
+  lines.push([csvEscape("Date range"), csvEscape(context.date_range_label)].join(","));
+  lines.push("");
+  lines.push(csvEscape("SUMMARY"));
+  lines.push([csvEscape("Total exported rows"), csvEscape(String(context.total_rows))].join(","));
+  lines.push([
+    csvEscape("Total exported amount (₱)"),
+    csvEscape(`₱${formattedTotalAmount}`),
+  ].join(","));
+  lines.push([csvEscape("Payment filter"), csvEscape(context.payment_label)].join(","));
+  lines.push([csvEscape("Inventory filter"), csvEscape(context.inventory_label)].join(","));
+  lines.push([csvEscape("Include archived"), csvEscape(context.include_archived_label)].join(","));
+  lines.push("");
 
   const txnHeader = [
     "#",
@@ -381,46 +352,30 @@ function buildClerkLogsXlsxBytes(
     "Inventory",
     "Amount (₱)",
   ];
-  const txnBody = rows.map((r) => [
-    r.row_no,
-    r.receipt_id,
-    r.created_at,
-    r.due_date,
-    r.customer_name,
-    r.clerk_name,
-    r.branch,
-    r.status,
-    r.inventory_status,
-    Number(r.amount) || 0,
-  ]);
-  const transactionsSheet = XLSX.utils.aoa_to_sheet([txnHeader, ...txnBody]);
-  transactionsSheet["!cols"] = [
-    { wch: 5 },
-    { wch: 16 },
-    { wch: 18 },
-    { wch: 12 },
-    { wch: 22 },
-    { wch: 20 },
-    { wch: 20 },
-    { wch: 12 },
-    { wch: 16 },
-    { wch: 14 },
-  ];
-  transactionsSheet["!autofilter"] = {
-    ref: `A1:J${Math.max(1, txnBody.length + 1)}`,
-  };
-  XLSX.utils.book_append_sheet(wb, transactionsSheet, "Transactions");
+  lines.push(txnHeader.map(csvEscape).join(","));
+  for (const r of rows) {
+    const row = [
+      csvEscape(r.row_no),
+      csvEscape(r.receipt_id),
+      csvEscape(r.created_at),
+      csvEscape(r.due_date),
+      csvEscape(r.customer_name),
+      csvEscape(r.clerk_name),
+      csvEscape(r.branch),
+      csvEscape(r.status),
+      csvEscape(r.inventory_status),
+      csvEscape(Number(r.amount) || 0),
+    ];
+    lines.push(row.join(","));
+  }
 
-  const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  return new Uint8Array(out);
+  // Prefix with BOM so Excel recognizes UTF-8 on Windows
+  const bom = "\uFEFF";
+  return bom + lines.join("\r\n");
 }
 
 /** Copy bytes into a plain `ArrayBuffer` for `Blob` (avoids SharedArrayBuffer typing issues). */
-function uint8ToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  const out = new ArrayBuffer(bytes.byteLength);
-  new Uint8Array(out).set(bytes);
-  return out;
-}
+// (keep downloadBlobWeb)
 
 function downloadBlobWeb(blob: Blob, filename: string) {
   if (typeof document === "undefined") return;
@@ -435,28 +390,22 @@ function downloadBlobWeb(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-async function exportClerkLogsExcel(rows: ClerkLogPdfRow[], context: ClerkLogsExportContext) {
-  const bytes = buildClerkLogsXlsxBytes(rows, context);
+async function exportClerkLogsCsv(rows: ClerkLogPdfRow[], context: ClerkLogsExportContext) {
+  const content = buildClerkLogsCsvContent(rows, context);
   const stamp = new Date().toISOString().slice(0, 10);
-  const filename = `clerk-logs-${stamp}.xlsx`;
+  const filename = `clerk-logs-${stamp}.csv`;
   if (Platform.OS === "web") {
-    downloadBlobWeb(
-      new Blob([uint8ToArrayBuffer(bytes)], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      }),
-      filename
-    );
+    downloadBlobWeb(new Blob([content], { type: "text/csv;charset=utf-8;" }), filename);
     return;
   }
   if (!cacheDirectory) {
     throw new Error("File storage is not available on this device.");
   }
   const uri = `${cacheDirectory}${filename}`;
-  await writeAsStringAsync(uri, uint8ToBase64(bytes), { encoding: "base64" });
+  await writeAsStringAsync(uri, content, { encoding: "utf8" });
   if (await Sharing.isAvailableAsync()) {
     await Sharing.shareAsync(uri, {
-      mimeType:
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      mimeType: "text/csv",
       dialogTitle: "Export Clerk Logs",
     });
   } else {
@@ -576,7 +525,7 @@ export default function ClerkLogsList() {
   );
 
   const runExport = useCallback(
-    async (kind: "excel" | "pdf") => {
+    async (kind: "csv" | "pdf") => {
       setExportMenuOpen(false);
       if (filteredLogs.length === 0) {
         Alert.alert("Nothing to export", "No transactions match your current filters.");
@@ -597,8 +546,8 @@ export default function ClerkLogsList() {
           total_amount: totalFilteredAmount,
         };
 
-        if (kind === "excel") {
-          await exportClerkLogsExcel(exportRows, exportContext);
+        if (kind === "csv") {
+          await exportClerkLogsCsv(exportRows, exportContext);
         } else {
           await exportClerkLogsPdf(exportRows, exportContext);
         }
@@ -798,14 +747,14 @@ export default function ClerkLogsList() {
             <Text style={styles.toolbarBtnText}>Filters</Text>
           </TouchableOpacity>
           <View style={styles.toolbarExportWrap}>
-            <TouchableOpacity
+              <TouchableOpacity
               style={styles.toolbarBtn}
               onPress={() => {
                 setOpen(false);
                 setExportMenuOpen((v) => !v);
               }}
               activeOpacity={0.7}
-              accessibilityLabel="Export, opens menu to choose Excel or PDF"
+              accessibilityLabel="Export, opens menu to choose CSV or PDF"
             >
               <Ionicons name="download-outline" size={20} color="#1e293b" />
               <Text style={styles.toolbarBtnText}>Export</Text>
@@ -825,11 +774,11 @@ export default function ClerkLogsList() {
               <View style={styles.exportDropdown}>
                 <TouchableOpacity
                   style={styles.exportDropdownItem}
-                  onPress={() => runExport("excel")}
+                  onPress={() => runExport("csv")}
                   activeOpacity={0.7}
                 >
                   <Ionicons name="document-text-outline" size={18} color="#1e293b" />
-                  <Text style={styles.exportDropdownText}>Excel (.xlsx)</Text>
+                  <Text style={styles.exportDropdownText}>CSV (.csv)</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.exportDropdownItem, styles.exportDropdownItemLast]}

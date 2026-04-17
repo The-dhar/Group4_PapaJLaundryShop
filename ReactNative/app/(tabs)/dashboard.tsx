@@ -578,7 +578,7 @@ export default function DashboardAnalytics() {
                 }}
               >
                 <Text style={{ color: "white", fontWeight: "700" }}>
-                  ₱{tooltipPos.value.toLocaleString()}
+                  ₱{Number(tooltipPos.value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Text>
               </View>
             )}
@@ -608,15 +608,15 @@ export default function DashboardAnalytics() {
                     propsForLabels: {
                       fontSize: isSmallScreen ? 10 : 12,
                     },
-                    formatYLabel: (y: string) => `₱${parseInt(y).toLocaleString()}`,
+                    formatYLabel: (y: string) => `₱${Number(y).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
                     propsForBackgroundLines: {
                       stroke: "#00000051",
                       strokeWidth: 1,
                     },
                   }}
                   bezier
-                  style={{ marginLeft: -20, borderRadius: 16 }}
-                  formatYLabel={(yValue) => `₱${parseInt(yValue).toLocaleString()}`}
+                  style={{ marginLeft: 20, borderRadius: 20 }}
+                  formatYLabel={(yValue) => `₱${Number(yValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   onDataPointClick={(data) => {
                     setTooltipPos({
                       x: data.x,
@@ -652,7 +652,7 @@ export default function DashboardAnalytics() {
                   }}
                 >
                   <Text style={{ color: "white", fontWeight: "700" }}>
-                    {branchTooltip.label}: ₱{branchTooltip.value.toLocaleString()}
+                    {branchTooltip.label}: ₱{Number(branchTooltip.value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Text>
                 </View>
               )}
@@ -686,11 +686,11 @@ export default function DashboardAnalytics() {
                         strokeWidth: 1,
                       },
                     }}
-                    formatYLabel={(yValue) => `₱${parseInt(yValue).toLocaleString()}`}
+                    formatYLabel={(yValue) => `₱${Number(yValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                     bezier
                     verticalLabelRotation={0}
                     fromZero={true}
-                    style={{ marginLeft: -20, borderRadius: 12, marginTop: 8 }}
+                    style={{ marginLeft: 16, borderRadius: 12, marginTop: 8 }}
                     onDataPointClick={(data) => {
                       setBranchTooltip({
                         x: data.x,
@@ -737,9 +737,9 @@ export default function DashboardAnalytics() {
                     strokeWidth: 1,
                   },
                 }}
-                formatYLabel={(yValue) => `₱${parseInt(yValue).toLocaleString()}`}
+                formatYLabel={(yValue) => `₱${Number(yValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 bezier
-                style={{ marginLeft: -20, borderRadius: 12, marginTop: 10 }}
+                style={{ marginLeft: 16, borderRadius: 12, marginTop: 10 }}
                 verticalLabelRotation={0}
                 fromZero={true}
                 segments={4}
@@ -767,8 +767,8 @@ export default function DashboardAnalytics() {
                   zIndex: 20,
                 }}
               >
-                <Text style={{ color: "white", fontWeight: "700" }}>
-                  {branchPerfTooltip.label}: ₱{branchPerfTooltip.value.toLocaleString()}
+                  <Text style={{ color: "white", fontWeight: "700" }}>
+                  {branchPerfTooltip.label}: ₱{Number(branchPerfTooltip.value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Text>
               </View>
             )}
@@ -807,7 +807,7 @@ export default function DashboardAnalytics() {
                 {disputeChartType === "refund" ? "Total Refund Amount (Est.)" : "Total Backjob Amount (Est.)"}
               </Text>
               <Text style={styles.disputeKpiValue}>
-                ₱{disputeKpiAmount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                ₱{disputeKpiAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </Text>
             </View>
             <View style={styles.disputeKpiCard}>
@@ -833,7 +833,7 @@ export default function DashboardAnalytics() {
                 }}
               >
                 <Text style={{ color: "white", fontWeight: "700" }}>
-                  {disputeTooltip.label}: ₱{disputeTooltip.value.toLocaleString()}
+                  {disputeTooltip.label}: ₱{Number(disputeTooltip.value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Text>
               </View>
             )}
@@ -866,10 +866,10 @@ export default function DashboardAnalytics() {
                       strokeWidth: 1,
                     },
                   }}
-                  formatYLabel={(yValue) => `₱${parseInt(yValue).toLocaleString()}`}
+                  formatYLabel={(yValue) => `₱${Number(yValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   bezier
                   fromZero
-                  style={{ marginLeft: -20, borderRadius: 12, marginTop: 8 }}
+                  style={{ marginLeft: 16, borderRadius: 12, marginTop: 8 }}
                   onDataPointClick={(data) => {
                     setDisputeTooltip({
                       x: data.x,

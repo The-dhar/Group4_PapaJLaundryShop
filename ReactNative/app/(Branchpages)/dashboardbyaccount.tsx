@@ -225,7 +225,7 @@ export default function RevenueDashboard() {
               {tooltipPos.visible && (
                 <View style={[styles.tooltip, { left: tooltipPos.x - 40, top: tooltipPos.y - 50 }]}>
                   <Text style={styles.tooltipText}>
-                    ₱{tooltipPos.value.toLocaleString()}
+                    ₱{Number(tooltipPos.value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Text>
                 </View>
               )}
@@ -244,7 +244,7 @@ export default function RevenueDashboard() {
                   backgroundColor: "#ffffff",
                   backgroundGradientFrom: "#ffffff",
                   backgroundGradientTo: "#ffffff",
-                  decimalPlaces: 0,
+                  decimalPlaces: 2,
                   color: () => `rgba(59, 130, 246, 1)`,
                   labelColor: () => `#64748b`,
                   propsForBackgroundLines: { stroke: "#e2e8f0", strokeWidth: 1 },
@@ -252,9 +252,11 @@ export default function RevenueDashboard() {
                     r: "5",
                     strokeWidth: "2",
                     stroke: "#3b82f6"
-                  }
+                  },
+                  formatYLabel: (y: string) => `₱${Number(y).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                 }}
                 bezier
+                formatYLabel={(yValue) => `₱${Number(yValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 style={styles.chart}
                 onDataPointClick={(data) => setTooltipPos({ x: data.x, y: data.y, value: data.value, visible: true })}
               />
