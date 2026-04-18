@@ -128,6 +128,14 @@ export default function RevenueDashboard() {
     return yearlyData;
   }, [receipts]);
 
+  const recentReceiptsForTable = useMemo(
+    () =>
+      [...receipts]
+        .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+        .slice(0, 5),
+    [receipts]
+  );
+
   const currentRevenue = revenueView === "weekly" ? weeklyRevenueData : monthlyRevenueData;
   const currentLabels = revenueView === "weekly" 
     ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] 
@@ -280,10 +288,10 @@ export default function RevenueDashboard() {
           </View>
 
           {/* Table Rows */}
-          {receipts?.map((r, i) => (
+          {recentReceiptsForTable.map((r, i) => (
             <View
               key={String(r.id)}
-              style={[styles.tableRow, i !== receipts.length - 1 && styles.tableRowBorder]}
+              style={[styles.tableRow, i !== recentReceiptsForTable.length - 1 && styles.tableRowBorder]}
             >
               <Text style={[styles.tableCell, { flex: 1 }]}>{r.receipt || r.id}</Text>
               <Text style={[styles.tableCell, { flex: 2 }]}>{r.customer_name || 'Unknown'}</Text>

@@ -2,7 +2,6 @@
  * CSV + PDF export for the Report page (same data as on-screen filters).
  */
 import { jsPDF } from 'jspdf';
-import * as XLSX from 'xlsx';
 
 function escapeCsvCell(val) {
   const s = String(val ?? '');
@@ -14,22 +13,32 @@ function csvRow(cells) {
   return cells.map(escapeCsvCell).join(',');
 }
 
-function uint8ToArrayBuffer(bytes) {
-  const out = new ArrayBuffer(bytes.byteLength);
-  new Uint8Array(out).set(bytes);
-  return out;
+/** Full-width separator row (reads as one column in Excel). */
+function csvRuleLine() {
+  return csvRow(['------------------------------------------------------------']);
 }
 
-function downloadBlobWeb(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.rel = 'noopener';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+function fmtIsoReadable(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
+  } catch {
+    return '—';
+  }
+}
+
+function fmtDateInput(ymd) {
+  const s = String(ymd || '').trim();
+  if (!s) return '—';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  try {
+    const d = new Date(`${s}T12:00:00`);
+    return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-PH', { dateStyle: 'medium' });
+  } catch {
+    return '—';
+  }
 }
 
 async function fetchImageAsDataUrl(url) {
@@ -67,6 +76,10 @@ export function buildAnalyticsCsv(payload) {
     branchName,
     branchId,
     viewTypeLabel,
+    rangeStartDate = '',
+    rangeEndDate = '',
+    viewWindowStartIso = '',
+    viewWindowEndIso = '',
     paidTotal,
     totalRevenue,
     unpaidAmountTotal = 0,
@@ -84,7 +97,11 @@ export function buildAnalyticsCsv(payload) {
     recentTransactions,
     totalWeightProcessed = 0,
     monthlyLossStack12 = [],
+    monthlyLossRefundRows = [],
+    monthlyLossBackjobRows = [],
     newCustomersByMonth12 = [],
+    customersGrowthByMonth = [],
+    rushRegularChartData = [],
   } = payload;
 
   const revenue = Number(totalRevenue ?? paidTotal);
@@ -93,60 +110,145 @@ export function buildAnalyticsCsv(payload) {
       ? Number(totalLossesRaw)
       : Number(unpaidAmountTotal) + Number(refundLossTotal);
 
-  lines.push(csvRow(['Papa J Laundry Shop - Branch Report']));
-  lines.push(csvRow(['Generated', new Date().toISOString()]));
+  const generatedDisplay = new Date().toLocaleString('en-PH', {
+    dateStyle: 'long',
+    timeStyle: 'short',
+  });
+
+  // ——— Cover & document information ———
+  lines.push(csvRow(['PAPA J LAUNDRY SHOP']));
+  lines.push(csvRow(['Branch performance report']));
   lines.push([]);
-  lines.push(csvRow(['Branch name', branchName]));
-  lines.push(csvRow(['Branch ID', branchId]));
-  lines.push(csvRow(['Chart period', viewTypeLabel]));
+  lines.push(csvRuleLine());
   lines.push([]);
-  lines.push(csvRow(['SUMMARY']));
+  lines.push(csvRow(['DOCUMENT INFORMATION']));
+  lines.push(csvRow(['Field', 'Detail']));
+  lines.push(csvRow(['Report generated', generatedDisplay]));
+  lines.push(csvRow(['Branch name', branchName ?? '—']));
+  lines.push(csvRow(['Branch ID', String(branchId ?? '—')]));
+  lines.push(csvRow(['Chart period (view)', String(viewTypeLabel ?? '—')]));
+  lines.push(csvRow(['Custom filter — start date', fmtDateInput(rangeStartDate)]));
+  lines.push(csvRow(['Custom filter — end date', fmtDateInput(rangeEndDate)]));
+  lines.push(csvRow(['Analysis window — start', fmtIsoReadable(viewWindowStartIso)]));
+  lines.push(csvRow(['Analysis window — end', fmtIsoReadable(viewWindowEndIso)]));
+  lines.push([]);
+  lines.push(csvRuleLine());
+  lines.push([]);
+
+  // SECTION 1 — Executive summary (key metrics)
+  lines.push(csvRow(['SECTION 1 – Executive summary']));
   lines.push(csvRow(['Metric', 'Value']));
-  lines.push(csvRow(['Total revenue (paid orders, PHP)', revenue.toFixed(2)]));
+  lines.push(csvRow(['Total revenue, paid orders (PHP)', revenue.toFixed(2)]));
   lines.push(csvRow(['Total losses (PHP)', losses.toFixed(2)]));
-  lines.push(csvRow(['Losses — unpaid debit (PHP)', Number(unpaidAmountTotal).toFixed(2)]));
-  lines.push(csvRow(['Losses — resolved refunds (PHP)', Number(refundLossTotal).toFixed(2)]));
+  lines.push(csvRow(['Losses, unpaid debit (PHP)', Number(unpaidAmountTotal).toFixed(2)]));
+  lines.push(csvRow(['Losses, resolved refunds (PHP)', Number(refundLossTotal).toFixed(2)]));
   lines.push(csvRow(['Branch performance (%)', Number(branchPerformancePct).toFixed(2)]));
-  lines.push(csvRow(['Total weight processed (kg, this period)', Number(totalWeightProcessed).toFixed(2)]));
-  lines.push(csvRow(['Debit sales (unpaid orders count)', debitCount]));
-  lines.push(csvRow(['Items in shop (count)', inShopCount]));
-  lines.push(csvRow(['Overdue items (count)', overdueCount]));
+  lines.push(csvRow(['Total weight processed (kg)', Number(totalWeightProcessed).toFixed(2)]));
+  lines.push(csvRow(['Debit sales, unpaid order count', String(debitCount ?? '—')]));
+  lines.push(csvRow(['Items in shop (count)', String(inShopCount ?? '—')]));
+  lines.push(csvRow(['Overdue items (count)', String(overdueCount ?? '—')]));
   lines.push([]);
-  lines.push(csvRow(['REVENUE CHART SERIES']));
+  lines.push(csvRuleLine());
+  lines.push([]);
+
+  // SECTION 2 — Revenue by period
+  lines.push(csvRow(['SECTION 2 – Revenue by period (same as chart)']));
   lines.push(csvRow(['Period', 'Revenue (PHP)', 'Debit amount (PHP)']));
   (chartData || []).forEach((row) => {
     lines.push(csvRow([row.name, Number(row.revenue || 0).toFixed(2), Number(row.unpaid || 0).toFixed(2)]));
   });
   lines.push([]);
-  lines.push(csvRow(['DISPUTES', disputeTypeLabel]));
-  lines.push(csvRow(['Total amount (est., PHP)', Number(disputeTotal).toFixed(2)]));
-  lines.push(csvRow(['Resolved cases (count)', disputeCount]));
-  lines.push(csvRow(['DISPUTE CHART SERIES']));
+  lines.push(csvRuleLine());
+  lines.push([]);
+
+  // SECTION 3 — Disputes
+  lines.push(csvRow(['SECTION 3 – Disputes (resolved)']));
+  lines.push(csvRow(['Description', 'Value']));
+  lines.push(csvRow(['Scope', String(disputeTypeLabel ?? '—')]));
+  lines.push(csvRow(['Total dispute amount estimate (PHP)', Number(disputeTotal || 0).toFixed(2)]));
+  lines.push(csvRow(['Resolved cases (count)', String(disputeCount ?? '—')]));
+  lines.push([]);
+  lines.push(csvRow(['Amount by period (aligned to dispute chart)']));
   lines.push(csvRow(['Period', 'Amount (PHP)']));
   (disputeChartData || []).forEach((row) => {
     lines.push(csvRow([row.name, Number(row.amount || 0).toFixed(2)]));
   });
   lines.push([]);
-  lines.push(csvRow(['LOSS & QUALITY (last 12 months, resolved disputes by month)']));
+  lines.push(csvRuleLine());
+  lines.push([]);
+
+  // SECTION 4 — Loss & quality
+  lines.push(csvRow(['SECTION 4 – Loss and quality, monthly totals (PHP)']));
   lines.push(csvRow(['Month', 'Refunds (PHP)', 'Backjobs / replacement (PHP)']));
   (monthlyLossStack12 || []).forEach((row) => {
     lines.push(
+      csvRow([row.name, Number(row.refund || 0).toFixed(2), Number(row.backjob || 0).toFixed(2)])
+    );
+  });
+  lines.push([]);
+  lines.push(csvRow(['SECTION 4a – Refunds by issue reason (PHP)']));
+  lines.push(csvRow(['Month', 'Damaged', 'Lost', 'Other']));
+  (monthlyLossRefundRows || []).forEach((row) => {
+    lines.push(
       csvRow([
         row.name,
-        Number(row.refund || 0).toFixed(2),
-        Number(row.backjob || 0).toFixed(2),
+        Number(row.Damaged || 0).toFixed(2),
+        Number(row.Lost || 0).toFixed(2),
+        Number(row.Other || 0).toFixed(2),
       ])
     );
   });
   lines.push([]);
-  lines.push(csvRow(['GROWTH TRENDS (last 12 months, new customers by first order month)']));
-  lines.push(csvRow(['Month', 'New customers (count)']));
-  (newCustomersByMonth12 || []).forEach((row) => {
-    lines.push(csvRow([row.name, String(row.count ?? 0)]));
+  lines.push(csvRow(['SECTION 4b – Backjobs by issue reason (PHP)']));
+  lines.push(csvRow(['Month', 'Poor quality', 'Wrinkled / not folded', 'Other']));
+  (monthlyLossBackjobRows || []).forEach((row) => {
+    lines.push(
+      csvRow([
+        row.name,
+        Number(row.PoorQuality || 0).toFixed(2),
+        Number(row.Wrinkled || 0).toFixed(2),
+        Number(row.Other || 0).toFixed(2),
+      ])
+    );
   });
   lines.push([]);
-  lines.push(csvRow(['RECENT TRANSACTIONS (up to 8, same as screen)']));
-  lines.push(csvRow(['Receipt', 'Customer', 'Payment', 'Inventory', 'Amount (PHP)', 'Created date']));
+  lines.push(csvRuleLine());
+  lines.push([]);
+
+  const growthRows =
+    customersGrowthByMonth && customersGrowthByMonth.length
+      ? customersGrowthByMonth
+      : (newCustomersByMonth12 || []).map((r) => ({
+          name: r.name,
+          newCustomers: r.count ?? 0,
+          returningCustomers: 0,
+        }));
+
+  // SECTION 5 — Growth
+  lines.push(csvRow(['SECTION 5 – Customer growth (by month)']));
+  lines.push(csvRow(['Month', 'New customers', 'Active returning customers']));
+  growthRows.forEach((row) => {
+    lines.push(csvRow([row.name, String(row.newCustomers ?? 0), String(row.returningCustomers ?? 0)]));
+  });
+  lines.push([]);
+  lines.push(csvRuleLine());
+  lines.push([]);
+
+  // SECTION 6 — Rush vs regular
+  lines.push(csvRow(['SECTION 6 – Rush vs regular paid revenue (PHP)']));
+  lines.push(csvRow(['Period', 'Rush (PHP)', 'Regular (PHP)']));
+  (rushRegularChartData || []).forEach((row) => {
+    lines.push(
+      csvRow([row.name, Number(row.rush || 0).toFixed(2), Number(row.regular || 0).toFixed(2)])
+    );
+  });
+  lines.push([]);
+  lines.push(csvRuleLine());
+  lines.push([]);
+
+  // SECTION 7 — Recent transactions
+  lines.push(csvRow(['SECTION 7 – Recent transactions (on screen)']));
+  lines.push(csvRow(['Receipt ID', 'Customer', 'Payment', 'Inventory status', 'Amount (PHP)', 'Created']));
   (recentTransactions || []).forEach((t) => {
     lines.push(
       csvRow([
@@ -155,10 +257,13 @@ export function buildAnalyticsCsv(payload) {
         t.payment_status || '—',
         t.inventory_status || '—',
         Number(t.amount || 0).toFixed(2),
-        t.created_at ? new Date(t.created_at).toISOString() : '—',
+        sanitizeDateTime(t.created_at),
       ])
     );
   });
+  lines.push([]);
+  lines.push(csvRuleLine());
+  lines.push(csvRow(['End of report']));
 
   const body = lines.map((line) => (Array.isArray(line) ? csvRow(line) : line)).join('\r\n');
   return `\uFEFF${body}`;
@@ -178,150 +283,16 @@ export function downloadAnalyticsCsv(csvString, filenameBase = 'branch-report') 
   URL.revokeObjectURL(url);
 }
 
+/** UTF-8 CSV bytes (e.g. for programmatic use); same content as buildAnalyticsCsv. */
 export function buildAnalyticsXlsxBytes(payload) {
-  const {
-    branchName,
-    branchId,
-    viewTypeLabel,
-    rangeStartDate,
-    rangeEndDate,
-    paidTotal,
-    totalRevenue,
-    unpaidAmountTotal = 0,
-    refundLossTotal = 0,
-    totalLosses: totalLossesRaw,
-    branchPerformancePct = 0,
-    debitCount,
-    inShopCount,
-    overdueCount,
-    disputeTypeLabel,
-    disputeTotal,
-    disputeCount,
-    chartData,
-    disputeChartData,
-    recentTransactions,
-    totalWeightProcessed = 0,
-    monthlyLossStack12 = [],
-    newCustomersByMonth12 = [],
-  } = payload;
-
-  const revenue = Number(totalRevenue ?? paidTotal);
-  const losses =
-    totalLossesRaw != null && totalLossesRaw !== ''
-      ? Number(totalLossesRaw)
-      : Number(unpaidAmountTotal) + Number(refundLossTotal);
-
-  const wb = XLSX.utils.book_new();
-
-  const summaryRows = [
-    ["PAPA J'S LAUNDRY SHOP - BRANCH REPORT", '', '', '', ''],
-    [`Generated: ${sanitizeDateTime(new Date().toISOString())}`, '', '', '', ''],
-    [`Branch: ${branchName || '—'} (ID: ${branchId || '—'})`, '', '', '', ''],
-    [`Chart period: ${viewTypeLabel || '—'}`, '', '', '', ''],
-    [
-      `Custom range: ${sanitizeDateOnly(rangeStartDate)} to ${sanitizeDateOnly(rangeEndDate)}`,
-      '',
-      '',
-      '',
-      '',
-    ],
-    [],
-    ['SUMMARY', '', '', '', ''],
-    ['Metric', 'Value', '', '', ''],
-    ['Total revenue (paid)', Number(revenue || 0).toFixed(2), '', '', ''],
-    ['Total losses', Number(losses || 0).toFixed(2), '', '', ''],
-    ['Losses — unpaid debit', Number(unpaidAmountTotal || 0).toFixed(2), '', '', ''],
-    ['Losses — resolved refunds', Number(refundLossTotal || 0).toFixed(2), '', '', ''],
-    ['Branch performance (%)', Number(branchPerformancePct || 0).toFixed(2), '', '', ''],
-    ['Total weight processed (kg)', Number(totalWeightProcessed || 0).toFixed(2), '', '', ''],
-    ['Debit sales (count)', String(debitCount ?? 0), '', '', ''],
-    ['Items in shop (count)', String(inShopCount ?? 0), '', '', ''],
-    ['Overdue items (count)', String(overdueCount ?? 0), '', '', ''],
-  ];
-
-  const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
-  wsSummary['!cols'] = [{ wch: 42 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
-  wsSummary['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
-    { s: { r: 2, c: 0 }, e: { r: 2, c: 4 } },
-    { s: { r: 3, c: 0 }, e: { r: 3, c: 4 } },
-    { s: { r: 4, c: 0 }, e: { r: 4, c: 4 } },
-    { s: { r: 6, c: 0 }, e: { r: 6, c: 4 } },
-  ];
-  XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
-
-  const seriesRows = [
-    ['REVENUE SERIES'],
-    ['Period', 'Revenue (PHP)', 'Debit amount (PHP)'],
-    ...(chartData || []).map((row) => [
-      row.name,
-      Number(row.revenue || 0).toFixed(2),
-      Number(row.unpaid || 0).toFixed(2),
-    ]),
-    [],
-    [`DISPUTES (${disputeTypeLabel || '—'})`],
-    ['Period', 'Amount (PHP)'],
-    ['Total (est.)', Number(disputeTotal || 0).toFixed(2)],
-    ['Resolved cases', String(disputeCount ?? 0)],
-    ...(disputeChartData || []).map((row) => [row.name, Number(row.amount || 0).toFixed(2)]),
-    [],
-    ['LOSS & QUALITY (12 months)'],
-    ['Month', 'Refunds (PHP)', 'Backjobs (PHP)'],
-    ...(monthlyLossStack12 || []).map((row) => [
-      row.name,
-      Number(row.refund || 0).toFixed(2),
-      Number(row.backjob || 0).toFixed(2),
-    ]),
-    [],
-    ['GROWTH TRENDS (12 months)'],
-    ['Month', 'New customers'],
-    ...(newCustomersByMonth12 || []).map((row) => [row.name, String(Number(row.count ?? 0))]),
-  ];
-  const wsSeries = XLSX.utils.aoa_to_sheet(seriesRows);
-  wsSeries['!cols'] = [{ wch: 18 }, { wch: 20 }, { wch: 20 }];
-  XLSX.utils.book_append_sheet(wb, wsSeries, 'Series');
-
-  const txRows = [
-    ['RECENT TRANSACTIONS (same screen rows)'],
-    ['Receipt', 'Customer', 'Payment', 'Inventory', 'Amount (PHP)', 'Created date'],
-    ...(recentTransactions || []).map((t) => [
-      t.receipt || `TXN-${t.id}`,
-      t.customer_name || '—',
-      String(t.payment_status || '—').toUpperCase(),
-      t.inventory_status || '—',
-      Number(t.amount || 0).toFixed(2),
-      sanitizeDateTime(t.created_at),
-    ]),
-  ];
-  const wsTransactions = XLSX.utils.aoa_to_sheet(txRows);
-  wsTransactions['!cols'] = [
-    { wch: 16 },
-    { wch: 26 },
-    { wch: 12 },
-    { wch: 14 },
-    { wch: 16 },
-    { wch: 22 },
-  ];
-  wsTransactions['!autofilter'] = {
-    ref: `A2:F${Math.max(2, txRows.length)}`,
-  };
-  XLSX.utils.book_append_sheet(wb, wsTransactions, 'Recent Transactions');
-
-  const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  return new Uint8Array(out);
-}
-
-export function downloadAnalyticsXlsx(payload, filenameBase = 'branch-report') {
-  const stamp = new Date().toISOString().slice(0, 10);
-  const bytes = buildAnalyticsXlsxBytes(payload);
-  const filename = `${filenameBase}-${stamp}.xlsx`;
-  downloadBlobWeb(
-    new Blob([uint8ToArrayBuffer(bytes)], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    }),
-    filename
-  );
+  const csv = buildAnalyticsCsv(payload);
+  if (typeof TextEncoder !== 'undefined') {
+    return new TextEncoder().encode(csv);
+  }
+  const utf8 = decodeURIComponent(encodeURIComponent(csv));
+  const arr = new Uint8Array(utf8.length);
+  for (let i = 0; i < utf8.length; i++) arr[i] = utf8.charCodeAt(i);
+  return arr;
 }
 
 function ensureSpace(doc, y, needed, pageHeight, margin) {
@@ -461,7 +432,11 @@ export async function exportAnalyticsPdf(payload) {
     recentTransactions,
     totalWeightProcessed = 0,
     monthlyLossStack12 = [],
+    monthlyLossRefundRows = [],
+    monthlyLossBackjobRows = [],
     newCustomersByMonth12 = [],
+    customersGrowthByMonth = [],
+    rushRegularChartData = [],
   } = payload;
 
   const revenue = Number(totalRevenue ?? paidTotal);
@@ -469,6 +444,15 @@ export async function exportAnalyticsPdf(payload) {
     totalLossesRaw != null && totalLossesRaw !== ''
       ? Number(totalLossesRaw)
       : Number(unpaidAmountTotal) + Number(refundLossTotal);
+
+  const growthRowsPdf =
+    customersGrowthByMonth && customersGrowthByMonth.length
+      ? customersGrowthByMonth
+      : (newCustomersByMonth12 || []).map((r) => ({
+          name: r.name,
+          newCustomers: r.count ?? 0,
+          returningCustomers: 0,
+        }));
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageH = doc.internal.pageSize.getHeight();
@@ -573,7 +557,7 @@ export async function exportAnalyticsPdf(payload) {
     ],
   });
 
-  y = drawSectionTitle(doc, 'Loss & Quality (12 Months)', y, margin, maxW, pageH);
+  y = drawSectionTitle(doc, 'Loss & Quality — totals', y, margin, maxW, pageH);
   y = drawTable(doc, {
     y,
     margin,
@@ -590,18 +574,75 @@ export async function exportAnalyticsPdf(payload) {
     })),
   });
 
-  y = drawSectionTitle(doc, 'Growth Trends (12 Months)', y, margin, maxW, pageH);
+  y = drawSectionTitle(doc, 'Loss & Quality — refunds by reason', y, margin, maxW, pageH);
   y = drawTable(doc, {
     y,
     margin,
     pageH,
     columns: [
-      { key: 'month', label: 'Month', width: 96 },
-      { key: 'count', label: 'New Customers', width: 90, align: 'right' },
+      { key: 'month', label: 'Month', width: 40 },
+      { key: 'damaged', label: 'Dam.', width: 36, align: 'right' },
+      { key: 'lost', label: 'Lost', width: 36, align: 'right' },
+      { key: 'other', label: 'Other', width: 36, align: 'right' },
     ],
-    rows: (newCustomersByMonth12 || []).map((row) => ({
+    rows: (monthlyLossRefundRows || []).map((row) => ({
       month: row.name,
-      count: String(Number(row.count ?? 0)),
+      damaged: Number(row.Damaged || 0).toFixed(2),
+      lost: Number(row.Lost || 0).toFixed(2),
+      other: Number(row.Other || 0).toFixed(2),
+    })),
+  });
+
+  y = drawSectionTitle(doc, 'Loss & Quality — backjobs by reason', y, margin, maxW, pageH);
+  y = drawTable(doc, {
+    y,
+    margin,
+    pageH,
+    columns: [
+      { key: 'month', label: 'Month', width: 40 },
+      { key: 'poor', label: 'Poor Q', width: 36, align: 'right' },
+      { key: 'wr', label: 'Wrink.', width: 36, align: 'right' },
+      { key: 'other', label: 'Other', width: 36, align: 'right' },
+    ],
+    rows: (monthlyLossBackjobRows || []).map((row) => ({
+      month: row.name,
+      poor: Number(row.PoorQuality || 0).toFixed(2),
+      wr: Number(row.Wrinkled || 0).toFixed(2),
+      other: Number(row.Other || 0).toFixed(2),
+    })),
+  });
+
+  y = drawSectionTitle(doc, 'Growth (new vs returning)', y, margin, maxW, pageH);
+  y = drawTable(doc, {
+    y,
+    margin,
+    pageH,
+    columns: [
+      { key: 'month', label: 'Month', width: 66 },
+      { key: 'newC', label: 'New', width: 60, align: 'right' },
+      { key: 'retC', label: 'Returning', width: 60, align: 'right' },
+    ],
+    rows: growthRowsPdf.map((row) => ({
+      month: row.name,
+      newC: String(Number(row.newCustomers ?? 0)),
+      retC: String(Number(row.returningCustomers ?? 0)),
+    })),
+  });
+
+  y = drawSectionTitle(doc, 'Rush vs regular (paid)', y, margin, maxW, pageH);
+  y = drawTable(doc, {
+    y,
+    margin,
+    pageH,
+    columns: [
+      { key: 'period', label: 'Period', width: 62 },
+      { key: 'rush', label: 'Rush (PHP)', width: 62, align: 'right' },
+      { key: 'reg', label: 'Regular (PHP)', width: 62, align: 'right' },
+    ],
+    rows: (rushRegularChartData || []).map((row) => ({
+      period: row.name,
+      rush: Number(row.rush || 0).toFixed(2),
+      reg: Number(row.regular || 0).toFixed(2),
     })),
   });
 

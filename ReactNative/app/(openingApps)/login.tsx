@@ -101,7 +101,7 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.welcomeText}>Welcome Back</Text>
+            <Text style={styles.welcomeText}>Welcome Back!</Text>
             <Text style={styles.welcomeSubtext}>Please sign in to continue</Text>
 
             <View style={styles.inputContainer}>
@@ -109,7 +109,7 @@ export default function LoginScreen() {
               <View style={styles.inputWrapper}>
                 <TextInput
                   style={styles.input}
-                  placeholder="name@example.com"
+                  placeholder="Email"
                   placeholderTextColor="#A0ABC0"
                   value={email}
                   onChangeText={setEmail}

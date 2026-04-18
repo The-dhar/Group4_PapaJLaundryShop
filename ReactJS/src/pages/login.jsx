@@ -148,7 +148,7 @@ export default function LoginPage() {
         </div>
 
         <div className="login-card">
-          <h2 className="login-title">Welcome Back</h2>
+          <h2 className="login-title">Welcome Back!</h2>
           <p className="login-subtitle">Please sign in to continue</p>
 
           <form onSubmit={handleLogin} className="login-form">
@@ -159,7 +159,7 @@ export default function LoginPage() {
                   id="email"
                   type="text"
                   name="email"
-                  placeholder="name@example.com"
+                  placeholder="Email"
                   value={formData.email}
                   onChange={handleChange}
                   className="form-input"

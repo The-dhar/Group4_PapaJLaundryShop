@@ -70,11 +70,50 @@
   color: #64748b;
 }
 
+.analytics-recharts-tooltip {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: #1e293b;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  max-width: 320px;
+}
+
+.analytics-recharts-tooltip-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: #0f172a;
+}
+
+.analytics-recharts-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.analytics-recharts-tooltip-issues {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e2e8f0;
+  font-size: 11px;
+  color: #475569;
+  line-height: 1.35;
+}
+
+.analytics-recharts-tooltip-issues-label {
+  display: block;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 4px;
+}
+
 .analytics-table-wrap {
   overflow-x: auto;
-  overflow-y: auto;
-  max-height: min(280px, 42vh);
-  -webkit-overflow-scrolling: touch;
+  overflow-y: visible;
+  max-height: none;
   border-radius: 8px;
   border: 1px solid #e2e8f0;
 }
@@ -178,6 +217,35 @@
 
 .main-cards.analytics-page > .custom-card {
   order: 4;
+}
+
+/* Side-by-side chart pairs (formal two-column layout on desktop) */
+.main-cards.analytics-page > .analytics-chart-pair {
+  order: 4;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  width: 100%;
+  align-items: stretch;
+  box-sizing: border-box;
+}
+
+.analytics-chart-pair .custom-card {
+  min-width: 0;
+}
+
+.analytics-chart-pair--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 960px) {
+  .analytics-chart-pair {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-chart-pair--single {
+    grid-template-columns: 1fr;
+  }
 }
 
 .analytics-section-title {
@@ -392,6 +460,18 @@
     max-height: none !important;
     min-height: 0 !important;
     overflow: visible !important;
+  }
+
+  .analytics-chart-pair {
+    display: block !important;
+  }
+
+  .analytics-chart-pair .custom-card {
+    margin-bottom: 12px;
+  }
+
+  .analytics-chart-pair .custom-card:last-child {
+    margin-bottom: 0;
   }
 
   .analytics-table-wrap {

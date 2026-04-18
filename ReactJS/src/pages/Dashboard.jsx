@@ -577,7 +577,7 @@ const Dashboard = () => {
     () =>
       [...filteredTransactions]
         .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
-        .slice(0, 8),
+        .slice(0, 5),
     [filteredTransactions]
   );
 
