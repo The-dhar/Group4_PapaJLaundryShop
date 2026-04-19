@@ -198,23 +198,80 @@ export default function ReportsPage() {
 
       if (action === 'resolve_refund' || action === 'resolve_backjob') {
         const isBackjob = action === 'resolve_backjob';
-        const noteResult = await Swal.fire({
-          title: isBackjob ? 'Resolve as backjob' : 'Resolve as refund',
-          input: 'textarea',
-          inputLabel: 'Optional note',
-          showCancelButton: true,
-          confirmButtonText: isBackjob ? 'Resolve backjob' : 'Resolve refund',
-          cancelButtonText: 'Cancel',
-        });
-        if (!noteResult.isConfirmed) return;
+        if (isBackjob) {
+          const noteResult = await Swal.fire({
+            title: 'Resolve as backjob',
+            input: 'textarea',
+            inputLabel: 'Optional note',
+            showCancelButton: true,
+            confirmButtonText: 'Resolve backjob',
+            cancelButtonText: 'Cancel',
+          });
+          if (!noteResult.isConfirmed) return;
 
-        await apiRequest(`/issue-reports/${row.id}/resolve`, {
-          method: 'PUT',
-          body: JSON.stringify({
-            resolution_type: isBackjob ? 'replacement' : 'refund',
-            resolution_note: String(noteResult.value || '').trim() || null,
-          }),
-        });
+          await apiRequest(`/issue-reports/${row.id}/resolve`, {
+            method: 'PUT',
+            body: JSON.stringify({
+              resolution_type: 'replacement',
+              resolution_note: String(noteResult.value || '').trim() || null,
+            }),
+          });
+        } else {
+          const maxRem =
+            row.refundable_remaining != null && Number.isFinite(Number(row.refundable_remaining))
+              ? Number(row.refundable_remaining)
+              : null;
+          const perPiece =
+            row.suggested_refund_per_piece != null &&
+            Number.isFinite(Number(row.suggested_refund_per_piece))
+              ? Number(row.suggested_refund_per_piece)
+              : null;
+          const maxHtml =
+            maxRem != null
+              ? `<p style="margin:0 0 8px;text-align:left;">Maximum for this line: <strong>₱${maxRem.toFixed(2)}</strong></p>`
+              : '';
+          const hintHtml =
+            perPiece != null
+              ? `<p style="margin:0 0 12px;text-align:left;font-size:13px;color:#555;">Suggested per piece (line total ÷ piece count): <strong>₱${perPiece.toFixed(2)}</strong></p>`
+              : '';
+
+          const refundResult = await Swal.fire({
+            title: 'Resolve as refund',
+            html: `${maxHtml}${hintHtml}
+              <label style="display:block;text-align:left;margin-bottom:6px;font-weight:600;">Refund amount (PHP)</label>
+              <input id="swal-refund-amt" type="number" class="swal2-input" min="0.01" step="0.01" placeholder="0.00" style="margin-bottom:12px;" />
+              <label style="display:block;text-align:left;margin-bottom:6px;font-weight:600;">Note (optional)</label>
+              <textarea id="swal-refund-note" class="swal2-textarea" placeholder="Resolution note"></textarea>`,
+            focusConfirm: false,
+            showCancelButton: true,
+            confirmButtonText: 'Resolve refund',
+            cancelButtonText: 'Cancel',
+            preConfirm: () => {
+              const raw = document.getElementById('swal-refund-amt')?.value;
+              const n = parseFloat(String(raw));
+              if (!Number.isFinite(n) || n < 0.01) {
+                Swal.showValidationMessage('Enter a valid refund amount (at least 0.01).');
+                return false;
+              }
+              if (maxRem != null && n - 0.001 > maxRem) {
+                Swal.showValidationMessage(`Amount cannot exceed ${maxRem.toFixed(2)}.`);
+                return false;
+              }
+              const note = String(document.getElementById('swal-refund-note')?.value || '').trim();
+              return { refund_amount: n, resolution_note: note || null };
+            },
+          });
+          if (!refundResult.isConfirmed || !refundResult.value) return;
+
+          await apiRequest(`/issue-reports/${row.id}/resolve`, {
+            method: 'PUT',
+            body: JSON.stringify({
+              resolution_type: 'refund',
+              refund_amount: refundResult.value.refund_amount,
+              resolution_note: refundResult.value.resolution_note,
+            }),
+          });
+        }
       }
 
       await loadData();
@@ -366,6 +423,13 @@ export default function ReportsPage() {
                     <td>{row.transaction?.customer_name || '—'}</td>
                     <td>
                       <div className="reports-cell-title">{issueTypeLabel(row.issue_type)}</div>
+                      {row.transaction_item?.service_name ? (
+                        <div className="reports-cell-sub">
+                          Line: {row.transaction_item.service_name} (₱
+                          {Number(row.transaction_item.line_total ?? 0).toFixed(2)})
+                          {row.transaction_item.piece_count ? ` · ${row.transaction_item.piece_count} pc` : ''}
+                        </div>
+                      ) : null}
                       {row.issue_note ? <div className="reports-cell-sub">{row.issue_note}</div> : null}
                     </td>
                     <td>{row.assigned_employee_name || '—'}</td>
@@ -375,7 +439,12 @@ export default function ReportsPage() {
                     <td>
                       <span className={statusClass(row.status)}>{row.status || '—'}</span>
                       {row.resolution_type ? (
-                        <div className="reports-cell-sub">Resolution: {row.resolution_type}</div>
+                        <div className="reports-cell-sub">
+                          Resolution: {row.resolution_type}
+                          {row.resolution_type === 'refund' && row.refund_amount != null
+                            ? ` · ₱${Number(row.refund_amount).toFixed(2)}`
+                            : ''}
+                        </div>
                       ) : null}
                     </td>
                     <td>{renderIssueActions(row)}</td>

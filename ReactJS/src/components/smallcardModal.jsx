@@ -6,12 +6,18 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
   const [kilos, setKilos] = useState(1);
   const [laundryType, setLaundryType] = useState("wash-and-fold");
   const [notes, setNotes] = useState("");
+  const [pieceCount, setPieceCount] = useState("");
   const [selectedTier, setSelectedTier] = useState(null);
 
   useEffect(() => {
     if (isOpen && item) {
       setKilos(item.initialKilos || 1);
       setNotes(item.initialNotes || "");
+      setPieceCount(
+        item.initialPieceCount != null && item.initialPieceCount !== ""
+          ? String(item.initialPieceCount)
+          : ""
+      );
 
       if (item.initialType) {
         setLaundryType(item.initialType);
@@ -218,13 +224,19 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
       return;
     }
 
+    const parsedPieces =
+      pieceCount === "" || pieceCount == null
+        ? null
+        : Math.max(0, parseInt(String(pieceCount).replace(/\D/g, ""), 10) || 0);
+
     onAdd(
       item,
       null,
       kilos,
       laundryType,
       { computedTotal: selectedTier.computedTotal, unit: "computed" },
-      notes
+      notes,
+      parsedPieces && parsedPieces > 0 ? parsedPieces : null
     );
 
     handleCancel();
@@ -234,6 +246,7 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
     setKilos(1);
     setLaundryType("wash-and-fold");
     setNotes("");
+    setPieceCount("");
     setSelectedTier(null);
     onClose();
   };
@@ -283,6 +296,19 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
             <div className="modal-select total-box">
               ₱{selectedTier ? selectedTier.computedTotal.toFixed(2) : "0.00"}
             </div>
+          </div>
+
+          <div className="modal-input-group">
+            <label className="modal-label">Piece count (optional):</label>
+            <input
+              type="number"
+              className="modal-kilos-input"
+              min="0"
+              step="1"
+              placeholder="e.g. shirts / items in this line"
+              value={pieceCount}
+              onChange={(e) => setPieceCount(e.target.value)}
+            />
           </div>
 
           <div className="modal-input-group">

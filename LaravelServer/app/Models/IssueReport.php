@@ -10,6 +10,7 @@ class IssueReport extends Model
 {
     protected $fillable = [
         'transaction_id',
+        'transaction_item_id',
         'branch_id',
         'reported_by_user_id',
         'assigned_employee_user_id',
@@ -18,6 +19,7 @@ class IssueReport extends Model
         'status',
         'resolution_type',
         'resolution_note',
+        'refund_amount',
         'resolved_by_user_id',
         'resolved_at',
     ];
@@ -26,12 +28,18 @@ class IssueReport extends Model
     {
         return [
             'resolved_at' => 'datetime',
+            'refund_amount' => 'decimal:2',
         ];
     }
 
     public function transaction(): BelongsTo
     {
         return $this->belongsTo(Transaction::class, 'transaction_id');
+    }
+
+    public function transactionItem(): BelongsTo
+    {
+        return $this->belongsTo(TransactionItem::class, 'transaction_item_id');
     }
 
     public function branch(): BelongsTo

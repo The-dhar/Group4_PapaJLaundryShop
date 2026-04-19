@@ -60,6 +60,10 @@ const normalizeTransaction = (txn) => {
         rate: Number(item.rate) || 0,
         kilos: Number(item.kilos) || 0,
         total: Number(item.total) || 0,
+        piece_count:
+          item.piece_count != null && item.piece_count !== ""
+            ? Number(item.piece_count)
+            : null,
       }))
     : [];
 
@@ -234,6 +238,11 @@ export const TransactionsProvider = ({ children }) => {
           rate: s.rate,
           kilos: s.kilos,
           total: s.total,
+          ...(s.piece_count != null &&
+          s.piece_count !== "" &&
+          Number(s.piece_count) > 0
+            ? { piece_count: Math.floor(Number(s.piece_count)) }
+            : {}),
         })),
         weight: weight || 0,
         subtotal: subtotal || amount,
@@ -304,6 +313,10 @@ export const TransactionsProvider = ({ children }) => {
               rate: Number(s.rate) || 0,
               kilos: Number(s.kilos) || 0,
               total: Number(s.total) || 0,
+              piece_count:
+                s.piece_count != null && s.piece_count !== ""
+                  ? Number(s.piece_count)
+                  : null,
             })),
         active_extras,
         sub_extras,

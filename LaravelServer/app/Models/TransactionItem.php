@@ -12,6 +12,14 @@ class TransactionItem extends Model
         'laundry_type',
         'rate',
         'kilos',
-        'total'
+        'total',
+        'piece_count',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'piece_count' => 'integer',
+        ];
+    }
 }

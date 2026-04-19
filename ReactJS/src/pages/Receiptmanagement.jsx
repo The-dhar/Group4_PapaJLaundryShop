@@ -32,6 +32,30 @@ function writeBackjobIdsCache(ids) {
   }
 }
 
+function disputeLineKey(transactionId, itemId) {
+  return `${Number(transactionId)}:${Number(itemId)}`;
+}
+
+function serviceHasPersistedLineId(svc) {
+  const n = Number(svc?.id);
+  return Number.isFinite(n) && n > 0;
+}
+
+/** True if at least one line on the receipt can still have an open dispute filed. */
+function receiptHasReportableLine(receipt, openLineKeys) {
+  const tid = Number(receipt?.id);
+  const svcs = receipt?.services || [];
+  const withIds = svcs.filter(serviceHasPersistedLineId);
+  if (withIds.length === 0) return false;
+  return withIds.some((svc) => !openLineKeys.has(disputeLineKey(tid, svc.id)));
+}
+
+function receiptLinesMissingPersistedIds(receipt) {
+  const svcs = receipt?.services || [];
+  if (svcs.length === 0) return true;
+  return !svcs.some(serviceHasPersistedLineId);
+}
+
 function formatInventoryStatus(status) {
   if (status == null || status === '') return '—';
   const key = String(status).toLowerCase();
@@ -92,8 +116,10 @@ const Receiptmanagement = () => {
   const [showReportModal, setShowReportModal] = useState(false);
   const [issueType, setIssueType] = useState('damaged');
   const [issueNote, setIssueNote] = useState('');
+  const [reportTransactionItemId, setReportTransactionItemId] = useState('');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
-  const [reportedTransactionIds, setReportedTransactionIds] = useState(new Set());
+  /** Open disputes: `transactionId:transactionItemId` for pending / under_review rows. */
+  const [openDisputeLineKeys, setOpenDisputeLineKeys] = useState(new Set());
   const [backjobTransactionIds, setBackjobTransactionIds] = useState(() => readBackjobIdsCache());
 
   const isInShopLike = useCallback(
@@ -133,6 +159,14 @@ const Receiptmanagement = () => {
     });
     return next;
   }, [backjobTransactionIds, transactions]);
+
+  const reportableServicesForModal = useMemo(() => {
+    if (!selectedReceipt) return [];
+    const tid = Number(selectedReceipt.id);
+    return (selectedReceipt.services || []).filter(
+      (s) => serviceHasPersistedLineId(s) && !openDisputeLineKeys.has(disputeLineKey(tid, s.id))
+    );
+  }, [selectedReceipt, openDisputeLineKeys]);
 
   useEffect(() => {
     writeBackjobIdsCache(effectiveBackjobTransactionIds);
@@ -439,6 +473,7 @@ const Receiptmanagement = () => {
   const resetReportForm = () => {
     setIssueType('damaged');
     setIssueNote('');
+    setReportTransactionItemId('');
   };
 
   const parseApiError = (payload) => {
@@ -470,16 +505,17 @@ const Receiptmanagement = () => {
         issuesRes.ok ? issuesRes.json().catch(() => []) : [],
         backjobsRes.ok ? backjobsRes.json().catch(() => []) : [],
       ]);
-      const next = new Set();
+      const openLineKeys = new Set();
       (Array.isArray(issues) ? issues : []).forEach((row) => {
-        const id = Number(row?.transaction_id || row?.transaction?.id || 0);
-        if (id > 0) next.add(id);
+        const st = String(row?.status || '').toLowerCase();
+        if (st !== 'pending' && st !== 'under_review') return;
+        const tid = Number(row?.transaction_id ?? row?.transaction?.id ?? 0);
+        const itemId = Number(row?.transaction_item_id ?? row?.transaction_item?.id ?? 0);
+        if (tid > 0 && itemId > 0) {
+          openLineKeys.add(disputeLineKey(tid, itemId));
+        }
       });
-      (Array.isArray(backjobs) ? backjobs : []).forEach((row) => {
-        const id = Number(row?.transaction_id || row?.transaction?.id || 0);
-        if (id > 0) next.add(id);
-      });
-      setReportedTransactionIds(next);
+      setOpenDisputeLineKeys(openLineKeys);
       const nextBackjobs = new Set();
       (Array.isArray(backjobs) ? backjobs : []).forEach((row) => {
         const id = Number(row?.transaction_id || row?.transaction?.id || 0);
@@ -500,6 +536,11 @@ const Receiptmanagement = () => {
     if (!selectedReceipt) return;
 
     resetReportForm();
+    const tid = Number(selectedReceipt.id);
+    const firstLine = (selectedReceipt.services || []).find(
+      (s) => serviceHasPersistedLineId(s) && !openDisputeLineKeys.has(disputeLineKey(tid, s.id))
+    );
+    setReportTransactionItemId(firstLine ? String(firstLine.id) : '');
     setShowReportModal(true);
   };
 
@@ -517,6 +558,16 @@ const Receiptmanagement = () => {
       return;
     }
 
+    const lineId = Number(reportTransactionItemId);
+    if (!Number.isFinite(lineId) || lineId <= 0) {
+      await Swal.fire({
+        title: 'Select a line',
+        text: 'Choose which service line this dispute is for. If lines are missing IDs, refresh the page after upgrading the server.',
+        icon: 'warning',
+      });
+      return;
+    }
+
     const token = localStorage.getItem('token');
     if (!token) {
       await Swal.fire({ title: 'Not authenticated', text: 'Please sign in again.', icon: 'error' });
@@ -527,6 +578,7 @@ const Receiptmanagement = () => {
     try {
       const body = {
         transaction_id: selectedReceipt.id,
+        transaction_item_id: lineId,
         issue_type: issueType,
         issue_note: issueNote.trim() || null,
       };
@@ -546,10 +598,9 @@ const Receiptmanagement = () => {
         throw new Error(parseApiError(payload));
       }
 
-      // Lock this transaction from being reported again immediately in UI.
-      setReportedTransactionIds((prev) => {
+      setOpenDisputeLineKeys((prev) => {
         const next = new Set(prev);
-        next.add(Number(selectedReceipt.id));
+        next.add(disputeLineKey(selectedReceipt.id, lineId));
         return next;
       });
 
@@ -778,9 +829,17 @@ const Receiptmanagement = () => {
                   <button
                     onClick={openReportModal}
                     className="receipt-btn-report"
-                    disabled={isSubmittingReport || reportedTransactionIds.has(Number(selectedReceipt.id))}
+                    disabled={
+                      isSubmittingReport ||
+                      !receiptHasReportableLine(selectedReceipt, openDisputeLineKeys)
+                    }
                   >
-                    <BsFlag /> {reportedTransactionIds.has(Number(selectedReceipt.id)) ? 'Already Reported' : 'Report Dispute'}
+                    <BsFlag />{' '}
+                    {receiptLinesMissingPersistedIds(selectedReceipt)
+                      ? 'Cannot report (missing line data)'
+                      : !receiptHasReportableLine(selectedReceipt, openDisputeLineKeys)
+                        ? 'All lines in dispute'
+                        : 'Report Dispute'}
                   </button>
                   {isInShopLike(selectedReceipt.inventory_status) && selectedReceipt.payment_status === 'paid' && (
                     <button
@@ -834,6 +893,25 @@ const Receiptmanagement = () => {
             <p className="receipt-report-note">
               Make sure that the dispute details are correct as this action cannot be edited later on.
             </p>
+
+            <label>Service line</label>
+            <select
+              value={reportTransactionItemId}
+              onChange={(e) => setReportTransactionItemId(e.target.value)}
+            >
+              <option value="">Select line…</option>
+              {reportableServicesForModal.map((s) => (
+                <option key={s.id} value={String(s.id)}>
+                  {s.serviceName} — P{(Number(s.total) || 0).toFixed(2)}
+                  {s.piece_count ? ` · ${s.piece_count} pc` : ''}
+                </option>
+              ))}
+            </select>
+            {reportableServicesForModal.length === 0 ? (
+              <p className="receipt-report-note" style={{ marginTop: 8 }}>
+                No lines available to dispute (all may already have an open dispute).
+              </p>
+            ) : null}
 
             <label>Dispute type</label>
             <select value={issueType} onChange={(e) => setIssueType(e.target.value)}>

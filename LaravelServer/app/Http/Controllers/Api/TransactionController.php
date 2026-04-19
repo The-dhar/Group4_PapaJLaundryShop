@@ -141,6 +141,7 @@ class TransactionController extends Controller
             'customer_first_name' => 'nullable|string|max:255',
             'customer_last_name' => 'nullable|string|max:255',
             'services' => 'required|array',
+            'services.*.piece_count' => 'nullable|integer|min:0|max:100000',
             'amount' => 'required|numeric',
             'due_date' => 'required|date_format:Y-m-d|after_or_equal:today',
             'vat_amount' => 'nullable|numeric|min:0',
@@ -234,6 +235,11 @@ class TransactionController extends Controller
             // Save services
             foreach ($request->services as $service) {
 
+                $pieceRaw = $service['piece_count'] ?? null;
+                $pieceCount = ($pieceRaw !== null && $pieceRaw !== '')
+                    ? max(0, (int) $pieceRaw)
+                    : null;
+
                 TransactionItem::create([
 
                     'transaction_id' => $transaction->id,
@@ -242,12 +248,15 @@ class TransactionController extends Controller
                     'rate' => $service['rate'],
                     'kilos' => $service['kilos'],
                     'total' => $service['total'],
+                    'piece_count' => $pieceCount,
 
                 ]);
 
             }
 
             DB::commit();
+
+            $transaction->load('items');
 
             return response()->json([
                 'id' => $transaction->id,
@@ -256,6 +265,17 @@ class TransactionController extends Controller
                 'customer_middle_name' => $transaction->customer_middle_name,
                 'customer_address' => $transaction->customer_address,
                 'services' => $request->services,
+                'receipt_items' => $transaction->items->map(function ($item) {
+                    return [
+                        'id' => $item->id,
+                        'serviceName' => $item->service_name,
+                        'laundryType' => $item->laundry_type,
+                        'rate' => $item->rate,
+                        'kilos' => $item->kilos,
+                        'total' => $item->total,
+                        'piece_count' => $item->piece_count,
+                    ];
+                }),
                 'amount' => $transaction->total_amount,
                 'vat_amount' => (float) ($transaction->vat_amount ?? 0),
                 'vat_rate' => $transaction->vat_rate !== null ? (float) $transaction->vat_rate : null,
@@ -373,6 +393,7 @@ class TransactionController extends Controller
                         'rate' => $item->rate,
                         'kilos' => $item->kilos,
                         'total' => $item->total,
+                        'piece_count' => $item->piece_count,
                     ];
                 }),
             ];

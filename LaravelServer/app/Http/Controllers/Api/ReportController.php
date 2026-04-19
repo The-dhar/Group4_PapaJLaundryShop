@@ -7,6 +7,7 @@ use App\Models\Backjob;
 use App\Models\IssueReport;
 use App\Models\ReportActivityLog;
 use App\Models\Transaction;
+use App\Models\TransactionItem;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -101,6 +102,7 @@ class ReportController extends Controller
 
         $query = IssueReport::query()->with([
             'transaction:id,receipt_number,payment_status,customer_name,total_amount,branch_id',
+            'transactionItem:id,transaction_id,service_name,laundry_type,rate,kilos,total,piece_count',
             'branch:id,name',
             'reporter:id,name,first_name,last_name,role,branch_id',
             'assignedEmployee:id,name,first_name,last_name,role,branch_id',
@@ -131,6 +133,7 @@ class ReportController extends Controller
 
         $validated = $request->validate([
             'transaction_id' => 'required|integer|exists:transactions,id',
+            'transaction_item_id' => 'required|integer|exists:transaction_items,id',
             'issue_type' => 'required|string|in:damaged,lost,poor_quality_cleaning,wrinkled_not_folded_well,other',
             'issue_note' => 'nullable|string|max:2000',
             'assigned_employee_user_id' => 'nullable|integer|exists:users,id',
@@ -145,6 +148,29 @@ class ReportController extends Controller
         $transaction = $this->reportableTransactionForUser($user, (int) $validated['transaction_id']);
         $this->assertPaidTransaction($transaction);
 
+        $lineItemId = (int) $validated['transaction_item_id'];
+        $line = TransactionItem::query()
+            ->whereKey($lineItemId)
+            ->where('transaction_id', $transaction->id)
+            ->first();
+
+        if (! $line) {
+            throw ValidationException::withMessages([
+                'transaction_item_id' => ['The selected line does not belong to this transaction.'],
+            ]);
+        }
+
+        $duplicateOpen = IssueReport::query()
+            ->where('transaction_item_id', $lineItemId)
+            ->whereIn('status', self::ISSUE_OPEN_STATUSES)
+            ->exists();
+
+        if ($duplicateOpen) {
+            throw ValidationException::withMessages([
+                'transaction_item_id' => ['An open dispute already exists for this line item.'],
+            ]);
+        }
+
         if (! empty($validated['assigned_employee_user_id'])) {
             $assignedEmployee = $this->branchEmployeeForTransaction(
                 (int) $validated['assigned_employee_user_id'],
@@ -157,6 +183,7 @@ class ReportController extends Controller
 
         $report = IssueReport::create([
             'transaction_id' => $transaction->id,
+            'transaction_item_id' => $lineItemId,
             'branch_id' => $transaction->branch_id,
             'reported_by_user_id' => $user->id,
             'assigned_employee_user_id' => $assignedEmployee->id,
@@ -167,11 +194,13 @@ class ReportController extends Controller
 
         $this->logActivity('issue_report', $report->id, 'created', null, 'pending', $user->id, null, [
             'transaction_id' => $transaction->id,
+            'transaction_item_id' => $lineItemId,
             'issue_type' => $report->issue_type,
         ]);
 
         $report->load([
             'transaction:id,receipt_number,payment_status,customer_name,total_amount,branch_id',
+            'transactionItem:id,transaction_id,service_name,laundry_type,rate,kilos,total,piece_count',
             'branch:id,name',
             'reporter:id,name,first_name,last_name,role,branch_id',
             'assignedEmployee:id,name,first_name,last_name,role,branch_id',
@@ -224,6 +253,7 @@ class ReportController extends Controller
 
         $report->load([
             'transaction:id,receipt_number,payment_status,customer_name,total_amount,branch_id',
+            'transactionItem:id,transaction_id,service_name,laundry_type,rate,kilos,total,piece_count',
             'branch:id,name',
             'reporter:id,name,first_name,last_name,role,branch_id',
             'assignedEmployee:id,name,first_name,last_name,role,branch_id',
@@ -254,6 +284,7 @@ class ReportController extends Controller
 
         $report->load([
             'transaction:id,receipt_number,payment_status,customer_name,total_amount,branch_id',
+            'transactionItem:id,transaction_id,service_name,laundry_type,rate,kilos,total,piece_count',
             'branch:id,name',
             'reporter:id,name,first_name,last_name,role,branch_id',
             'assignedEmployee:id,name,first_name,last_name,role,branch_id',
@@ -281,10 +312,26 @@ class ReportController extends Controller
             return response()->json(['message' => 'Only pending or under_review reports can be resolved.'], 422);
         }
 
+        $resolutionType = strtolower(trim((string) $validated['resolution_type']));
+
+        $refundAmount = null;
+        if ($resolutionType === 'refund') {
+            $request->validate([
+                'refund_amount' => 'required|numeric|min:0.01',
+            ]);
+            $refundAmount = round((float) $request->input('refund_amount'), 2);
+            $this->assertRefundAmountWithinLineCap($report, $refundAmount);
+        } elseif ($request->filled('refund_amount')) {
+            throw ValidationException::withMessages([
+                'refund_amount' => ['Refund amount is only used when resolution type is refund.'],
+            ]);
+        }
+
         $oldStatus = $report->status;
         $report->status = 'resolved';
-        $report->resolution_type = strtolower(trim((string) $validated['resolution_type']));
+        $report->resolution_type = $resolutionType;
         $report->resolution_note = trim((string) ($validated['resolution_note'] ?? '')) ?: null;
+        $report->refund_amount = $refundAmount;
         $report->resolved_by_user_id = $user->id;
         $report->resolved_at = now();
         $report->save();
@@ -312,6 +359,7 @@ class ReportController extends Controller
 
         $report->load([
             'transaction:id,receipt_number,payment_status,customer_name,total_amount,branch_id',
+            'transactionItem:id,transaction_id,service_name,laundry_type,rate,kilos,total,piece_count',
             'branch:id,name',
             'reporter:id,name,first_name,last_name,role,branch_id',
             'assignedEmployee:id,name,first_name,last_name,role,branch_id',
@@ -345,6 +393,7 @@ class ReportController extends Controller
         $report->status = 'rejected';
         $report->resolution_type = null;
         $report->resolution_note = trim((string) ($validated['resolution_note'] ?? '')) ?: null;
+        $report->refund_amount = null;
         $report->resolved_by_user_id = $user->id;
         $report->resolved_at = now();
         $report->save();
@@ -361,6 +410,7 @@ class ReportController extends Controller
 
         $report->load([
             'transaction:id,receipt_number,payment_status,customer_name,total_amount,branch_id',
+            'transactionItem:id,transaction_id,service_name,laundry_type,rate,kilos,total,piece_count',
             'branch:id,name',
             'reporter:id,name,first_name,last_name,role,branch_id',
             'assignedEmployee:id,name,first_name,last_name,role,branch_id',
@@ -903,11 +953,88 @@ class ReportController extends Controller
         ]);
     }
 
+    protected function assertRefundAmountWithinLineCap(IssueReport $report, float $amount): void
+    {
+        if (! $report->transaction_item_id) {
+            throw ValidationException::withMessages([
+                'refund_amount' => ['This dispute is not linked to a line item; refund resolution is not available.'],
+            ]);
+        }
+
+        $line = TransactionItem::query()
+            ->whereKey($report->transaction_item_id)
+            ->where('transaction_id', $report->transaction_id)
+            ->first();
+
+        if (! $line) {
+            throw ValidationException::withMessages([
+                'refund_amount' => ['Line item not found for this transaction.'],
+            ]);
+        }
+
+        $lineTotal = round((float) $line->total, 2);
+        $prior = (float) IssueReport::query()
+            ->where('transaction_item_id', $line->id)
+            ->where('id', '!=', $report->id)
+            ->where('status', 'resolved')
+            ->where('resolution_type', 'refund')
+            ->sum('refund_amount');
+        $prior = round($prior, 2);
+        $remaining = max(0, round($lineTotal - $prior, 2));
+
+        if ($amount < 0.01) {
+            throw ValidationException::withMessages([
+                'refund_amount' => ['Refund amount must be at least 0.01.'],
+            ]);
+        }
+
+        if ($amount - 0.001 > $remaining) {
+            throw ValidationException::withMessages([
+                'refund_amount' => ["Refund cannot exceed the remaining refundable amount for this line (max {$remaining})."],
+            ]);
+        }
+    }
+
+    protected function refundableRemainingForIssueReport(IssueReport $row): ?float
+    {
+        if (! $row->transaction_item_id) {
+            return null;
+        }
+
+        if (! $row->relationLoaded('transactionItem')) {
+            $row->load('transactionItem:id,transaction_id,service_name,laundry_type,rate,kilos,total,piece_count');
+        }
+
+        $line = $row->transactionItem;
+        if (! $line) {
+            return null;
+        }
+
+        $lineTotal = round((float) $line->total, 2);
+        $prior = (float) IssueReport::query()
+            ->where('transaction_item_id', $line->id)
+            ->where('id', '!=', $row->id)
+            ->where('status', 'resolved')
+            ->where('resolution_type', 'refund')
+            ->sum('refund_amount');
+
+        return max(0, round($lineTotal - round($prior, 2), 2));
+    }
+
     protected function serializeIssueReport(IssueReport $row): array
     {
+        $refundableRemaining = $this->refundableRemainingForIssueReport($row);
+        $pieceCount = $row->transactionItem?->piece_count;
+        $lineTotal = $row->transactionItem ? (float) $row->transactionItem->total : null;
+        $suggestedPerPiece =
+            ($pieceCount !== null && (int) $pieceCount > 0 && $lineTotal !== null)
+                ? round($lineTotal / (int) $pieceCount, 2)
+                : null;
+
         return [
             'id' => $row->id,
             'transaction_id' => $row->transaction_id,
+            'transaction_item_id' => $row->transaction_item_id,
             'branch_id' => $row->branch_id,
             'branch_name' => $row->branch?->name,
             'reported_by_user_id' => $row->reported_by_user_id,
@@ -921,6 +1048,9 @@ class ReportController extends Controller
             'status' => $row->status,
             'resolution_type' => $row->resolution_type,
             'resolution_note' => $row->resolution_note,
+            'refund_amount' => $row->refund_amount !== null ? (float) $row->refund_amount : null,
+            'refundable_remaining' => $refundableRemaining,
+            'suggested_refund_per_piece' => $suggestedPerPiece,
             'resolved_by_user_id' => $row->resolved_by_user_id,
             'resolved_by_name' => $this->displayName($row->resolver),
             'resolved_at' => $row->resolved_at,
@@ -930,6 +1060,15 @@ class ReportController extends Controller
                 'customer_name' => $row->transaction->customer_name,
                 'payment_status' => $row->transaction->payment_status,
                 'amount' => (float) $row->transaction->total_amount,
+            ] : null,
+            'transaction_item' => $row->transactionItem ? [
+                'id' => $row->transactionItem->id,
+                'service_name' => $row->transactionItem->service_name,
+                'laundry_type' => $row->transactionItem->laundry_type,
+                'rate' => (float) $row->transactionItem->rate,
+                'kilos' => (float) $row->transactionItem->kilos,
+                'line_total' => (float) $row->transactionItem->total,
+                'piece_count' => $row->transactionItem->piece_count,
             ] : null,
             'created_at' => $row->created_at,
             'updated_at' => $row->updated_at,

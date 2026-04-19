@@ -853,7 +853,7 @@ const POs = () => {
     }
   };
 
-  const handleAddServiceFromModal = (laundryItem, selectedTier, kilos, laundryType, extra, notes) => {
+  const handleAddServiceFromModal = (laundryItem, selectedTier, kilos, laundryType, extra, notes, pieceCountOptional) => {
     const serviceData = {
       serviceName: laundryItem.name,
       rate: extra.computedTotal,
@@ -863,6 +863,12 @@ const POs = () => {
       unit: extra.unit,
       label: extra.label,
       notes: notes || '',
+      piece_count:
+        pieceCountOptional != null &&
+        Number.isFinite(Number(pieceCountOptional)) &&
+        Number(pieceCountOptional) > 0
+          ? Math.floor(Number(pieceCountOptional))
+          : null,
     };
 
     if (editingServiceId) {
@@ -890,7 +896,8 @@ const POs = () => {
       ...originalItem,
       initialKilos: service.kilos,
       initialType: service.laundryType === 'Dry Only' ? 'dry-only' : 'wash-fold',
-      initialNotes: service.notes
+      initialNotes: service.notes,
+      initialPieceCount: service.piece_count,
     });
     setEditingServiceId(service.id);
     setIsModalOpen(true);
@@ -1763,7 +1770,10 @@ const POs = () => {
                   <span className="mini-item-name">{service.serviceName}</span>
                   <span className="mini-item-laundryType">{service.laundryType}</span>
                   <span className="mini-item-rate">P{service.rate.toFixed(2)}</span>
-                  <span className="mini-item-kilos">{service.kilos} kg</span>
+                  <span className="mini-item-kilos">
+                    {service.kilos} kg
+                    {service.piece_count ? ` · ${service.piece_count} pc` : ''}
+                  </span>
                   <span className="mini-item-notes" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={service.notes || ''}>{service.notes || '-'}</span>
                   <div className="mini-item-actions">
                     <button className="mini-item-edit" onClick={() => handleEditService(service)} title="Edit"><BsPencilSquare /></button>
