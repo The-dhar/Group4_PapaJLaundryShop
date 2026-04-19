@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import DataTable from 'react-data-table-component';
-import { BsEye, BsPrinter, BsCheck, BsFlag } from 'react-icons/bs';
+import { BsEye, BsPrinter, BsCheck, BsFlag, BsQuestionCircle } from 'react-icons/bs';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../components/dashboardlayout';
 import TransactionExtrasSummary from '../components/TransactionExtrasSummary';
@@ -140,8 +140,13 @@ const Receiptmanagement = () => {
   const [showReportModal, setShowReportModal] = useState(false);
   const [issueType, setIssueType] = useState('damaged');
   const [issueNote, setIssueNote] = useState('');
-  const [reportTransactionItemId, setReportTransactionItemId] = useState('');
+  /** Checked transaction_item ids (strings). API still receives one primary id: first checked in receipt line order. */
+  const [selectedReportLineIds, setSelectedReportLineIds] = useState([]);
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  /** Dispute policy popover: stay open on click (e.g. touch); also show on hover over the (? ) control. */
+  const [reportHelpPinned, setReportHelpPinned] = useState(false);
+  const [reportHelpHover, setReportHelpHover] = useState(false);
+  const reportHelpVisible = reportHelpPinned || reportHelpHover;
   /** Any existing issue report blocks a second report for the same transaction. */
   const [transactionIdsWithIssueReport, setTransactionIdsWithIssueReport] = useState(new Set());
   const [backjobTransactionIds, setBackjobTransactionIds] = useState(() => readBackjobIdsCache());
@@ -202,6 +207,18 @@ const Receiptmanagement = () => {
   useEffect(() => {
     writeBackjobIdsCache(effectiveBackjobTransactionIds);
   }, [effectiveBackjobTransactionIds]);
+
+  useEffect(() => {
+    if (!showReportModal || !reportHelpPinned) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setReportHelpPinned(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showReportModal, reportHelpPinned]);
 
   const columns = useMemo(() => [
     { name: 'Receipt ID', selector: (row) => row.receipt, sortable: true },
@@ -504,8 +521,28 @@ const Receiptmanagement = () => {
   const resetReportForm = () => {
     setIssueType('damaged');
     setIssueNote('');
-    setReportTransactionItemId('');
+    setSelectedReportLineIds([]);
   };
+
+  const toggleReportLine = useCallback((idStr) => {
+    setSelectedReportLineIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(idStr)) next.delete(idStr);
+      else next.add(idStr);
+      return Array.from(next);
+    });
+  }, []);
+
+  /** Primary line for API: first service row in receipt order that is checked. */
+  const primaryTransactionItemIdFromSelection = useCallback(() => {
+    for (const s of reportableServicesForModal) {
+      if (selectedReportLineIds.includes(String(s.id))) {
+        const n = Number(s.id);
+        return Number.isFinite(n) && n > 0 ? n : null;
+      }
+    }
+    return null;
+  }, [reportableServicesForModal, selectedReportLineIds]);
 
   const parseApiError = (payload) => {
     if (!payload || typeof payload !== 'object') return 'Request failed.';
@@ -562,13 +599,19 @@ const Receiptmanagement = () => {
     if (!selectedReceipt) return;
 
     resetReportForm();
-    const firstLine = (selectedReceipt.services || []).find((s) => serviceHasPersistedLineId(s));
-    setReportTransactionItemId(firstLine ? String(firstLine.id) : '');
+    setReportHelpPinned(false);
+    setReportHelpHover(false);
+    const lines = (selectedReceipt.services || []).filter((s) => serviceHasPersistedLineId(s));
+    if (lines.length === 1) {
+      setSelectedReportLineIds([String(lines[0].id)]);
+    }
     setShowReportModal(true);
   };
 
   const closeReportModal = () => {
     setShowReportModal(false);
+    setReportHelpPinned(false);
+    setReportHelpHover(false);
     resetReportForm();
   };
 
@@ -594,11 +637,11 @@ const Receiptmanagement = () => {
       return;
     }
 
-    const lineId = Number(reportTransactionItemId);
-    if (!Number.isFinite(lineId) || lineId <= 0) {
+    const lineId = primaryTransactionItemIdFromSelection();
+    if (lineId == null) {
       await swalFire({
-        title: 'Select a line',
-        text: 'Choose which service line this dispute is for. If lines are missing IDs, refresh the page after upgrading the server.',
+        title: 'Select service line(s)',
+        text: 'Check at least one service line that this dispute applies to. Use the note for how many damaged/lost per line.',
         icon: 'warning',
       });
       return;
@@ -612,9 +655,15 @@ const Receiptmanagement = () => {
 
     setIsSubmittingReport(true);
     try {
+      const orderedAffectedIds = reportableServicesForModal
+        .filter((s) => selectedReportLineIds.includes(String(s.id)))
+        .map((s) => Number(s.id))
+        .filter((id) => Number.isFinite(id) && id > 0);
+
       const body = {
         transaction_id: selectedReceipt.id,
         transaction_item_id: lineId,
+        affected_transaction_item_ids: orderedAffectedIds,
         issue_type: issueType,
         issue_note: issueNote.trim() || null,
       };
@@ -927,75 +976,143 @@ const Receiptmanagement = () => {
       {showReportModal && selectedReceipt && (
         <div className="receipt-report-overlay" onClick={closeReportModal}>
           <div className="receipt-report-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Create Report</h3>
-            <p className="receipt-report-sub">Receipt: <strong>{selectedReceipt.receipt}</strong> · Customer: <strong>{selectedReceipt.customer_name}</strong></p>
-            <p className="receipt-report-note">
-              Make sure that the dispute details are correct as this action cannot be edited later on.
+            <div className="receipt-report-modal-header">
+              <h3>Create Report</h3>
+              <div
+                className="receipt-report-help-anchor"
+                onMouseEnter={() => setReportHelpHover(true)}
+                onMouseLeave={() => setReportHelpHover(false)}
+              >
+                <button
+                  type="button"
+                  className="receipt-report-help-btn"
+                  aria-label="Reporting and dispute policy"
+                  aria-expanded={reportHelpVisible}
+                  title="Show reporting policy"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setReportHelpPinned((p) => !p);
+                  }}
+                >
+                  <BsQuestionCircle size={22} aria-hidden />
+                </button>
+                {reportHelpVisible ? (
+                  <div
+                    className="receipt-report-help-popover"
+                    role="region"
+                    aria-label="Reporting instructions"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <p className="receipt-report-help-popover-warning">
+                      Make sure that the dispute details are correct as this action cannot be edited later on.
+                    </p>
+                    <strong className="receipt-report-help-popover-title">How reporting works (Option 2)</strong>
+                    <ul className="receipt-report-policy-list">
+                      <li>
+                        <strong>One report per receipt</strong> — Check every service line that has this issue. In the
+                        note, say how many damaged/lost per line (or describe clearly if you prefer).
+                      </li>
+                      <li>
+                        <strong>System primary line</strong> — The <strong>topmost checked</strong> line in the list
+                        (receipt order) is used for refund limits / linking; add detail in the note if another line
+                        should drive resolution.
+                      </li>
+                      <li>
+                        <strong>Dispute type</strong> — One category per report. If damage and loss occur on{' '}
+                        <em>different</em> lines, choose <strong>Lost</strong> as the type (more severe) and explain in
+                        the note; otherwise use <strong>Damaged</strong> or <strong>Lost</strong> as fits.
+                      </li>
+                      <li>
+                        {persistedLineCountForReport > 1 && isDamagedOrLostIssueType(issueType) ? (
+                          <span>
+                            This receipt has <strong>multiple lines</strong> — an <strong>issue note is required</strong>{' '}
+                            for Damaged/Lost.
+                          </span>
+                        ) : (
+                          <span>
+                            Multiple lines + Damaged/Lost: an <strong>issue note is required</strong> to list what
+                            happened on each affected line.
+                          </span>
+                        )}
+                      </li>
+                    </ul>
+                    {reportableServicesForModal.length > 0 ? (
+                      <p className="receipt-report-help-popover-extra">
+                        Only <strong>checked</strong> lines plus what you write in the note define scope. If only one
+                        line had an issue, check that line only.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <p className="receipt-report-sub">
+              Receipt: <strong>{selectedReceipt.receipt}</strong> · Customer:{' '}
+              <strong>{selectedReceipt.customer_name}</strong>
             </p>
 
-            <div className="receipt-report-policy-option2">
-              <strong>How reporting works (Option 2)</strong>
-              <ul className="receipt-report-policy-list">
-                <li>
-                  <strong>Primary service line</strong> — Used for refund limits and linking. If only one line is affected,
-                  select that line. If multiple lines are involved, select the line that should drive resolution (e.g.
-                  largest impact), and describe all lines in the issue note.
-                </li>
-                <li>
-                  <strong>Dispute type</strong> — One category per report. If damage and loss occur on{' '}
-                  <em>different</em> lines, choose <strong>Lost</strong> as the primary type (more severe) and explain
-                  both lines in the note; if only damage (or only loss) across lines, use <strong>Damaged</strong> or{' '}
-                  <strong>Lost</strong> accordingly and detail each line in the note.
-                </li>
-                <li>
-                  {persistedLineCountForReport > 1 && isDamagedOrLostIssueType(issueType) ? (
-                    <span>
-                      This receipt has <strong>multiple lines</strong> — an <strong>issue note is required</strong> for
-                      Damaged/Lost.
-                    </span>
-                  ) : (
-                    <span>
-                      Multiple lines + Damaged/Lost: an <strong>issue note is required</strong> to list what happened on
-                      each affected line.
-                    </span>
-                  )}
-                </li>
-              </ul>
-            </div>
-
-            <label>Service line (primary)</label>
+            <label htmlFor="receipt-report-issue-type">Dispute type</label>
             <select
-              value={reportTransactionItemId}
-              onChange={(e) => setReportTransactionItemId(e.target.value)}
+              id="receipt-report-issue-type"
+              value={issueType}
+              onChange={(e) => setIssueType(e.target.value)}
             >
-              <option value="">Select line…</option>
-              {reportableServicesForModal.map((s) => (
-                <option key={s.id} value={String(s.id)}>
-                  {s.serviceName} — P{(Number(s.total) || 0).toFixed(2)}
-                  {s.piece_count ? ` · ${s.piece_count} pc` : ''}
-                </option>
-              ))}
-            </select>
-            {reportableServicesForModal.length > 0 ? (
-              <p className="receipt-report-note" style={{ marginTop: 8, fontSize: 12, color: '#64748b' }}>
-                Only the line(s) you describe in the note are “in scope”; pick the primary line above for system linking.
-                Single-line receipts can leave the note optional for Damaged/Lost unless you want extra detail.
-              </p>
-            ) : null}
-            {reportableServicesForModal.length === 0 ? (
-              <p className="receipt-report-note" style={{ marginTop: 8 }}>
-                No service lines with IDs on this receipt. Refresh after upgrading the server if needed.
-              </p>
-            ) : null}
-
-            <label>Dispute type</label>
-            <select value={issueType} onChange={(e) => setIssueType(e.target.value)}>
               <option value="damaged">Damaged</option>
               <option value="lost">Lost</option>
               <option value="poor_quality_cleaning">Poor Quality Cleaning</option>
               <option value="wrinkled_not_folded_well">Wrinkled/ Not Folded Well</option>
               <option value="other">Other</option>
             </select>
+
+            <fieldset className="receipt-report-lines-fieldset">
+              <legend className="receipt-report-lines-legend">Service line(s) affected</legend>
+              {reportableServicesForModal.length === 0 ? (
+                <p className="receipt-report-inline-alert">
+                  No service lines with IDs on this receipt. Refresh after upgrading the server if needed.
+                </p>
+              ) : (
+                <div
+                  className={
+                    reportableServicesForModal.length >= 2
+                      ? 'receipt-report-line-grid receipt-report-line-grid--cols2'
+                      : 'receipt-report-line-grid'
+                  }
+                >
+                  {reportableServicesForModal.map((s) => {
+                    const idStr = String(s.id);
+                    const checked = selectedReportLineIds.includes(idStr);
+                    return (
+                      <div key={s.id} className="receipt-report-line-cell">
+                        <label className="receipt-report-line-option">
+                          <span className="receipt-report-line-check">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleReportLine(idStr)}
+                              aria-label={`Affects ${s.serviceName || 'service line'}`}
+                            />
+                          </span>
+                          <span className="receipt-report-line-option-text">
+                            <span className="receipt-report-line-name">{s.serviceName}</span>
+                            <span className="receipt-report-line-meta">
+                              P{(Number(s.total) || 0).toFixed(2)}
+                              {s.piece_count ? ` · ${s.piece_count} pc` : ''}
+                            </span>
+                          </span>
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {reportableServicesForModal.length > 0 ? (
+                <p className="receipt-report-lines-hint">
+                  Check each line that applies. Use the note below for how many damaged/lost per line. For system
+                  linking/refunds, the <strong>topmost checked line</strong> in this list (receipt order) is used as the
+                  primary line.
+                </p>
+              ) : null}
+            </fieldset>
 
             <label>
               Issue note{' '}
@@ -1005,8 +1122,8 @@ const Receiptmanagement = () => {
               rows={4}
               placeholder={
                 persistedLineCountForReport > 1 && isDamagedOrLostIssueType(issueType)
-                  ? 'Required: which line(s), how many pieces, and if damage vs loss differs by line — be specific.'
-                  : 'e.g. 2 of 8 pieces damaged on this line only; or list each service line if several are affected.'
+                  ? 'Required: for each checked line, how many damaged/lost (or describe clearly). If only one line checked, say counts for that line.'
+                  : 'e.g. 3 damaged on Regular Clothes; or counts per line if you checked more than one.'
               }
               value={issueNote}
               onChange={(e) => setIssueNote(e.target.value)}

@@ -134,6 +134,8 @@ class ReportController extends Controller
         $validated = $request->validate([
             'transaction_id' => 'required|integer|exists:transactions,id',
             'transaction_item_id' => 'required|integer|exists:transaction_items,id',
+            'affected_transaction_item_ids' => 'nullable|array',
+            'affected_transaction_item_ids.*' => 'integer|exists:transaction_items,id',
             'issue_type' => 'required|string|in:damaged,lost,poor_quality_cleaning,wrinkled_not_folded_well,other',
             'issue_note' => 'nullable|string|max:2000',
             'assigned_employee_user_id' => 'nullable|integer|exists:users,id',
@@ -163,6 +165,28 @@ class ReportController extends Controller
         if (! $line) {
             throw ValidationException::withMessages([
                 'transaction_item_id' => ['The selected line does not belong to this transaction.'],
+            ]);
+        }
+
+        $affectedIds = ! empty($validated['affected_transaction_item_ids'])
+            ? array_values(array_unique(array_map('intval', $validated['affected_transaction_item_ids'])))
+            : [$lineItemId];
+
+        foreach ($affectedIds as $aid) {
+            $belongs = TransactionItem::query()
+                ->whereKey($aid)
+                ->where('transaction_id', $transaction->id)
+                ->exists();
+            if (! $belongs) {
+                throw ValidationException::withMessages([
+                    'affected_transaction_item_ids' => ["Service line {$aid} does not belong to this transaction."],
+                ]);
+            }
+        }
+
+        if (! in_array($lineItemId, $affectedIds, true)) {
+            throw ValidationException::withMessages([
+                'transaction_item_id' => ['Primary line must be included in affected service lines.'],
             ]);
         }
 
@@ -197,6 +221,7 @@ class ReportController extends Controller
         $report = IssueReport::create([
             'transaction_id' => $transaction->id,
             'transaction_item_id' => $lineItemId,
+            'affected_transaction_item_ids' => $affectedIds,
             'branch_id' => $transaction->branch_id,
             'reported_by_user_id' => $user->id,
             'assigned_employee_user_id' => $assignedEmployee->id,
@@ -328,15 +353,42 @@ class ReportController extends Controller
         $resolutionType = strtolower(trim((string) $validated['resolution_type']));
 
         $refundAmount = null;
+        $refundAllocationsStored = null;
         if ($resolutionType === 'refund') {
-            $request->validate([
-                'refund_amount' => 'required|numeric|min:0.01',
-            ]);
-            $refundAmount = round((float) $request->input('refund_amount'), 2);
-            $this->assertRefundAmountWithinLineCap($report, $refundAmount);
-        } elseif ($request->filled('refund_amount')) {
+            $affected = $this->affectedIdsForReport($report);
+            if (count($affected) === 0) {
+                throw ValidationException::withMessages([
+                    'refund_amount' => ['This dispute has no linked service lines; refund resolution is not available.'],
+                ]);
+            }
+
+            if (count($affected) > 1) {
+                $request->validate([
+                    'refund_allocations' => 'required|array|min:1',
+                    'refund_allocations.*.transaction_item_id' => 'required|integer',
+                    'refund_allocations.*.amount' => 'required|numeric|min:0',
+                ]);
+                $result = $this->validateRefundAllocationsForResolve($report, $request->input('refund_allocations', []));
+                $refundAmount = $result['total'];
+                $refundAllocationsStored = $result['allocations'];
+            } elseif ($request->filled('refund_allocations') && is_array($request->input('refund_allocations'))) {
+                $result = $this->validateRefundAllocationsForResolve($report, $request->input('refund_allocations', []));
+                $refundAmount = $result['total'];
+                $refundAllocationsStored = $result['allocations'];
+            } else {
+                $request->validate([
+                    'refund_amount' => 'required|numeric|min:0.01',
+                ]);
+                $refundAmount = round((float) $request->input('refund_amount'), 2);
+                $onlyId = (int) $affected[0];
+                $this->assertSingleLineRefundWithinCap($report, $onlyId, $refundAmount);
+                $refundAllocationsStored = [
+                    ['transaction_item_id' => $onlyId, 'amount' => $refundAmount],
+                ];
+            }
+        } elseif ($request->filled('refund_amount') || $request->filled('refund_allocations')) {
             throw ValidationException::withMessages([
-                'refund_amount' => ['Refund amount is only used when resolution type is refund.'],
+                'refund_amount' => ['Refund fields are only used when resolution type is refund.'],
             ]);
         }
 
@@ -345,6 +397,7 @@ class ReportController extends Controller
         $report->resolution_type = $resolutionType;
         $report->resolution_note = trim((string) ($validated['resolution_note'] ?? '')) ?: null;
         $report->refund_amount = $refundAmount;
+        $report->refund_allocations = $refundAllocationsStored;
         $report->resolved_by_user_id = $user->id;
         $report->resolved_at = now();
         $report->save();
@@ -407,6 +460,7 @@ class ReportController extends Controller
         $report->resolution_type = null;
         $report->resolution_note = trim((string) ($validated['resolution_note'] ?? '')) ?: null;
         $report->refund_amount = null;
+        $report->refund_allocations = null;
         $report->resolved_by_user_id = $user->id;
         $report->resolved_at = now();
         $report->save();
@@ -966,34 +1020,12 @@ class ReportController extends Controller
         ]);
     }
 
-    protected function assertRefundAmountWithinLineCap(IssueReport $report, float $amount): void
+    /**
+     * Legacy single-field refund: one affected line, cap checked against that line's remaining refundable amount.
+     */
+    protected function assertSingleLineRefundWithinCap(IssueReport $report, int $transactionItemId, float $amount): void
     {
-        if (! $report->transaction_item_id) {
-            throw ValidationException::withMessages([
-                'refund_amount' => ['This dispute is not linked to a line item; refund resolution is not available.'],
-            ]);
-        }
-
-        $line = TransactionItem::query()
-            ->whereKey($report->transaction_item_id)
-            ->where('transaction_id', $report->transaction_id)
-            ->first();
-
-        if (! $line) {
-            throw ValidationException::withMessages([
-                'refund_amount' => ['Line item not found for this transaction.'],
-            ]);
-        }
-
-        $lineTotal = round((float) $line->total, 2);
-        $prior = (float) IssueReport::query()
-            ->where('transaction_item_id', $line->id)
-            ->where('id', '!=', $report->id)
-            ->where('status', 'resolved')
-            ->where('resolution_type', 'refund')
-            ->sum('refund_amount');
-        $prior = round($prior, 2);
-        $remaining = max(0, round($lineTotal - $prior, 2));
+        $remaining = $this->refundableRemainingForLineItem($transactionItemId, $report->id, (int) $report->transaction_id);
 
         if ($amount < 0.01) {
             throw ValidationException::withMessages([
@@ -1008,30 +1040,197 @@ class ReportController extends Controller
         }
     }
 
+    /**
+     * @return array{total: float, allocations: array<int, array{transaction_item_id: int, amount: float}>}
+     */
+    protected function validateRefundAllocationsForResolve(IssueReport $report, array $allocationsInput): array
+    {
+        $affected = $this->affectedIdsForReport($report);
+
+        $byLine = [];
+        foreach ($allocationsInput as $row) {
+            $tid = (int) ($row['transaction_item_id'] ?? 0);
+            $amt = round((float) ($row['amount'] ?? 0), 2);
+            if ($tid <= 0) {
+                throw ValidationException::withMessages([
+                    'refund_allocations' => ['Each allocation must include a valid transaction_item_id.'],
+                ]);
+            }
+            if ($amt < 0) {
+                throw ValidationException::withMessages([
+                    'refund_allocations' => ['Allocation amounts cannot be negative.'],
+                ]);
+            }
+            if (isset($byLine[$tid])) {
+                throw ValidationException::withMessages([
+                    'refund_allocations' => ['Duplicate transaction_item_id in refund allocations.'],
+                ]);
+            }
+            $byLine[$tid] = $amt;
+        }
+
+        foreach ($affected as $id) {
+            if (! array_key_exists($id, $byLine)) {
+                throw ValidationException::withMessages([
+                    'refund_allocations' => ["Include an amount for each affected service line (missing line ID {$id})."],
+                ]);
+            }
+        }
+
+        foreach (array_keys($byLine) as $tid) {
+            if (! in_array($tid, $affected, true)) {
+                throw ValidationException::withMessages([
+                    'refund_allocations' => ['Allocation includes a line that is not part of this dispute.'],
+                ]);
+            }
+        }
+
+        $total = round(array_sum($byLine), 2);
+        if ($total < 0.01) {
+            throw ValidationException::withMessages([
+                'refund_allocations' => ['Total refund must be at least 0.01.'],
+            ]);
+        }
+
+        foreach ($byLine as $tid => $amt) {
+            $remaining = $this->refundableRemainingForLineItem((int) $tid, $report->id, (int) $report->transaction_id);
+            if ($amt - 0.001 > $remaining) {
+                throw ValidationException::withMessages([
+                    'refund_allocations' => ["Refund for line {$tid} cannot exceed {$remaining} (remaining for this line)."],
+                ]);
+            }
+        }
+
+        $normalized = [];
+        foreach ($affected as $tid) {
+            $normalized[] = [
+                'transaction_item_id' => $tid,
+                'amount' => $byLine[$tid],
+            ];
+        }
+
+        return ['total' => $total, 'allocations' => $normalized];
+    }
+
+    /** @return int[] */
+    protected function affectedIdsForReport(IssueReport $report): array
+    {
+        $raw = $report->affected_transaction_item_ids;
+        if (is_array($raw) && count($raw) > 0) {
+            return array_values(array_unique(array_map('intval', $raw)));
+        }
+        if ($report->transaction_item_id) {
+            return [(int) $report->transaction_item_id];
+        }
+
+        return [];
+    }
+
+    protected function priorRefundAmountAllocatedToLine(int $transactionItemId, int $excludeIssueReportId, int $transactionId): float
+    {
+        $reports = IssueReport::query()
+            ->where('transaction_id', $transactionId)
+            ->where('status', 'resolved')
+            ->where('resolution_type', 'refund')
+            ->where('id', '!=', $excludeIssueReportId)
+            ->get(['id', 'transaction_item_id', 'refund_amount', 'refund_allocations']);
+
+        $sum = 0.0;
+        foreach ($reports as $r) {
+            $sum += $this->priorRefundAmountForLineFromReport($r, $transactionItemId);
+        }
+
+        return round($sum, 2);
+    }
+
+    protected function priorRefundAmountForLineFromReport(IssueReport $r, int $transactionItemId): float
+    {
+        $alloc = $r->refund_allocations;
+        if (is_array($alloc) && count($alloc) > 0) {
+            foreach ($alloc as $row) {
+                if ((int) ($row['transaction_item_id'] ?? 0) === $transactionItemId) {
+                    return round((float) ($row['amount'] ?? 0), 2);
+                }
+            }
+
+            return 0.0;
+        }
+
+        if ((int) $r->transaction_item_id === $transactionItemId && $r->refund_amount !== null) {
+            return round((float) $r->refund_amount, 2);
+        }
+
+        return 0.0;
+    }
+
+    protected function refundableRemainingForLineItem(int $transactionItemId, int $excludeIssueReportId, int $transactionId): float
+    {
+        $line = TransactionItem::query()
+            ->whereKey($transactionItemId)
+            ->where('transaction_id', $transactionId)
+            ->first();
+
+        if (! $line) {
+            return 0.0;
+        }
+
+        $lineTotal = round((float) $line->total, 2);
+        $prior = $this->priorRefundAmountAllocatedToLine($transactionItemId, $excludeIssueReportId, $transactionId);
+
+        return max(0, round($lineTotal - $prior, 2));
+    }
+
+    /** Remaining refundable amount for the primary linked line (API compat). */
     protected function refundableRemainingForIssueReport(IssueReport $row): ?float
     {
         if (! $row->transaction_item_id) {
             return null;
         }
 
-        if (! $row->relationLoaded('transactionItem')) {
-            $row->load('transactionItem:id,transaction_id,service_name,laundry_type,rate,kilos,total,piece_count');
+        return $this->refundableRemainingForLineItem((int) $row->transaction_item_id, $row->id, (int) $row->transaction_id);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    protected function buildAffectedLinesPayload(IssueReport $row): array
+    {
+        $ids = $this->affectedIdsForReport($row);
+        if (count($ids) === 0) {
+            return [];
         }
 
-        $line = $row->transactionItem;
-        if (! $line) {
-            return null;
+        $items = TransactionItem::query()
+            ->whereIn('id', $ids)
+            ->where('transaction_id', $row->transaction_id)
+            ->get()
+            ->keyBy('id');
+
+        $ordered = [];
+        foreach ($ids as $id) {
+            $item = $items->get($id);
+            if (! $item) {
+                continue;
+            }
+            $pieceCount = $item->piece_count;
+            $lineTotal = (float) $item->total;
+            $remaining = $this->refundableRemainingForLineItem((int) $item->id, $row->id, (int) $row->transaction_id);
+            $suggestedPerPiece =
+                ($pieceCount !== null && (int) $pieceCount > 0)
+                    ? round($lineTotal / (int) $pieceCount, 2)
+                    : null;
+
+            $ordered[] = [
+                'transaction_item_id' => (int) $item->id,
+                'service_name' => $item->service_name,
+                'line_total' => $lineTotal,
+                'piece_count' => $pieceCount,
+                'refundable_remaining' => $remaining,
+                'suggested_refund_per_piece' => $suggestedPerPiece,
+            ];
         }
 
-        $lineTotal = round((float) $line->total, 2);
-        $prior = (float) IssueReport::query()
-            ->where('transaction_item_id', $line->id)
-            ->where('id', '!=', $row->id)
-            ->where('status', 'resolved')
-            ->where('resolution_type', 'refund')
-            ->sum('refund_amount');
-
-        return max(0, round($lineTotal - round($prior, 2), 2));
+        return $ordered;
     }
 
     protected function serializeIssueReport(IssueReport $row): array
@@ -1044,10 +1243,23 @@ class ReportController extends Controller
                 ? round($lineTotal / (int) $pieceCount, 2)
                 : null;
 
+        $affectedLines = $this->buildAffectedLinesPayload($row);
+        $allocOut = null;
+        if (is_array($row->refund_allocations) && count($row->refund_allocations) > 0) {
+            $allocOut = array_map(function ($a) {
+                return [
+                    'transaction_item_id' => (int) ($a['transaction_item_id'] ?? 0),
+                    'amount' => isset($a['amount']) ? round((float) $a['amount'], 2) : 0.0,
+                ];
+            }, $row->refund_allocations);
+        }
+
         return [
             'id' => $row->id,
             'transaction_id' => $row->transaction_id,
             'transaction_item_id' => $row->transaction_item_id,
+            'affected_transaction_item_ids' => $this->affectedIdsForReport($row),
+            'affected_lines' => $affectedLines,
             'branch_id' => $row->branch_id,
             'branch_name' => $row->branch?->name,
             'reported_by_user_id' => $row->reported_by_user_id,
@@ -1062,6 +1274,7 @@ class ReportController extends Controller
             'resolution_type' => $row->resolution_type,
             'resolution_note' => $row->resolution_note,
             'refund_amount' => $row->refund_amount !== null ? (float) $row->refund_amount : null,
+            'refund_allocations' => $allocOut,
             'refundable_remaining' => $refundableRemaining,
             'suggested_refund_per_piece' => $suggestedPerPiece,
             'resolved_by_user_id' => $row->resolved_by_user_id,

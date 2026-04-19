@@ -11,6 +11,7 @@ class IssueReport extends Model
     protected $fillable = [
         'transaction_id',
         'transaction_item_id',
+        'affected_transaction_item_ids',
         'branch_id',
         'reported_by_user_id',
         'assigned_employee_user_id',
@@ -20,6 +21,7 @@ class IssueReport extends Model
         'resolution_type',
         'resolution_note',
         'refund_amount',
+        'refund_allocations',
         'resolved_by_user_id',
         'resolved_at',
     ];
@@ -29,6 +31,8 @@ class IssueReport extends Model
         return [
             'resolved_at' => 'datetime',
             'refund_amount' => 'decimal:2',
+            'affected_transaction_item_ids' => 'array',
+            'refund_allocations' => 'array',
         ];
     }
 

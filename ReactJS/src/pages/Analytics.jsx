@@ -195,6 +195,64 @@ function isRushOrder(row) {
   return false;
 }
 
+const RUSH_REGULAR_MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * Same bucketing as the executive "monthly" revenue chart: days 1–7 → Week 1, …, 22–28+ → Week 4.
+ * Used for Rush vs regular when Weekly is selected.
+ */
+function buildRushRegularFourWeekBuckets(transactions) {
+  const rows = [
+    { name: 'Week 1', rush: 0, regular: 0 },
+    { name: 'Week 2', rush: 0, regular: 0 },
+    { name: 'Week 3', rush: 0, regular: 0 },
+    { name: 'Week 4', rush: 0, regular: 0 },
+  ];
+  transactions.forEach((t) => {
+    if (t.payment_status !== 'paid') return;
+    const dt = new Date(t.created_at || t.updated_at || Date.now());
+    const idx = Math.min(3, Math.floor((dt.getDate() - 1) / 7));
+    const amount = Number(t.amount) || 0;
+    if (isRushOrder(t)) rows[idx].rush += amount;
+    else rows[idx].regular += amount;
+  });
+  return rows;
+}
+
+/** Jan–Dec for one calendar year (same shape as the old yearly revenue chart). */
+function buildRushRegularCalendarYearMonths(transactions, year) {
+  const rows = RUSH_REGULAR_MONTH_LABELS.map((name) => ({ name, rush: 0, regular: 0 }));
+  transactions.forEach((t) => {
+    if (t.payment_status !== 'paid') return;
+    const dt = new Date(t.created_at || t.updated_at || Date.now());
+    if (dt.getFullYear() !== year) return;
+    const idx = dt.getMonth();
+    const amount = Number(t.amount) || 0;
+    if (isRushOrder(t)) rows[idx].rush += amount;
+    else rows[idx].regular += amount;
+  });
+  return rows;
+}
+
+/** Five calendar years ending at `focusYear` (left … right), sliding as the selected year changes. */
+function buildRushRegularFiveYearWindow(transactions, focusYear) {
+  const years = [focusYear - 4, focusYear - 3, focusYear - 2, focusYear - 1, focusYear];
+  const byYear = new Map(
+    years.map((y) => [y, { name: String(y), rush: 0, regular: 0 }])
+  );
+  transactions.forEach((t) => {
+    if (t.payment_status !== 'paid') return;
+    const dt = new Date(t.created_at || t.updated_at || Date.now());
+    const y = dt.getFullYear();
+    const row = byYear.get(y);
+    if (!row) return;
+    const amount = Number(t.amount) || 0;
+    if (isRushOrder(t)) row.rush += amount;
+    else row.regular += amount;
+  });
+  return years.map((y) => byYear.get(y));
+}
+
 /** Intersection of view window and optional custom date inputs (same logic as filtered transactions). */
 function getEffectiveChartBounds(viewBounds, rangeStartDate, rangeEndDate) {
   let start = new Date(viewBounds.start);
@@ -782,11 +840,41 @@ export default function AnalyticsPage() {
   }, [viewType, todayData, weekData, monthData, yearData]);
 
   const rushRegularChartData = useMemo(() => {
-    if (viewType === 'today') return todayData.map(({ name, rush, regular }) => ({ name, rush, regular }));
-    if (viewType === 'week') return weekData.map(({ name, rush, regular }) => ({ name, rush, regular }));
-    if (viewType === 'month') return monthData.map(({ name, rush, regular }) => ({ name, rush, regular }));
-    return yearData.map(({ name, rush, regular }) => ({ name, rush, regular }));
-  }, [viewType, todayData, weekData, monthData, yearData]);
+    if (viewType === 'today') {
+      return todayData.map(({ name, rush, regular }) => ({ name, rush, regular }));
+    }
+    if (viewType === 'week') {
+      return buildRushRegularFourWeekBuckets(filteredTransactions);
+    }
+    if (viewType === 'month') {
+      const y = viewBounds.start.getFullYear();
+      const calStart = new Date(y, 0, 1, 0, 0, 0, 0);
+      const calEnd = new Date(y, 11, 31, 23, 59, 59, 999);
+      const { start, end } = getEffectiveChartBounds({ start: calStart, end: calEnd }, rangeStartDate, rangeEndDate);
+      const inWindow = branchScopedTxns.filter((t) => {
+        const dt = new Date(t.created_at || t.updated_at || Date.now());
+        return dt >= start && dt <= end;
+      });
+      return buildRushRegularCalendarYearMonths(inWindow, y);
+    }
+    const focusYear = viewBounds.start.getFullYear();
+    const calStart = new Date(focusYear - 4, 0, 1, 0, 0, 0, 0);
+    const calEnd = new Date(focusYear, 11, 31, 23, 59, 59, 999);
+    const { start, end } = getEffectiveChartBounds({ start: calStart, end: calEnd }, rangeStartDate, rangeEndDate);
+    const inWindow = branchScopedTxns.filter((t) => {
+      const dt = new Date(t.created_at || t.updated_at || Date.now());
+      return dt >= start && dt <= end;
+    });
+    return buildRushRegularFiveYearWindow(inWindow, focusYear);
+  }, [
+    viewType,
+    todayData,
+    filteredTransactions,
+    branchScopedTxns,
+    viewBounds.start,
+    rangeStartDate,
+    rangeEndDate,
+  ]);
 
   const disputeStats = useMemo(() => {
     const total = disputesInView.reduce((sum, r) => sum + disputeAmountFromReport(r), 0);
@@ -1085,7 +1173,9 @@ export default function AnalyticsPage() {
 
               <Card title="Rush vs regular (paid revenue)">
                 <p className="analytics-card-sub">
-                  Paid revenue grouped as rush (express) vs regular for the same period as the executive summary charts.
+                  Paid rush (express) vs regular. Weekly: Week 1–4 (same calendar-month segments as the monthly revenue
+                  chart). Monthly: Jan–Dec for the calendar year of the selected month. Yearly: five years ending on the
+                  selected year (latest on the right). Honors the custom date range when set.
                 </p>
                 <ResponsiveContainer width="100%" height={240}>
                   <BarChart data={rushRegularChartData} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>

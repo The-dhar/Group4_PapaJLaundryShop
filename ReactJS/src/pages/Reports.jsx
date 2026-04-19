@@ -56,6 +56,34 @@ function formatDateCell(value) {
   return dt.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** Lines for refund UI + display; falls back to primary transaction_item when API omits affected_lines. */
+function resolveAffectedLinesForRow(row) {
+  if (Array.isArray(row.affected_lines) && row.affected_lines.length > 0) {
+    return row.affected_lines;
+  }
+  if (row.transaction_item?.service_name) {
+    return [
+      {
+        transaction_item_id: row.transaction_item.id,
+        service_name: row.transaction_item.service_name,
+        line_total: row.transaction_item.line_total,
+        piece_count: row.transaction_item.piece_count,
+        refundable_remaining: row.refundable_remaining,
+        suggested_refund_per_piece: row.suggested_refund_per_piece,
+      },
+    ];
+  }
+  return [];
+}
+
 async function apiRequest(path, options = {}) {
   const token = getToken();
   const res = await fetch(`${API_URL}${path}`, {
@@ -217,29 +245,45 @@ export default function ReportsPage() {
             }),
           });
         } else {
-          const maxRem =
-            row.refundable_remaining != null && Number.isFinite(Number(row.refundable_remaining))
-              ? Number(row.refundable_remaining)
-              : null;
-          const perPiece =
-            row.suggested_refund_per_piece != null &&
-            Number.isFinite(Number(row.suggested_refund_per_piece))
-              ? Number(row.suggested_refund_per_piece)
-              : null;
-          const maxHtml =
-            maxRem != null
-              ? `<p style="margin:0 0 8px;text-align:left;">Maximum for this line: <strong>₱${maxRem.toFixed(2)}</strong></p>`
-              : '';
-          const hintHtml =
-            perPiece != null
-              ? `<p style="margin:0 0 12px;text-align:left;font-size:13px;color:#555;">Suggested per piece (line total ÷ piece count): <strong>₱${perPiece.toFixed(2)}</strong></p>`
-              : '';
+          const lines = resolveAffectedLinesForRow(row);
+          if (lines.length === 0) {
+            await Swal.fire({
+              title: 'Cannot resolve refund',
+              text: 'This report has no linked service lines.',
+              icon: 'warning',
+            });
+            return;
+          }
+
+          const lineBlocks = lines
+            .map((line) => {
+              const maxRem =
+                line.refundable_remaining != null && Number.isFinite(Number(line.refundable_remaining))
+                  ? Number(line.refundable_remaining)
+                  : null;
+              const perPiece =
+                line.suggested_refund_per_piece != null &&
+                Number.isFinite(Number(line.suggested_refund_per_piece))
+                  ? Number(line.suggested_refund_per_piece)
+                  : null;
+              const maxStr = maxRem != null ? maxRem.toFixed(2) : '—';
+              const hint =
+                perPiece != null
+                  ? `<span style="font-size:12px;color:#64748b;">Suggested per piece: <strong>₱${perPiece.toFixed(2)}</strong></span>`
+                  : '';
+              const id = line.transaction_item_id;
+              return `<div style="margin-bottom:12px;text-align:left;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;background:#f8fafc;">
+                <div style="font-weight:600;margin-bottom:4px;color:#0f172a;">${escapeHtml(line.service_name || 'Service line')}</div>
+                <p style="margin:0 0 6px;font-size:12px;color:#475569;">Max for this line: <strong>₱${maxStr}</strong>${hint ? ` · ${hint}` : ''}</p>
+                <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Refund (PHP)</label>
+                <input id="swal-refund-line-${id}" type="number" class="swal2-input" min="0" step="0.01" placeholder="0.00" style="margin-bottom:0;" />
+              </div>`;
+            })
+            .join('');
 
           const refundResult = await Swal.fire({
             title: 'Resolve as refund',
-            html: `${maxHtml}${hintHtml}
-              <label style="display:block;text-align:left;margin-bottom:6px;font-weight:600;">Refund amount (PHP)</label>
-              <input id="swal-refund-amt" type="number" class="swal2-input" min="0.01" step="0.01" placeholder="0.00" style="margin-bottom:12px;" />
+            html: `${lineBlocks}
               <label style="display:block;text-align:left;margin-bottom:6px;font-weight:600;">Note (optional)</label>
               <textarea id="swal-refund-note" class="swal2-textarea" placeholder="Resolution note"></textarea>`,
             focusConfirm: false,
@@ -247,18 +291,35 @@ export default function ReportsPage() {
             confirmButtonText: 'Resolve refund',
             cancelButtonText: 'Cancel',
             preConfirm: () => {
-              const raw = document.getElementById('swal-refund-amt')?.value;
-              const n = parseFloat(String(raw));
-              if (!Number.isFinite(n) || n < 0.01) {
-                Swal.showValidationMessage('Enter a valid refund amount (at least 0.01).');
-                return false;
+              const allocations = [];
+              let total = 0;
+              for (const line of lines) {
+                const id = line.transaction_item_id;
+                const raw = document.getElementById(`swal-refund-line-${id}`)?.value;
+                const n = parseFloat(String(raw));
+                if (!Number.isFinite(n) || n < 0) {
+                  Swal.showValidationMessage('Enter a valid refund amount for each line (0 or more).');
+                  return false;
+                }
+                const maxRem =
+                  line.refundable_remaining != null && Number.isFinite(Number(line.refundable_remaining))
+                    ? Number(line.refundable_remaining)
+                    : null;
+                if (maxRem != null && n - 0.001 > maxRem) {
+                  Swal.showValidationMessage(
+                    `Refund for "${line.service_name || 'line'}" cannot exceed ₱${maxRem.toFixed(2)}.`
+                  );
+                  return false;
+                }
+                allocations.push({ transaction_item_id: id, amount: Math.round(n * 100) / 100 });
+                total += n;
               }
-              if (maxRem != null && n - 0.001 > maxRem) {
-                Swal.showValidationMessage(`Amount cannot exceed ${maxRem.toFixed(2)}.`);
+              if (total < 0.01) {
+                Swal.showValidationMessage('Total refund must be at least 0.01.');
                 return false;
               }
               const note = String(document.getElementById('swal-refund-note')?.value || '').trim();
-              return { refund_amount: n, resolution_note: note || null };
+              return { refund_allocations: allocations, resolution_note: note || null };
             },
           });
           if (!refundResult.isConfirmed || !refundResult.value) return;
@@ -267,7 +328,7 @@ export default function ReportsPage() {
             method: 'PUT',
             body: JSON.stringify({
               resolution_type: 'refund',
-              refund_amount: refundResult.value.refund_amount,
+              refund_allocations: refundResult.value.refund_allocations,
               resolution_note: refundResult.value.resolution_note,
             }),
           });
@@ -423,7 +484,14 @@ export default function ReportsPage() {
                     <td>{row.transaction?.customer_name || '—'}</td>
                     <td>
                       <div className="reports-cell-title">{issueTypeLabel(row.issue_type)}</div>
-                      {row.transaction_item?.service_name ? (
+                      {Array.isArray(row.affected_lines) && row.affected_lines.length > 0 ? (
+                        row.affected_lines.map((line) => (
+                          <div key={`aff-${row.id}-${line.transaction_item_id}`} className="reports-cell-sub">
+                            Line: {line.service_name} (₱{Number(line.line_total ?? 0).toFixed(2)})
+                            {line.piece_count ? ` · ${line.piece_count} pc` : ''}
+                          </div>
+                        ))
+                      ) : row.transaction_item?.service_name ? (
                         <div className="reports-cell-sub">
                           Line: {row.transaction_item.service_name} (₱
                           {Number(row.transaction_item.line_total ?? 0).toFixed(2)})
@@ -442,8 +510,23 @@ export default function ReportsPage() {
                         <div className="reports-cell-sub">
                           Resolution: {row.resolution_type}
                           {row.resolution_type === 'refund' && row.refund_amount != null
-                            ? ` · ₱${Number(row.refund_amount).toFixed(2)}`
+                            ? ` · Total ₱${Number(row.refund_amount).toFixed(2)}`
                             : ''}
+                          {row.resolution_type === 'refund' &&
+                          Array.isArray(row.refund_allocations) &&
+                          row.refund_allocations.length > 1
+                            ? row.refund_allocations.map((a) => {
+                                const name =
+                                  (row.affected_lines || []).find(
+                                    (l) => Number(l.transaction_item_id) === Number(a.transaction_item_id)
+                                  )?.service_name || `Line ${a.transaction_item_id}`;
+                                return (
+                                  <div key={`refalloc-${row.id}-${a.transaction_item_id}`}>
+                                    {name}: ₱{Number(a.amount).toFixed(2)}
+                                  </div>
+                                );
+                              })
+                            : null}
                         </div>
                       ) : null}
                     </td>

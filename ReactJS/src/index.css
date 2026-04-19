@@ -18,3 +18,21 @@ body {
 code {
     font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
+
+/**
+ * Hide number input stepper arrows (Chrome, Safari, Edge, Firefox).
+ * Reduces accidental value changes from mis-clicks; users still type digits normally.
+ *
+ * Mouse-wheel value changes while focused are blocked in src/utils/blockNumberInputWheel.js
+ * (installNumberInputWheelBlock in index.js).
+ */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
