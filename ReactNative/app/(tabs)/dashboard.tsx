@@ -81,6 +81,20 @@ function formatBranchLabel(name: unknown): string {
     .trim();
 }
 
+/** Refund KPI/chart: use refund_amount. Replacement: estimate from line item (not full receipt). */
+function disputeChartAmountFromReport(row: any): number {
+  const rt = String(row?.resolution_type || "").toLowerCase();
+  if (rt === "refund") {
+    const n = Number(row?.refund_amount);
+    return Number.isFinite(n) ? n : 0;
+  }
+  if (rt === "replacement") {
+    const line = Number(row?.transaction_item?.line_total);
+    return Number.isFinite(line) ? line : 0;
+  }
+  return 0;
+}
+
 type PeriodPreset = "weekly" | "monthly" | "yearly" | "range";
 
 function rangeForPreset(preset: Exclude<PeriodPreset, "range">): [string, string] {
@@ -274,6 +288,7 @@ export default function DashboardAnalytics() {
     to.setHours(23, 59, 59, 999);
     const resolutionType = disputeChartType === "refund" ? "refund" : "replacement";
     return issueReports.filter((row) => {
+      if (String(row?.status || "").toLowerCase() !== "resolved") return false;
       if (String(row?.resolution_type || "").toLowerCase() !== resolutionType) return false;
       const dt = new Date(row?.resolved_at || row?.updated_at || 0);
       if (Number.isNaN(dt.getTime())) return false;
@@ -282,11 +297,6 @@ export default function DashboardAnalytics() {
   }, [issueReports, rangeFrom, rangeTo, disputeChartType]);
 
   const disputeSeries = useMemo(() => {
-    const amountFromReport = (row: any) => {
-      const n = Number(row?.transaction?.amount);
-      return Number.isFinite(n) ? n : 0;
-    };
-
     if (periodPreset === "weekly") {
       const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
       const start = mondayOfCalendarWeek(parseYmd(rangeTo));
@@ -301,7 +311,7 @@ export default function DashboardAnalytics() {
         if (Number.isNaN(dt.getTime())) return;
         const key = toYmd(dt);
         const row = rows.find((x) => x.key === key);
-        if (row) row.amount += amountFromReport(r);
+        if (row) row.amount += disputeChartAmountFromReport(r);
       });
       return { labels: rows.map((r) => r.name), values: rows.map((r) => Number(r.amount.toFixed(2))) };
     }
@@ -317,7 +327,7 @@ export default function DashboardAnalytics() {
         const dt = new Date(r?.resolved_at || r?.updated_at || 0);
         if (Number.isNaN(dt.getTime())) return;
         const idx = Math.min(3, Math.floor((dt.getDate() - 1) / 7));
-        rows[idx].amount += amountFromReport(r);
+        rows[idx].amount += disputeChartAmountFromReport(r);
       });
       return { labels: rows.map((r) => r.name), values: rows.map((r) => Number(r.amount.toFixed(2))) };
     }
@@ -332,7 +342,7 @@ export default function DashboardAnalytics() {
       filteredResolvedDisputes.forEach((r) => {
         const dt = new Date(r?.resolved_at || r?.updated_at || 0);
         if (Number.isNaN(dt.getTime())) return;
-        rows[dt.getMonth()].amount += amountFromReport(r);
+        rows[dt.getMonth()].amount += disputeChartAmountFromReport(r);
       });
       return { labels: rows.map((r) => r.name), values: rows.map((r) => Number(r.amount.toFixed(2))) };
     }
@@ -344,7 +354,7 @@ export default function DashboardAnalytics() {
       if (Number.isNaN(dt.getTime())) return;
       const key = toYmd(dt);
       const row = rows.find((x) => x.day === key);
-      if (row) row.amount += amountFromReport(r);
+      if (row) row.amount += disputeChartAmountFromReport(r);
     });
     return {
       labels: rows.map((r) => parseYmd(r.day).toLocaleDateString("en-US", { month: "short", day: "numeric" })),
@@ -354,7 +364,7 @@ export default function DashboardAnalytics() {
 
   const disputeChartWidth = getResponsiveChartWidth(disputeSeries.labels);
   const disputeKpiAmount = useMemo(
-    () => filteredResolvedDisputes.reduce((sum, r) => sum + Number(r?.transaction?.amount || 0), 0),
+    () => filteredResolvedDisputes.reduce((sum, r) => sum + disputeChartAmountFromReport(r), 0),
     [filteredResolvedDisputes]
   );
   const disputeKpiCount = filteredResolvedDisputes.length;

@@ -1,4 +1,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+
+/**
+ * SweetAlert2 defaults to z-index ~1060, below app overlays (e.g. Receipt "Create Report" at 10001).
+ * Without this, validation/success dialogs render behind modals.
+ */
+.swal2-container {
+  z-index: 11000 !important;
+}
+
 body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Poppins", 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;

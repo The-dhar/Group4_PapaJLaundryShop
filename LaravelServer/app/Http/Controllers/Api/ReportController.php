@@ -148,6 +148,12 @@ class ReportController extends Controller
         $transaction = $this->reportableTransactionForUser($user, (int) $validated['transaction_id']);
         $this->assertPaidTransaction($transaction);
 
+        if (IssueReport::query()->where('transaction_id', $transaction->id)->exists()) {
+            throw ValidationException::withMessages([
+                'transaction_id' => ['A report already exists for this transaction. Only one report per transaction is allowed.'],
+            ]);
+        }
+
         $lineItemId = (int) $validated['transaction_item_id'];
         $line = TransactionItem::query()
             ->whereKey($lineItemId)
@@ -160,14 +166,21 @@ class ReportController extends Controller
             ]);
         }
 
-        $duplicateOpen = IssueReport::query()
-            ->where('transaction_item_id', $lineItemId)
-            ->whereIn('status', self::ISSUE_OPEN_STATUSES)
-            ->exists();
+        /**
+         * Option 2 policy: one primary issue_type + issue_note for multi-line / mixed cases.
+         * If the receipt has multiple line items and type is Damaged or Lost, require a note
+         * explaining which line(s) are affected (and mixed damage vs loss on other lines).
+         */
+        $lineCount = TransactionItem::query()
+            ->where('transaction_id', $transaction->id)
+            ->count();
 
-        if ($duplicateOpen) {
+        $issueTypeNorm = strtolower(trim((string) $validated['issue_type']));
+        $noteTrim = trim((string) ($validated['issue_note'] ?? ''));
+
+        if ($lineCount > 1 && in_array($issueTypeNorm, ['damaged', 'lost'], true) && $noteTrim === '') {
             throw ValidationException::withMessages([
-                'transaction_item_id' => ['An open dispute already exists for this line item.'],
+                'issue_note' => ['This receipt has multiple service lines. Enter an issue note describing which line(s) are affected, quantities, and—if damage and loss involve different lines—which applies where (see shop policy for primary type).'],
             ]);
         }
 

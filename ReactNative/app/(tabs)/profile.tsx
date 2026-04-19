@@ -89,6 +89,8 @@ export default function ProfileScreen() {
   const [vatRateStr, setVatRateStr] = useState("12");
   const [vatSelectedBranchId, setVatSelectedBranchId] = useState<number | null>(null);
   const [vatBranchModalVisible, setVatBranchModalVisible] = useState(false);
+  /** Owner: read-only overview of VAT status for every branch */
+  const [vatOverviewModalVisible, setVatOverviewModalVisible] = useState(false);
 
   const loadProfile = useCallback(async () => {
     setProfileError(null);
@@ -546,6 +548,17 @@ export default function ProfileScreen() {
                 <Text style={styles.vatHint}>
                   Applies to new sales for this branch. Same settings sync to the web POS after you save.
                 </Text>
+                {roleLower === "owner" && !vatLoading && vatBranches.length > 0 ? (
+                  <TouchableOpacity
+                    style={styles.vatViewListBtn}
+                    onPress={() => setVatOverviewModalVisible(true)}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="View VAT status for all branches"
+                  >
+                    <Text style={styles.vatViewListBtnText}>View list</Text>
+                  </TouchableOpacity>
+                ) : null}
                 {vatLoading ? (
                   <View style={styles.vatLoadingRow}>
                     <ActivityIndicator size="small" color="#3b82f6" />
@@ -884,6 +897,76 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Owner: all branches VAT on/off overview */}
+      <Modal
+        visible={vatOverviewModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setVatOverviewModalVisible(false)}
+      >
+        <View style={styles.vatBranchModalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setVatOverviewModalVisible(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Close VAT overview"
+          />
+          <View style={styles.vatOverviewModalCard} pointerEvents="box-none">
+            <Text style={styles.vatBranchModalTitle}>VAT by branch</Text>
+            <Text style={styles.vatOverviewSubtitle}>
+              Shows whether VAT applies to new sales at each location (saved settings).
+            </Text>
+            <ScrollView
+              style={styles.vatOverviewScroll}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
+            >
+              {[...vatBranches]
+                .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" }))
+                .map((b) => {
+                  const { vatEnabled, vatRate } = parseBranchVat(b);
+                  return (
+                    <View key={b.id} style={styles.vatOverviewRow}>
+                      <View style={styles.vatOverviewRowMain}>
+                        <Text style={styles.vatOverviewBranchName} numberOfLines={2}>
+                          {b.name?.trim() || `Branch ${b.id}`}
+                        </Text>
+                        <Text style={styles.vatOverviewMeta}>
+                          {vatEnabled
+                            ? `Rate ${vatRate}% on new sales`
+                            : "VAT not applied on new sales"}
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.vatOverviewBadge,
+                          vatEnabled ? styles.vatOverviewBadgeOn : styles.vatOverviewBadgeOff,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.vatOverviewBadgeText,
+                            vatEnabled ? styles.vatOverviewBadgeTextOn : styles.vatOverviewBadgeTextOff,
+                          ]}
+                        >
+                          {vatEnabled ? "VAT on" : "VAT off"}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.vatOverviewCloseBtn}
+              onPress={() => setVatOverviewModalVisible(false)}
+              activeOpacity={0.88}
+            >
+              <Text style={styles.vatOverviewCloseBtnText}>Close</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1241,8 +1324,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#64748b",
     lineHeight: 19,
-    marginBottom: 16,
+    marginBottom: 12,
     fontWeight: "500",
+  },
+  vatViewListBtn: {
+    alignSelf: "flex-start",
+    marginBottom: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#3b82f6",
+    backgroundColor: "#eff6ff",
+  },
+  vatViewListBtnText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#1d4ed8",
+    letterSpacing: 0.2,
   },
   vatLoadingRow: {
     flexDirection: "row",
@@ -1359,5 +1458,94 @@ const styles = StyleSheet.create({
   },
   vatBranchRowTextSelected: {
     color: "#1d4ed8",
+  },
+  vatOverviewModalCard: {
+    width: "100%",
+    maxWidth: 380,
+    maxHeight: "88%",
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  vatOverviewSubtitle: {
+    fontSize: 12,
+    color: "#64748b",
+    marginBottom: 12,
+    lineHeight: 17,
+    fontWeight: "500",
+  },
+  vatOverviewScroll: {
+    maxHeight: 360,
+    marginBottom: 12,
+  },
+  vatOverviewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 8,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  vatOverviewRowMain: {
+    flex: 1,
+    minWidth: 0,
+  },
+  vatOverviewBranchName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1e293b",
+    marginBottom: 4,
+  },
+  vatOverviewMeta: {
+    fontSize: 12,
+    color: "#64748b",
+    fontWeight: "500",
+  },
+  vatOverviewBadge: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    flexShrink: 0,
+  },
+  vatOverviewBadgeOn: {
+    backgroundColor: "#dcfce7",
+    borderWidth: 1,
+    borderColor: "#86efac",
+  },
+  vatOverviewBadgeOff: {
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+  },
+  vatOverviewBadgeText: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  vatOverviewBadgeTextOn: {
+    color: "#166534",
+  },
+  vatOverviewBadgeTextOff: {
+    color: "#475569",
+  },
+  vatOverviewCloseBtn: {
+    backgroundColor: "#1e293b",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  vatOverviewCloseBtnText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "800",
   },
 });

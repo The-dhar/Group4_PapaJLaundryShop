@@ -99,9 +99,21 @@ function getViewDateBounds(viewType, referenceDate = new Date()) {
   return { start, end };
 }
 
+/**
+ * Refund charts: sum actual refund PHP. Replacement/backjob charts: line item total as an operational estimate.
+ * (Do not use full transaction total — it overstates refunds.)
+ */
 function disputeAmountFromReport(row) {
-  const n = Number(row?.transaction?.amount);
-  return Number.isFinite(n) ? n : 0;
+  const rt = String(row?.resolution_type || '').toLowerCase();
+  if (rt === 'refund') {
+    const n = Number(row?.refund_amount);
+    return Number.isFinite(n) ? n : 0;
+  }
+  if (rt === 'replacement') {
+    const line = Number(row?.transaction_item?.line_total);
+    return Number.isFinite(line) ? line : 0;
+  }
+  return 0;
 }
 
 function buildDisputeSeries(viewType, reports) {

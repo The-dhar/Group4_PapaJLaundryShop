@@ -10,6 +10,16 @@ import '../styles/receiptstyle.css';
 import { jsPDF } from 'jspdf';
 import Swal from 'sweetalert2';
 
+/** Blur focused control before Swal so dialogs stack above overlays (see index.css) and reduce aria-hidden warnings. */
+function swalFire(options) {
+  try {
+    document.activeElement?.blur?.();
+  } catch {
+    /* ignore */
+  }
+  return Swal.fire(options);
+}
+
 const RECEIPT_BACKJOB_IDS_SESSION_KEY = 'receipt_backjob_transaction_ids_v1';
 
 function readBackjobIdsCache() {
@@ -32,28 +42,42 @@ function writeBackjobIdsCache(ids) {
   }
 }
 
-function disputeLineKey(transactionId, itemId) {
-  return `${Number(transactionId)}:${Number(itemId)}`;
-}
-
 function serviceHasPersistedLineId(svc) {
   const n = Number(svc?.id);
   return Number.isFinite(n) && n > 0;
 }
 
-/** True if at least one line on the receipt can still have an open dispute filed. */
-function receiptHasReportableLine(receipt, openLineKeys) {
+/** One issue report per transaction; user still picks which service line it applies to. */
+function canCreateIssueReport(receipt, transactionIdsWithReport) {
   const tid = Number(receipt?.id);
-  const svcs = receipt?.services || [];
-  const withIds = svcs.filter(serviceHasPersistedLineId);
-  if (withIds.length === 0) return false;
-  return withIds.some((svc) => !openLineKeys.has(disputeLineKey(tid, svc.id)));
+  if (!Number.isFinite(tid) || tid <= 0) return false;
+  if (transactionIdsWithReport.has(tid)) return false;
+  const withIds = (receipt?.services || []).filter(serviceHasPersistedLineId);
+  return withIds.length > 0;
 }
 
 function receiptLinesMissingPersistedIds(receipt) {
   const svcs = receipt?.services || [];
   if (svcs.length === 0) return true;
   return !svcs.some(serviceHasPersistedLineId);
+}
+
+/** Count of service rows with persisted transaction_item ids (matches server line items when in sync). */
+function countPersistedServiceLines(receipt) {
+  return (receipt?.services || []).filter(serviceHasPersistedLineId).length;
+}
+
+function isDamagedOrLostIssueType(type) {
+  return type === 'damaged' || type === 'lost';
+}
+
+/**
+ * Option 2: issue note required for "other", and for damaged/lost when receipt has multiple lines.
+ */
+function isIssueNoteRequired(issueType, persistedLineCount) {
+  if (issueType === 'other') return true;
+  if (persistedLineCount > 1 && isDamagedOrLostIssueType(issueType)) return true;
+  return false;
 }
 
 function formatInventoryStatus(status) {
@@ -83,7 +107,7 @@ function openAndAutoPrintPdf(doc) {
   const printWindow = window.open(blobUrl, '_blank');
 
   if (!printWindow) {
-    Swal.fire({
+    swalFire({
       title: 'Popup blocked',
       text: 'Allow popups to auto-print the receipt.',
       icon: 'info',
@@ -118,8 +142,8 @@ const Receiptmanagement = () => {
   const [issueNote, setIssueNote] = useState('');
   const [reportTransactionItemId, setReportTransactionItemId] = useState('');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
-  /** Open disputes: `transactionId:transactionItemId` for pending / under_review rows. */
-  const [openDisputeLineKeys, setOpenDisputeLineKeys] = useState(new Set());
+  /** Any existing issue report blocks a second report for the same transaction. */
+  const [transactionIdsWithIssueReport, setTransactionIdsWithIssueReport] = useState(new Set());
   const [backjobTransactionIds, setBackjobTransactionIds] = useState(() => readBackjobIdsCache());
 
   const isInShopLike = useCallback(
@@ -162,11 +186,18 @@ const Receiptmanagement = () => {
 
   const reportableServicesForModal = useMemo(() => {
     if (!selectedReceipt) return [];
-    const tid = Number(selectedReceipt.id);
-    return (selectedReceipt.services || []).filter(
-      (s) => serviceHasPersistedLineId(s) && !openDisputeLineKeys.has(disputeLineKey(tid, s.id))
-    );
-  }, [selectedReceipt, openDisputeLineKeys]);
+    return (selectedReceipt.services || []).filter((s) => serviceHasPersistedLineId(s));
+  }, [selectedReceipt]);
+
+  const persistedLineCountForReport = useMemo(() => {
+    if (!selectedReceipt || !showReportModal) return 0;
+    return countPersistedServiceLines(selectedReceipt);
+  }, [selectedReceipt, showReportModal]);
+
+  const issueNoteRequired = useMemo(
+    () => isIssueNoteRequired(issueType, persistedLineCountForReport),
+    [issueType, persistedLineCountForReport]
+  );
 
   useEffect(() => {
     writeBackjobIdsCache(effectiveBackjobTransactionIds);
@@ -448,7 +479,7 @@ const Receiptmanagement = () => {
   const handleMarkPickedUp = async () => {
     if (!selectedReceipt) return;
 
-    const result = await Swal.fire({
+    const result = await swalFire({
       title: 'Mark as Picked Up?',
       text: `Receipt ${selectedReceipt.receipt} will be marked as picked up.`,
       icon: 'question',
@@ -505,17 +536,12 @@ const Receiptmanagement = () => {
         issuesRes.ok ? issuesRes.json().catch(() => []) : [],
         backjobsRes.ok ? backjobsRes.json().catch(() => []) : [],
       ]);
-      const openLineKeys = new Set();
+      const txnWithReport = new Set();
       (Array.isArray(issues) ? issues : []).forEach((row) => {
-        const st = String(row?.status || '').toLowerCase();
-        if (st !== 'pending' && st !== 'under_review') return;
         const tid = Number(row?.transaction_id ?? row?.transaction?.id ?? 0);
-        const itemId = Number(row?.transaction_item_id ?? row?.transaction_item?.id ?? 0);
-        if (tid > 0 && itemId > 0) {
-          openLineKeys.add(disputeLineKey(tid, itemId));
-        }
+        if (tid > 0) txnWithReport.add(tid);
       });
-      setOpenDisputeLineKeys(openLineKeys);
+      setTransactionIdsWithIssueReport(txnWithReport);
       const nextBackjobs = new Set();
       (Array.isArray(backjobs) ? backjobs : []).forEach((row) => {
         const id = Number(row?.transaction_id || row?.transaction?.id || 0);
@@ -536,10 +562,7 @@ const Receiptmanagement = () => {
     if (!selectedReceipt) return;
 
     resetReportForm();
-    const tid = Number(selectedReceipt.id);
-    const firstLine = (selectedReceipt.services || []).find(
-      (s) => serviceHasPersistedLineId(s) && !openDisputeLineKeys.has(disputeLineKey(tid, s.id))
-    );
+    const firstLine = (selectedReceipt.services || []).find((s) => serviceHasPersistedLineId(s));
     setReportTransactionItemId(firstLine ? String(firstLine.id) : '');
     setShowReportModal(true);
   };
@@ -554,13 +577,26 @@ const Receiptmanagement = () => {
     if (isSubmittingReport) return;
 
     if (issueType === 'other' && issueNote.trim() === '') {
-      await Swal.fire({ title: 'Missing details', text: 'Please provide issue details for type "other".', icon: 'warning' });
+      await swalFire({ title: 'Missing details', text: 'Please provide issue details for type "other".', icon: 'warning' });
+      return;
+    }
+
+    const lineCount = countPersistedServiceLines(selectedReceipt);
+    if (isIssueNoteRequired(issueType, lineCount) && !issueNote.trim()) {
+      await swalFire({
+        title: 'Issue note required',
+        html:
+          lineCount > 1 && isDamagedOrLostIssueType(issueType)
+            ? '<p style="text-align:left;margin:0;">This receipt has <strong>multiple service lines</strong>. Describe which line(s) are affected, quantities, and—if both damage and loss appear on different lines—which line has what (see policy in the form).</p>'
+            : '<p style="text-align:left;margin:0;">Please enter the issue note.</p>',
+        icon: 'warning',
+      });
       return;
     }
 
     const lineId = Number(reportTransactionItemId);
     if (!Number.isFinite(lineId) || lineId <= 0) {
-      await Swal.fire({
+      await swalFire({
         title: 'Select a line',
         text: 'Choose which service line this dispute is for. If lines are missing IDs, refresh the page after upgrading the server.',
         icon: 'warning',
@@ -570,7 +606,7 @@ const Receiptmanagement = () => {
 
     const token = localStorage.getItem('token');
     if (!token) {
-      await Swal.fire({ title: 'Not authenticated', text: 'Please sign in again.', icon: 'error' });
+      await swalFire({ title: 'Not authenticated', text: 'Please sign in again.', icon: 'error' });
       return;
     }
 
@@ -598,9 +634,9 @@ const Receiptmanagement = () => {
         throw new Error(parseApiError(payload));
       }
 
-      setOpenDisputeLineKeys((prev) => {
+      setTransactionIdsWithIssueReport((prev) => {
         const next = new Set(prev);
-        next.add(disputeLineKey(selectedReceipt.id, lineId));
+        next.add(Number(selectedReceipt.id));
         return next;
       });
 
@@ -608,7 +644,7 @@ const Receiptmanagement = () => {
       // (Previously it waited for Swal choice, which looked stuck on "Submitting...".)
       closeReportModal();
 
-      const nextResult = await Swal.fire({
+      const nextResult = await swalFire({
         title: 'Dispute created',
         text: 'Open the Dispute page now?',
         icon: 'success',
@@ -622,7 +658,7 @@ const Receiptmanagement = () => {
         navigate('/Reports');
       }
     } catch (e) {
-      await Swal.fire({
+      await swalFire({
         title: 'Could not create report',
         text: e.message || 'Request failed.',
         icon: 'error',
@@ -826,21 +862,24 @@ const Receiptmanagement = () => {
             <div className="receipt-modal-actions" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
               {viewMode === 'view' && (
                 <>
-                  <button
-                    onClick={openReportModal}
-                    className="receipt-btn-report"
-                    disabled={
-                      isSubmittingReport ||
-                      !receiptHasReportableLine(selectedReceipt, openDisputeLineKeys)
-                    }
-                  >
-                    <BsFlag />{' '}
-                    {receiptLinesMissingPersistedIds(selectedReceipt)
-                      ? 'Cannot report (missing line data)'
-                      : !receiptHasReportableLine(selectedReceipt, openDisputeLineKeys)
-                        ? 'All lines in dispute'
-                        : 'Report Dispute'}
-                  </button>
+                  {receiptLinesMissingPersistedIds(selectedReceipt) ? (
+                    <button type="button" className="receipt-btn-report" disabled>
+                      <BsFlag /> Cannot report (missing line data)
+                    </button>
+                  ) : transactionIdsWithIssueReport.has(Number(selectedReceipt.id)) ? (
+                    <div className="receipt-report-status-pill" role="status" aria-label="Already reported">
+                      <BsFlag aria-hidden /> Already Reported
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={openReportModal}
+                      className="receipt-btn-report"
+                      disabled={isSubmittingReport}
+                    >
+                      <BsFlag /> Report Dispute
+                    </button>
+                  )}
                   {isInShopLike(selectedReceipt.inventory_status) && selectedReceipt.payment_status === 'paid' && (
                     <button
                       onClick={handleMarkPickedUp}
@@ -894,7 +933,37 @@ const Receiptmanagement = () => {
               Make sure that the dispute details are correct as this action cannot be edited later on.
             </p>
 
-            <label>Service line</label>
+            <div className="receipt-report-policy-option2">
+              <strong>How reporting works (Option 2)</strong>
+              <ul className="receipt-report-policy-list">
+                <li>
+                  <strong>Primary service line</strong> — Used for refund limits and linking. If only one line is affected,
+                  select that line. If multiple lines are involved, select the line that should drive resolution (e.g.
+                  largest impact), and describe all lines in the issue note.
+                </li>
+                <li>
+                  <strong>Dispute type</strong> — One category per report. If damage and loss occur on{' '}
+                  <em>different</em> lines, choose <strong>Lost</strong> as the primary type (more severe) and explain
+                  both lines in the note; if only damage (or only loss) across lines, use <strong>Damaged</strong> or{' '}
+                  <strong>Lost</strong> accordingly and detail each line in the note.
+                </li>
+                <li>
+                  {persistedLineCountForReport > 1 && isDamagedOrLostIssueType(issueType) ? (
+                    <span>
+                      This receipt has <strong>multiple lines</strong> — an <strong>issue note is required</strong> for
+                      Damaged/Lost.
+                    </span>
+                  ) : (
+                    <span>
+                      Multiple lines + Damaged/Lost: an <strong>issue note is required</strong> to list what happened on
+                      each affected line.
+                    </span>
+                  )}
+                </li>
+              </ul>
+            </div>
+
+            <label>Service line (primary)</label>
             <select
               value={reportTransactionItemId}
               onChange={(e) => setReportTransactionItemId(e.target.value)}
@@ -907,9 +976,15 @@ const Receiptmanagement = () => {
                 </option>
               ))}
             </select>
+            {reportableServicesForModal.length > 0 ? (
+              <p className="receipt-report-note" style={{ marginTop: 8, fontSize: 12, color: '#64748b' }}>
+                Only the line(s) you describe in the note are “in scope”; pick the primary line above for system linking.
+                Single-line receipts can leave the note optional for Damaged/Lost unless you want extra detail.
+              </p>
+            ) : null}
             {reportableServicesForModal.length === 0 ? (
               <p className="receipt-report-note" style={{ marginTop: 8 }}>
-                No lines available to dispute (all may already have an open dispute).
+                No service lines with IDs on this receipt. Refresh after upgrading the server if needed.
               </p>
             ) : null}
 
@@ -922,12 +997,20 @@ const Receiptmanagement = () => {
               <option value="other">Other</option>
             </select>
 
-            <label>Issue note {issueType === 'other' ? '(required)' : '(optional)'}</label>
+            <label>
+              Issue note{' '}
+              {issueNoteRequired ? <span className="receipt-report-required-mark">(required)</span> : '(optional)'}
+            </label>
             <textarea
-              rows={3}
-              placeholder="Write issue details"
+              rows={4}
+              placeholder={
+                persistedLineCountForReport > 1 && isDamagedOrLostIssueType(issueType)
+                  ? 'Required: which line(s), how many pieces, and if damage vs loss differs by line — be specific.'
+                  : 'e.g. 2 of 8 pieces damaged on this line only; or list each service line if several are affected.'
+              }
               value={issueNote}
               onChange={(e) => setIssueNote(e.target.value)}
+              aria-required={issueNoteRequired}
             />
 
             <div className="receipt-report-actions">
