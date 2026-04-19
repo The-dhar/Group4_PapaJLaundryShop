@@ -15,6 +15,7 @@ import '../styles/posstyle.css';
 import Swal from 'sweetalert2';
 import { jsPDF } from 'jspdf';
 import { BsPencilSquare, BsTrash } from 'react-icons/bs';
+import { BRANCH_VAT_CHANGED_EVENT } from '../constants/branchEvents';
 
 /** Split full name into first, optional middle, last (last token = surname). */
 function splitFullName(fullName) {
@@ -204,28 +205,12 @@ const DEFAULT_SERVICE_ICONS = {
 
 const RUSH_FEE = 100;
 
-const POS_VAT_ENABLED_KEY = 'posVatEnabled';
-const POS_VAT_RATE_KEY = 'posVatRate';
-
 function readStoredVatEnabled() {
-  try {
-    const v = localStorage.getItem(POS_VAT_ENABLED_KEY);
-    if (v === null) return true;
-    return v === '1' || v === 'true';
-  } catch {
-    return true;
-  }
+  return true;
 }
 
 function readStoredVatRate() {
-  try {
-    const v = localStorage.getItem(POS_VAT_RATE_KEY);
-    if (v === null) return 12;
-    const n = parseFloat(v);
-    return Number.isFinite(n) && n >= 0 ? n : 12;
-  } catch {
-    return 12;
-  }
+  return 12;
 }
 
 function isRushExtraName(name) {
@@ -386,29 +371,6 @@ const POs = () => {
   const [vatEnabled, setVatEnabled] = useState(readStoredVatEnabled);
   const [vatRatePercent, setVatRatePercent] = useState(() => String(readStoredVatRate()));
 
-  const isVatAdmin = sessionUser?.role === 'owner';
-
-  useEffect(() => {
-    if (!isVatAdmin) return;
-    try {
-      localStorage.setItem(POS_VAT_ENABLED_KEY, vatEnabled ? '1' : '0');
-    } catch {
-      // ignore
-    }
-  }, [vatEnabled, isVatAdmin]);
-
-  useEffect(() => {
-    if (!isVatAdmin) return;
-    const n = parseFloat(vatRatePercent);
-    if (Number.isFinite(n)) {
-      try {
-        localStorage.setItem(POS_VAT_RATE_KEY, String(n));
-      } catch {
-        // ignore
-      }
-    }
-  }, [vatRatePercent, isVatAdmin]);
-
   const [customerSearchInput, setCustomerSearchInput] = useState('');
   const [customerSuggestions, setCustomerSuggestions] = useState([]);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
@@ -562,15 +524,39 @@ const POs = () => {
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token || !sessionUser) return;
+    let cancelled = false;
 
-    if (sessionUser.role === 'owner') {
-      (async () => {
-        const res = await fetch(`${API_URL}/branches`, {
-          headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!Array.isArray(data) || data.length === 0) return;
+    const applyVatFromBranchList = (data, userObj, ownerBid) => {
+      let bid = null;
+      if (userObj.role === 'owner') {
+        const stored = localStorage.getItem('ownerSelectedBranchId');
+        const pick =
+          ownerBid ??
+          (stored && data.some((b) => String(b.id) === String(stored))
+            ? Number(stored)
+            : data[0]?.id);
+        bid = Number.isFinite(Number(pick)) ? Number(pick) : null;
+      } else {
+        bid = Number(userObj.branch_id ?? userObj.branch?.id) || null;
+      }
+      if (!bid) return;
+      const br = data.find((b) => Number(b.id) === bid);
+      if (!br) return;
+      const ve = br.vat_enabled !== false && br.vat_enabled !== 0;
+      const vr = br.vat_rate != null && br.vat_rate !== '' ? Number(br.vat_rate) : 12;
+      setVatEnabled(ve);
+      setVatRatePercent(String(Number.isFinite(vr) ? vr : 12));
+    };
+
+    (async () => {
+      const res = await fetch(`${API_URL}/branches`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      });
+      if (!res.ok || cancelled) return;
+      const data = await res.json();
+      if (!Array.isArray(data) || data.length === 0 || cancelled) return;
+
+      if (sessionUser.role === 'owner') {
         setBranches(data);
         const stored = localStorage.getItem('ownerSelectedBranchId');
         const pick =
@@ -579,25 +565,50 @@ const POs = () => {
             : data[0].id;
         setOwnerBranchId(pick);
         localStorage.setItem('ownerSelectedBranchId', String(pick));
-      })();
-      return;
-    }
+        applyVatFromBranchList(data, sessionUser, pick);
+        return;
+      }
 
-    if (sessionUser.branch?.id) return;
+      if (!sessionUser.branch?.id) {
+        const first = data[0];
+        if (first) {
+          const merged = { ...sessionUser, branch: first };
+          if (!cancelled) {
+            setSessionUser(merged);
+            localStorage.setItem('user', JSON.stringify(merged));
+          }
+          applyVatFromBranchList(data, merged, null);
+          return;
+        }
+      }
 
-    (async () => {
-      const res = await fetch(`${API_URL}/branches`, {
-        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      const first = Array.isArray(data) ? data[0] : null;
-      if (!first) return;
-      const merged = { ...sessionUser, branch: first };
-      setSessionUser(merged);
-      localStorage.setItem('user', JSON.stringify(merged));
+      applyVatFromBranchList(data, sessionUser, null);
     })();
-  }, [sessionUser]);
+
+    const onVatChanged = () => {
+      if (cancelled) return;
+      const u = getUserFromStorage() || sessionUser;
+      fetch(`${API_URL}/branches`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!Array.isArray(data) || cancelled) return;
+          const ownerBid =
+            u?.role === 'owner'
+              ? Number(localStorage.getItem('ownerSelectedBranchId')) || ownerBranchId
+              : null;
+          applyVatFromBranchList(data, u, ownerBid);
+        })
+        .catch(() => {});
+    };
+    window.addEventListener(BRANCH_VAT_CHANGED_EVENT, onVatChanged);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener(BRANCH_VAT_CHANGED_EVENT, onVatChanged);
+    };
+  }, [sessionUser, ownerBranchId]);
 
   useEffect(() => {
     const triggerRefresh = () => setServicesRefreshNonce((n) => n + 1);
@@ -1621,37 +1632,19 @@ const POs = () => {
                     <input type="number" className="for-receipt-customerinput" value={amountPaid} onChange={e => setAmountPaid(e.target.value)} />
                   </div>
                 )}
-                {isVatAdmin && (
-                  <div className="payment-amount-section" style={{ marginTop: 10 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600 }}>
-                      <input
-                        type="checkbox"
-                        checked={vatEnabled}
-                        onChange={(e) => setVatEnabled(e.target.checked)}
-                      />
-                      <span>Apply VAT (sales tax)</span>
-                    </label>
-                    {vatEnabled && (
+                <div className="payment-amount-section" style={{ marginTop: 10 }}>
+                  <p style={{ margin: 0, fontSize: 12, color: '#64748b', lineHeight: 1.5 }}>
+                    {vatEnabled ? (
                       <>
-                        <label style={{ display: 'block', marginTop: 8 }}>VAT rate (%)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          className="for-receipt-customerinput"
-                          value={vatRatePercent}
-                          onChange={(e) => setVatRatePercent(e.target.value)}
-                        />
+                        VAT <strong>({vatRateNum}%)</strong> applies to this sale per{' '}
+                        <strong>branch settings</strong>. Clerks can change it under{' '}
+                        <strong>Profile</strong> → VAT.
                       </>
+                    ) : (
+                      <>VAT is turned off for this branch. Clerks can enable it under Profile → VAT.</>
                     )}
-                  </div>
-                )}
-                {!isVatAdmin && vatEnabled && (
-                  <p style={{ marginTop: 10, fontSize: 12, color: '#64748b', lineHeight: 1.4 }}>
-                    VAT ({vatRateNum}%) is applied by shop settings. Ask an admin to change VAT options.
                   </p>
-                )}
+                </div>
               </div>
 
               <div className="extras-box">

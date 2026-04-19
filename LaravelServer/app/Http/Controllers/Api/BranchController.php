@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class BranchController extends Controller
 {
@@ -124,5 +125,51 @@ class BranchController extends Controller
             'message' => 'Branch activated.',
             'branch' => $branch->fresh(),
         ]);
+    }
+
+    /**
+     * VAT toggle and rate for a branch. Owner: any branch. Clerk: own branch only. Staff: not allowed.
+     */
+    public function updateVatSettings(Request $request, $id)
+    {
+        $user = $request->user();
+        $branchId = (int) $id;
+
+        if ($user->isStaff()) {
+            return response()->json(['message' => 'Only a clerk or the owner can update VAT settings.'], 403);
+        }
+
+        if ($user->isClerk()) {
+            if (! $user->branch_id || (int) $user->branch_id !== $branchId) {
+                return response()->json(['message' => 'You can only update VAT for your assigned branch.'], 403);
+            }
+        } elseif (! $user->isOwner()) {
+            return response()->json(['message' => 'This account cannot update VAT settings.'], 403);
+        }
+
+        $validated = $request->validate([
+            'vat_enabled' => 'required|boolean',
+            'vat_rate' => [
+                Rule::requiredIf(fn () => $request->boolean('vat_enabled')),
+                'nullable',
+                'numeric',
+                'min:0',
+                'max:100',
+            ],
+        ]);
+
+        $branch = Branch::findOrFail($branchId);
+        $branch->vat_enabled = (bool) $validated['vat_enabled'];
+
+        $incoming = $validated['vat_rate'] ?? null;
+        if ($incoming !== null && $incoming !== '') {
+            $branch->vat_rate = round((float) $incoming, 2);
+        } elseif ($branch->vat_enabled) {
+            $branch->vat_rate = round((float) ($branch->vat_rate ?? 12), 2);
+        }
+
+        $branch->save();
+
+        return response()->json($branch->fresh());
     }
 }

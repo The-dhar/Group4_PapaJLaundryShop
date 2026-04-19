@@ -13,12 +13,16 @@ class Branch extends Model
         'legacy_manager_user_id',
         'clerk_username',
         'is_active',
+        'vat_enabled',
+        'vat_rate',
     ];
 
     protected function casts(): array
     {
         return [
             'is_active' => 'boolean',
+            'vat_enabled' => 'boolean',
+            'vat_rate' => 'decimal:2',
         ];
     }
 

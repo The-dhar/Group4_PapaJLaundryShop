@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { BsGrid1X2Fill, BsCart3, BsBoxSeam, BsReceiptCutoff, BsDoorOpen, BsCashStack, BsLightningCharge, BsArchive, BsList, BsFlag, BsBarChartLine } from 'react-icons/bs';
+import { BsGrid1X2Fill, BsCart3, BsBoxSeam, BsReceiptCutoff, BsDoorOpen, BsCashStack, BsLightningCharge, BsArchive, BsList, BsFlag, BsBarChartLine, BsPersonBadge } from 'react-icons/bs';
 import '../componentstyle/sidebarstyle.css';
 import { API_URL } from '../config/api';
 
@@ -133,6 +133,12 @@ const Sidebar = ({ sidebarOpen, toggleSidebar, onNavigate }) => {
                 <li className='sidebar-list-items'>
                     <NavLink to="/Archive" onClick={handleNavClick}>
                         <BsArchive className='icon'/><span>Archive</span>
+                    </NavLink>
+                </li>
+
+                <li className='sidebar-list-items'>
+                    <NavLink to="/profile" onClick={handleNavClick}>
+                        <BsPersonBadge className='icon'/><span>Profile</span>
                     </NavLink>
                 </li>
             </ul>

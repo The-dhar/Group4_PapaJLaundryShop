@@ -14,6 +14,8 @@ import Express from './pages/Express';
 import Archive from './pages/Archive'; 
 import Reports from './pages/Reports';
 import Analytics from './pages/Analytics';
+import ProfilePage from './pages/Profile';
+
 function App() {
   return (
     <TransactionsProvider>
@@ -99,6 +101,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Archive />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <ProfilePage />
               </ProtectedRoute>
             }
           />
