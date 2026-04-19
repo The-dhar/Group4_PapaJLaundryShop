@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import '../styles/loginstyle.css';
 import { API_URL } from "../config/api";
 import Swal from 'sweetalert2';
@@ -8,7 +8,22 @@ import { useTransactions } from '../context/transactionsContext';
 export default function LoginPage() {
 
   const navigate = useNavigate();
+  const location = useLocation();
   const { fetchTransactions } = useTransactions();
+
+  /** Session cleared by ProtectedRoute when an owner token was present — explain web is clerk/staff only. */
+  useEffect(() => {
+    if (location.state?.reason !== 'owner_web_blocked') return;
+    void Swal.fire({
+      title: 'Use the mobile app',
+      html:
+        '<p style="text-align:left;margin:0;">The <strong>shop owner</strong> account is for the <strong>mobile app</strong> only. Sign in here with a <strong>clerk</strong> or <strong>staff</strong> account.</p>',
+      icon: 'info',
+      width: 440,
+      confirmButtonText: 'OK',
+    });
+    navigate('/', { replace: true, state: {} });
+  }, [location.state, navigate]);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -70,12 +85,24 @@ export default function LoginPage() {
         return;
       }
 
-      const webAllowedRoles = ['owner', 'clerk', 'staff'];
+      /** Web POS is for branch staff only; owner uses the mobile app exclusively. */
+      const webAllowedRoles = ['clerk', 'staff'];
       const role = data.user?.role;
+      if (role === 'owner') {
+        await Swal.fire({
+          title: 'Use the mobile app',
+          html:
+            '<p style="text-align:left;margin:0;">The <strong>shop owner</strong> account is for the <strong>mobile app</strong> only. Sign in here with a <strong>clerk</strong> or <strong>staff</strong> account.</p>',
+          icon: 'info',
+          width: 440,
+          confirmButtonText: 'OK',
+        });
+        return;
+      }
       if (!webAllowedRoles.includes(role)) {
         const text =
           role === 'manager'
-            ? 'Branch manager logins are no longer used. Sign in with a clerk/staff account or the shop owner account.'
+            ? 'Branch manager logins are no longer used. Sign in with a clerk or staff account.'
             : 'This account cannot use the web app.';
         await Swal.fire({
           title: 'Access denied',
@@ -141,7 +168,7 @@ export default function LoginPage() {
       <div className="login-panel">
         <div className="login-brand-stack">
           <div className="login-logo-wrap">
-            <img src="/pictures/Papa(1).png" alt="Papa J logo" className="login-logo" />
+            <img src="/assets/images/papaj-logo.png" alt="Papa J Laundry Shop" className="login-logo" />
           </div>
           <h1 className="login-brand-title">PAPA J&apos;s</h1>
           <p className="login-brand-subtitle">Laundry Shop</p>

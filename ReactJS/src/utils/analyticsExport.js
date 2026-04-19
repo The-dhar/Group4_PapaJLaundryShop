@@ -58,7 +58,7 @@ async function fetchImageAsDataUrl(url) {
 }
 
 async function loadStoreLogoDataUrl() {
-  const candidates = ['/pictures/Papa(1).png', '/logo512.png'];
+  const candidates = ['/assets/images/papaj-logo.png', '/logo512.png'];
   for (const path of candidates) {
     // eslint-disable-next-line no-await-in-loop
     const dataUrl = await fetchImageAsDataUrl(path);

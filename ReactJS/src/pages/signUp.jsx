@@ -77,7 +77,7 @@ export default function SignUpPage() {
       </div>
 
       <div className="signup-right">
-        <img src="/pictures/Papa(1).png" alt="Signup" />
+        <img src="/assets/images/papaj-logo.png" alt="Papa J Laundry Shop" />
     
       </div>
     </div>
