@@ -15,7 +15,9 @@ import '../styles/posstyle.css';
 import Swal from 'sweetalert2';
 import { jsPDF } from 'jspdf';
 import { BsPencilSquare, BsTrash } from 'react-icons/bs';
-import { BRANCH_VAT_CHANGED_EVENT } from '../constants/branchEvents';
+
+/** Dispatched after branch VAT settings change (e.g. mobile app) so POS can refresh totals. */
+const BRANCH_VAT_CHANGED_EVENT = 'papaj-branch-vat-changed';
 
 /** Split full name into first, optional middle, last (last token = surname). */
 function splitFullName(fullName) {
@@ -357,6 +359,8 @@ const POs = () => {
   const [psgcBarangaysLoading, setPsgcBarangaysLoading] = useState(false);
   const [psgcBarangaysError, setPsgcBarangaysError] = useState('');
   const [selectedBarangayCode, setSelectedBarangayCode] = useState('');
+  /** When true, resolve barangay text to PSGC code once (e.g. after loading a saved customer). */
+  const [shouldMatchBarangayFromText, setShouldMatchBarangayFromText] = useState(false);
 
   const [dueDate, setDueDate] = useState('');
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -454,31 +458,45 @@ const POs = () => {
   }, [psgcCitiesError, selectedCityCode]);
 
   useEffect(() => {
-    if (
-      psgcCitiesError ||
-      psgcBarangaysError ||
-      !selectedCityCode ||
-      psgcBarangays.length === 0
-    ) {
-      if (!selectedCityCode) setSelectedBarangayCode('');
+    if (!shouldMatchBarangayFromText) return;
+    if (!String(barangay || '').trim()) {
+      setShouldMatchBarangayFromText(false);
       return;
     }
-
+    if (psgcCitiesError || psgcBarangaysError) {
+      setShouldMatchBarangayFromText(false);
+      return;
+    }
+    if (!selectedCityCode) {
+      if (!psgcCitiesLoading && psgcCities.length > 0) {
+        setSelectedBarangayCode('');
+        setShouldMatchBarangayFromText(false);
+      }
+      return;
+    }
+    if (psgcBarangaysLoading) return;
+    if (psgcBarangays.length === 0) {
+      setSelectedBarangayCode('');
+      setShouldMatchBarangayFromText(false);
+      return;
+    }
     const match = findPsgcByName(psgcBarangays, barangay);
     if (!match) {
       setSelectedBarangayCode('');
-      return;
+    } else {
+      setSelectedBarangayCode(match.code);
+      if (barangay !== match.name) setBarangay(match.name);
     }
-
-    setSelectedBarangayCode(match.code);
-    if (barangay !== match.name) {
-      setBarangay(match.name);
-    }
+    setShouldMatchBarangayFromText(false);
   }, [
+    shouldMatchBarangayFromText,
     barangay,
     psgcBarangays,
+    psgcBarangaysLoading,
     psgcBarangaysError,
     psgcCitiesError,
+    psgcCities,
+    psgcCitiesLoading,
     selectedCityCode,
   ]);
 
@@ -534,7 +552,7 @@ const POs = () => {
           ownerBid ??
           (stored && data.some((b) => String(b.id) === String(stored))
             ? Number(stored)
-            : data[0]?.id);
+            : null);
         bid = Number.isFinite(Number(pick)) ? Number(pick) : null;
       } else {
         bid = Number(userObj.branch_id ?? userObj.branch?.id) || null;
@@ -562,10 +580,16 @@ const POs = () => {
         const pick =
           stored && data.some((b) => String(b.id) === String(stored))
             ? Number(stored)
-            : data[0].id;
+            : null;
         setOwnerBranchId(pick);
-        localStorage.setItem('ownerSelectedBranchId', String(pick));
-        applyVatFromBranchList(data, sessionUser, pick);
+        if (pick != null) {
+          localStorage.setItem('ownerSelectedBranchId', String(pick));
+          applyVatFromBranchList(data, sessionUser, pick);
+        } else {
+          localStorage.removeItem('ownerSelectedBranchId');
+          setVatEnabled(readStoredVatEnabled());
+          setVatRatePercent(String(readStoredVatRate()));
+        }
         return;
       }
 
@@ -721,6 +745,7 @@ const POs = () => {
   }, []);
 
   const applyCustomerSuggestion = useCallback((item) => {
+    let nextBarangay = '';
     if (item.kind === 'api') {
       const c = item.record;
       const fromName = splitFullName(c.name);
@@ -732,11 +757,13 @@ const POs = () => {
         setStreet(c.street || '');
         setBarangay(c.barangay || '');
         setCity(c.city || '');
+        nextBarangay = String(c.barangay || '').trim();
       } else if (c.address) {
         const p = splitAddressLine(c.address);
         setStreet(p.street);
         setBarangay(p.barangay);
         setCity(p.city);
+        nextBarangay = String(p.barangay || '').trim();
       } else {
         setStreet('');
         setBarangay('');
@@ -752,7 +779,9 @@ const POs = () => {
       setStreet(p.street);
       setBarangay(p.barangay);
       setCity(p.city);
+      nextBarangay = String(p.barangay || '').trim();
     }
+    setShouldMatchBarangayFromText(Boolean(nextBarangay));
     setCustomerSearchInput(item.displayName);
     setCustomerSuggestions([]);
     setSuggestionOpen(false);
@@ -831,6 +860,7 @@ const POs = () => {
   const handleCitySelectChange = (e) => {
     const nextCode = e.target.value;
     setSelectedCityCode(nextCode);
+    setShouldMatchBarangayFromText(false);
 
     if (!nextCode) {
       setCity('');
@@ -854,6 +884,7 @@ const POs = () => {
   const handleBarangaySelectChange = (e) => {
     const nextCode = e.target.value;
     setSelectedBarangayCode(nextCode);
+    setShouldMatchBarangayFromText(false);
     if (!nextCode) {
       setBarangay('');
       return;
@@ -861,6 +892,28 @@ const POs = () => {
     const picked = psgcBarangays.find((row) => String(row.code) === String(nextCode));
     if (picked) {
       setBarangay(picked.name);
+    }
+  };
+
+  const handleOwnerBranchChange = (e) => {
+    const v = e.target.value;
+    if (!v) {
+      setOwnerBranchId(null);
+      localStorage.removeItem('ownerSelectedBranchId');
+      setVatEnabled(readStoredVatEnabled());
+      setVatRatePercent(String(readStoredVatRate()));
+      return;
+    }
+    const id = Number(v);
+    if (!Number.isFinite(id)) return;
+    setOwnerBranchId(id);
+    localStorage.setItem('ownerSelectedBranchId', String(id));
+    const br = branches.find((b) => Number(b.id) === id);
+    if (br) {
+      const ve = br.vat_enabled !== false && br.vat_enabled !== 0;
+      const vr = br.vat_rate != null && br.vat_rate !== '' ? Number(br.vat_rate) : 12;
+      setVatEnabled(ve);
+      setVatRatePercent(String(Number.isFinite(vr) ? vr : 12));
     }
   };
 
@@ -985,6 +1038,7 @@ const POs = () => {
     setPaymentStatus('later');
     setAmountPaid('');
     setSelectedDynamicExtras({});
+    setShouldMatchBarangayFromText(false);
   };
 
   const printThermalReceipt = (txn) => {
@@ -1415,6 +1469,26 @@ const POs = () => {
   return (
     <DashboardLayout>
       <div className="pos-wrapper">
+        {sessionUser?.role === 'owner' && branches.length > 0 && (
+          <div style={{ marginBottom: 14, maxWidth: 420 }}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#1e3a5f', marginBottom: 6 }}>
+              Branch
+              <select
+                className="for-receipt-customerinput"
+                style={{ marginTop: 6, width: '100%' }}
+                value={ownerBranchId != null && !Number.isNaN(ownerBranchId) ? String(ownerBranchId) : ''}
+                onChange={handleOwnerBranchChange}
+              >
+                <option value="">Select branch</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={String(b.id)}>
+                    {b.name?.trim() || `Branch ${b.id}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
         <div className="pos-grid">
           {/* Service Items Section */}
           <section className="Service-item">
@@ -1510,6 +1584,7 @@ const POs = () => {
                     setMiddleName(data.middleName || '');
                     setLastName(data.lastName);
                     setStreet(data.street); setBarangay(data.barangay); setCity(data.city);
+                    setShouldMatchBarangayFromText(Boolean(String(data.barangay || '').trim()));
                   }}
                 />
 
@@ -1637,11 +1712,14 @@ const POs = () => {
                     {vatEnabled ? (
                       <>
                         VAT <strong>({vatRateNum}%)</strong> applies to this sale per{' '}
-                        <strong>branch settings</strong>. Clerks can change it under{' '}
-                        <strong>Profile</strong> → VAT.
+                        <strong>branch settings</strong>. VAT is configured in the{' '}
+                        <strong>mobile app</strong> (Profile → VAT); it cannot be changed on this web POS.
                       </>
                     ) : (
-                      <>VAT is turned off for this branch. Clerks can enable it under Profile → VAT.</>
+                      <>
+                        VAT is turned off for this branch. Enable it in the <strong>mobile app</strong>{' '}
+                        under Profile → VAT.
+                      </>
                     )}
                   </p>
                 </div>

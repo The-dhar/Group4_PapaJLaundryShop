@@ -8,6 +8,7 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -19,8 +20,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { API_URL } from "../../config/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const WINDOW_HEIGHT = Dimensions.get("window").height;
+/** Persisted owner choice for which branch VAT form applies to; empty = no branch selected. */
+const VAT_OWNER_BRANCH_STORAGE_KEY = "profile_vat_owner_branch_id";
 const PASSWORD_MODAL_MAX_HEIGHT = Math.min(Math.round(WINDOW_HEIGHT * 0.88), 520);
 
 type UserProfile = {
@@ -28,6 +32,14 @@ type UserProfile = {
   email: string;
   role?: string;
   clerk_username?: string | null;
+  branch_id?: number | null;
+};
+
+type BranchRow = {
+  id: number;
+  name: string;
+  vat_enabled?: boolean | number | null;
+  vat_rate?: number | string | null;
 };
 
 function formatApiErrorMessage(payload: unknown): string {
@@ -68,7 +80,15 @@ export default function ProfileScreen() {
   const [isSavingPassword, setIsSavingPassword] = useState(false);
 
   const router = useRouter();
-  const { token } = useAuth();
+  const { token, user: authUser } = useAuth();
+
+  const [vatBranches, setVatBranches] = useState<BranchRow[]>([]);
+  const [vatLoading, setVatLoading] = useState(false);
+  const [vatSaving, setVatSaving] = useState(false);
+  const [vatEnabled, setVatEnabled] = useState(true);
+  const [vatRateStr, setVatRateStr] = useState("12");
+  const [vatSelectedBranchId, setVatSelectedBranchId] = useState<number | null>(null);
+  const [vatBranchModalVisible, setVatBranchModalVisible] = useState(false);
 
   const loadProfile = useCallback(async () => {
     setProfileError(null);
@@ -109,6 +129,12 @@ export default function ProfileScreen() {
       }
 
       const u = data as Record<string, unknown>;
+      const bidRaw = u.branch_id;
+      const branchId =
+        bidRaw !== null && bidRaw !== undefined && bidRaw !== ""
+          ? Number(bidRaw)
+          : null;
+
       setProfile({
         name: typeof u.name === "string" ? u.name : "",
         email: typeof u.email === "string" ? u.email : "",
@@ -117,6 +143,7 @@ export default function ProfileScreen() {
           u.clerk_username === null || typeof u.clerk_username === "string"
             ? (u.clerk_username as string | null)
             : undefined,
+        branch_id: branchId !== null && Number.isFinite(branchId) ? branchId : null,
       });
     } catch (e) {
       console.log(e);
@@ -127,11 +154,138 @@ export default function ProfileScreen() {
     }
   }, [token]);
 
+  const parseBranchVat = useCallback((br: BranchRow) => {
+    const ve = br.vat_enabled !== false && br.vat_enabled !== 0;
+    const vr = br.vat_rate != null && br.vat_rate !== "" ? Number(br.vat_rate) : 12;
+    return {
+      vatEnabled: ve,
+      vatRate: Number.isFinite(vr) ? vr : 12,
+    };
+  }, []);
+
+  const applyBranchRowToVatForm = useCallback(
+    (br: BranchRow) => {
+      const { vatEnabled: ve, vatRate: vr } = parseBranchVat(br);
+      setVatEnabled(ve);
+      setVatRateStr(String(vr));
+    },
+    [parseBranchVat]
+  );
+
+  const loadVatSettings = useCallback(async () => {
+    if (!token) return;
+    setVatLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/branches`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!Array.isArray(data) || data.length === 0) {
+        setVatBranches([]);
+        return;
+      }
+      const rows: BranchRow[] = data.map((b: Record<string, unknown>) => ({
+        id: Number(b.id),
+        name: String(b.name ?? ""),
+        vat_enabled: b.vat_enabled as boolean | number | null | undefined,
+        vat_rate: b.vat_rate as number | string | null | undefined,
+      }));
+      setVatBranches(rows);
+
+      const role = String(authUser?.role ?? "").toLowerCase();
+      let targetId: number | null = null;
+
+      if (role === "owner") {
+        let persisted: number | null = null;
+        try {
+          const raw = await AsyncStorage.getItem(VAT_OWNER_BRANCH_STORAGE_KEY);
+          if (raw != null && raw !== "") {
+            const n = Number(raw);
+            if (Number.isFinite(n) && rows.some((r) => r.id === n)) persisted = n;
+          }
+        } catch {
+          /* ignore */
+        }
+        const nextId = persisted;
+        setVatSelectedBranchId(nextId);
+        targetId = nextId;
+      } else if (role === "clerk" || role === "staff") {
+        const bid = Number(authUser?.branch_id);
+        targetId = Number.isFinite(bid) && bid > 0 ? bid : rows[0]?.id ?? null;
+      }
+
+      const br = targetId != null ? rows.find((r) => r.id === targetId) : null;
+      if (br) {
+        applyBranchRowToVatForm(br);
+      } else if (role === "owner") {
+        setVatEnabled(true);
+        setVatRateStr("12");
+      }
+    } catch (e) {
+      console.log(e);
+    } finally {
+      setVatLoading(false);
+    }
+  }, [token, authUser, applyBranchRowToVatForm]);
+
   useFocusEffect(
     useCallback(() => {
       loadProfile();
-    }, [loadProfile])
+      loadVatSettings();
+    }, [loadProfile, loadVatSettings])
   );
+
+  const roleLower = String(profile?.role ?? authUser?.role ?? "").toLowerCase();
+  const canEditVat = roleLower === "owner" || roleLower === "clerk";
+
+  const effectiveVatBranchId = (): number | null => {
+    if (roleLower === "owner") return vatSelectedBranchId;
+    const bid = Number(authUser?.branch_id ?? profile?.branch_id);
+    return Number.isFinite(bid) && bid > 0 ? bid : null;
+  };
+
+  const handleSaveVat = async () => {
+    const bid = effectiveVatBranchId();
+    if (!bid || !token) {
+      Alert.alert("Error", "No branch selected for VAT settings.");
+      return;
+    }
+    const rateNum = parseFloat(String(vatRateStr).replace(",", "."));
+    if (vatEnabled) {
+      if (!Number.isFinite(rateNum) || rateNum < 0 || rateNum > 100) {
+        Alert.alert("Invalid VAT rate", "Enter a percentage between 0 and 100.");
+        return;
+      }
+    }
+    setVatSaving(true);
+    try {
+      const res = await fetch(`${API_URL}/branches/${bid}/vat-settings`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          vat_enabled: vatEnabled,
+          vat_rate: Number.isFinite(rateNum) ? rateNum : 12,
+        }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        Alert.alert("Could not save", formatApiErrorMessage(payload));
+        return;
+      }
+      await loadVatSettings();
+      Alert.alert("Saved", "VAT settings were updated for this branch.");
+    } catch (e) {
+      console.log(e);
+      Alert.alert("Error", "Something went wrong. Try again.");
+    } finally {
+      setVatSaving(false);
+    }
+  };
 
   const openPersonalModal = () => {
     if (!profile) return;
@@ -384,6 +538,87 @@ export default function ProfileScreen() {
                 ) : null}
               </View>
 
+              {/* VAT — branch settings from API */}
+              <View style={[styles.profileCard, styles.sectionCardFollow]}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>VAT (sales tax)</Text>
+                </View>
+                <Text style={styles.vatHint}>
+                  Applies to new sales for this branch. Same settings sync to the web POS after you save.
+                </Text>
+                {vatLoading ? (
+                  <View style={styles.vatLoadingRow}>
+                    <ActivityIndicator size="small" color="#3b82f6" />
+                    <Text style={styles.loadingText}>Loading branch settings…</Text>
+                  </View>
+                ) : (
+                  <>
+                    {roleLower === "owner" && vatBranches.length > 0 ? (
+                      <TouchableOpacity
+                        style={styles.vatBranchPick}
+                        onPress={() => setVatBranchModalVisible(true)}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.label}>Branch</Text>
+                        <View style={styles.vatBranchPickInner}>
+                          <Text style={styles.vatBranchPickText} numberOfLines={1}>
+                            {vatSelectedBranchId == null
+                              ? "No branch selected"
+                              : vatBranches.find((b) => b.id === vatSelectedBranchId)?.name ?? "—"}
+                          </Text>
+                          <Text style={styles.vatBranchChevron}>▼</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ) : null}
+
+                    <View style={styles.vatRow}>
+                      <Text style={styles.label}>Apply VAT on new sales</Text>
+                      <Switch
+                        value={vatEnabled}
+                        onValueChange={setVatEnabled}
+                        disabled={!canEditVat}
+                        trackColor={{ false: "#cbd5e1", true: "#86efac" }}
+                        thumbColor={vatEnabled ? "#22c55e" : "#f4f4f5"}
+                      />
+                    </View>
+
+                    {vatEnabled ? (
+                      <View style={[styles.inputGroup, styles.inputGroupLast]}>
+                        <Text style={styles.label}>VAT rate (%)</Text>
+                        <TextInput
+                          style={styles.vatRateInput}
+                          value={vatRateStr}
+                          onChangeText={setVatRateStr}
+                          keyboardType="decimal-pad"
+                          editable={canEditVat}
+                          placeholder="12"
+                          placeholderTextColor="#94a3b8"
+                        />
+                      </View>
+                    ) : null}
+
+                    {!canEditVat ? (
+                      <Text style={styles.vatStaffNote}>
+                        Only the shop owner or a branch clerk can change VAT. Ask them to update Profile → VAT.
+                      </Text>
+                    ) : null}
+
+                    {canEditVat ? (
+                      <TouchableOpacity
+                        style={[styles.vatSaveBtn, vatSaving && styles.buttonDisabled]}
+                        onPress={handleSaveVat}
+                        disabled={vatSaving}
+                        activeOpacity={0.88}
+                      >
+                        <Text style={styles.vatSaveBtnText}>
+                          {vatSaving ? "Saving…" : "Save VAT settings"}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </>
+                )}
+              </View>
+
               {/* Security */}
               <View style={[styles.profileCard, styles.sectionCardFollow]}>
                 <View style={styles.sectionHeader}>
@@ -571,6 +806,84 @@ export default function ProfileScreen() {
                 </Pressable>
               </View>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Owner: pick which branch VAT applies to */}
+      <Modal
+        visible={vatBranchModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setVatBranchModalVisible(false)}
+      >
+        <View style={styles.vatBranchModalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setVatBranchModalVisible(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Close branch picker"
+          />
+          <View style={styles.vatBranchModalCard} pointerEvents="box-none">
+            <Text style={styles.vatBranchModalTitle}>Select branch</Text>
+            <ScrollView style={styles.vatBranchModalScroll} keyboardShouldPersistTaps="handled">
+              <TouchableOpacity
+                style={[
+                  styles.vatBranchRow,
+                  vatSelectedBranchId === null && styles.vatBranchRowSelected,
+                ]}
+                onPress={async () => {
+                  setVatSelectedBranchId(null);
+                  setVatEnabled(true);
+                  setVatRateStr("12");
+                  try {
+                    await AsyncStorage.removeItem(VAT_OWNER_BRANCH_STORAGE_KEY);
+                  } catch {
+                    /* ignore */
+                  }
+                  setVatBranchModalVisible(false);
+                }}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    styles.vatBranchRowText,
+                    vatSelectedBranchId === null && styles.vatBranchRowTextSelected,
+                  ]}
+                >
+                  No branch selected
+                </Text>
+              </TouchableOpacity>
+              {vatBranches.map((b) => (
+                <TouchableOpacity
+                  key={b.id}
+                  style={[
+                    styles.vatBranchRow,
+                    vatSelectedBranchId === b.id && styles.vatBranchRowSelected,
+                  ]}
+                  onPress={async () => {
+                    setVatSelectedBranchId(b.id);
+                    applyBranchRowToVatForm(b);
+                    try {
+                      await AsyncStorage.setItem(VAT_OWNER_BRANCH_STORAGE_KEY, String(b.id));
+                    } catch {
+                      /* ignore */
+                    }
+                    setVatBranchModalVisible(false);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text
+                    style={[
+                      styles.vatBranchRowText,
+                      vatSelectedBranchId === b.id && styles.vatBranchRowTextSelected,
+                    ]}
+                  >
+                    {b.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -923,5 +1236,128 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
+  },
+  vatHint: {
+    fontSize: 13,
+    color: "#64748b",
+    lineHeight: 19,
+    marginBottom: 16,
+    fontWeight: "500",
+  },
+  vatLoadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 8,
+  },
+  vatBranchPick: {
+    marginBottom: 18,
+  },
+  vatBranchPickInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: "#f8fafc",
+    marginTop: 8,
+  },
+  vatBranchPickText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1e293b",
+  },
+  vatBranchChevron: {
+    fontSize: 12,
+    color: "#64748b",
+    marginLeft: 8,
+  },
+  vatRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  vatRateInput: {
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    backgroundColor: "#ffffff",
+    color: "#1e293b",
+    fontWeight: "600",
+  },
+  vatStaffNote: {
+    fontSize: 13,
+    color: "#64748b",
+    marginTop: 4,
+    marginBottom: 8,
+    lineHeight: 19,
+  },
+  vatSaveBtn: {
+    marginTop: 8,
+    backgroundColor: "#3b82f6",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  vatSaveBtnText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  vatBranchModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  vatBranchModalCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  vatBranchModalTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#1e293b",
+    marginBottom: 12,
+  },
+  vatBranchModalScroll: {
+    maxHeight: 320,
+  },
+  vatBranchRow: {
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 6,
+    backgroundColor: "#f8fafc",
+  },
+  vatBranchRowSelected: {
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#93c5fd",
+  },
+  vatBranchRowText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1e293b",
+  },
+  vatBranchRowTextSelected: {
+    color: "#1d4ed8",
   },
 });

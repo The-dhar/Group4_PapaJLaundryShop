@@ -14,7 +14,6 @@ import Express from './pages/Express';
 import Archive from './pages/Archive'; 
 import Reports from './pages/Reports';
 import Analytics from './pages/Analytics';
-import ProfilePage from './pages/Profile';
 
 function App() {
   return (
@@ -23,6 +22,7 @@ function App() {
         <Routes>
           <Route path="/" element={<LogIn />} />
           <Route path="/signup" element={<SignUp />} />
+          <Route path="/profile" element={<Navigate to="/dashboard" replace />} />
           <Route
             path="/dashboard"
             element={
@@ -101,14 +101,6 @@ function App() {
             element={
               <ProtectedRoute>
                 <Archive />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/profile"
-            element={
-              <ProtectedRoute>
-                <ProfilePage />
               </ProtectedRoute>
             }
           />
