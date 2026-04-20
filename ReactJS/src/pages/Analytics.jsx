@@ -635,16 +635,6 @@ export default function AnalyticsPage() {
   const { refundRows: monthlyLossRefundRows, backjobRows: monthlyLossBackjobRows, monthlyLossStack12 } =
     lossMonthlyCharts;
 
-  const showLossQualitySection = useMemo(() => {
-    return (
-      monthlyLossRefundRows.some(
-        (r) => r.Damaged > 0.005 || r.Lost > 0.005 || r.Other > 0.005
-      ) ||
-      monthlyLossBackjobRows.some(
-        (r) => r.PoorQuality > 0.005 || r.Wrinkled > 0.005 || r.Other > 0.005
-      )
-    );
-  }, [monthlyLossRefundRows, monthlyLossBackjobRows]);
 
   /** New vs returning customers by month (same date window as loss charts). */
   const customersGrowthByMonth = useMemo(() => {
@@ -1075,8 +1065,7 @@ export default function AnalyticsPage() {
               </div>
             </div>
 
-            {showLossQualitySection ? (
-              <div className="analytics-chart-pair">
+            <div className="analytics-chart-pair">
                 <Card title="Loss & quality — Refunds (resolved)">
                   <p className="analytics-card-sub">
                     Refund resolutions by month and issue reason (damaged, lost, other). Tooltip lists reported issues
@@ -1121,8 +1110,7 @@ export default function AnalyticsPage() {
                     </BarChart>
                   </ResponsiveContainer>
                 </Card>
-              </div>
-            ) : null}
+            </div>
 
             <div
               className={
