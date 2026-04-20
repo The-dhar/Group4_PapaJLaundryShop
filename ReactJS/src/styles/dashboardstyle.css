@@ -220,6 +220,36 @@
     color: #64748b;
 }
 
+.chart-date-range--active {
+    border: 1.5px solid #1976d2;
+    border-radius: 10px;
+    padding: 4px 8px;
+    background: #eff6ff;
+}
+
+.chart-date-range-clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 50%;
+    background: #e2e8f0;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+    transition: background 0.15s ease;
+    flex-shrink: 0;
+}
+
+.chart-date-range-clear:hover {
+    background: #cbd5e1;
+}
+
 .card-transaction {
     background: #ffffff;
     padding: 0 0 12px 0;

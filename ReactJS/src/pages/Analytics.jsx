@@ -337,6 +337,7 @@ export default function AnalyticsPage() {
   const [viewType, setViewType] = useState('week');
   const [rangeStartDate, setRangeStartDate] = useState('');
   const [rangeEndDate, setRangeEndDate] = useState('');
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [branches, setBranches] = useState(() => readBranchesCache());
   const [issueReports, setIssueReports] = useState([]);
   /** Avoid flashing "no branches" before the first /branches response (same idea as Dashboard). */
@@ -941,8 +942,22 @@ export default function AnalyticsPage() {
     const label = n.toLowerCase().includes('returning') ? 'Active returning customers' : 'New customers';
     return [`${Number(value ?? 0)}`, label];
   }, []);
-  const onRangeStartDateChange = useCallback((e) => setRangeStartDate(e.target.value), []);
-  const onRangeEndDateChange = useCallback((e) => setRangeEndDate(e.target.value), []);
+  const onRangeStartDateChange = useCallback((e) => {
+    const v = e.target.value;
+    setRangeStartDate(v);
+    // If new start is after current end, auto-clear end so range stays valid
+    if (v && rangeEndDate && v > rangeEndDate) setRangeEndDate('');
+  }, [rangeEndDate]);
+  const onRangeEndDateChange = useCallback((e) => {
+    const v = e.target.value;
+    setRangeEndDate(v);
+    // If new end is before current start, auto-clear start so range stays valid
+    if (v && rangeStartDate && v < rangeStartDate) setRangeStartDate('');
+  }, [rangeStartDate]);
+  const clearDateRange = useCallback(() => {
+    setRangeStartDate('');
+    setRangeEndDate('');
+  }, []);
 
   const exportPayload = useMemo(
     () => ({
@@ -1060,10 +1075,36 @@ export default function AnalyticsPage() {
                 <button className={`chart-toggle-btn ${viewType === 'week' ? 'active' : ''}`} onClick={() => setViewType('week')}>Weekly</button>
                 <button className={`chart-toggle-btn ${viewType === 'month' ? 'active' : ''}`} onClick={() => setViewType('month')}>Monthly</button>
                 <button className={`chart-toggle-btn ${viewType === 'year' ? 'active' : ''}`} onClick={() => setViewType('year')}>Yearly</button>
-                <div className="chart-date-range">
-                  <input type="date" className="chart-year-date" value={rangeStartDate} onChange={onRangeStartDateChange} />
+                <div className={`chart-date-range${rangeStartDate || rangeEndDate ? ' chart-date-range--active' : ''}`}>
+                  <input
+                    type="date"
+                    className="chart-year-date"
+                    value={rangeStartDate}
+                    max={rangeEndDate || todayIso}
+                    onChange={onRangeStartDateChange}
+                    aria-label="Filter start date"
+                  />
                   <span className="chart-date-range-sep">to</span>
-                  <input type="date" className="chart-year-date" value={rangeEndDate} onChange={onRangeEndDateChange} />
+                  <input
+                    type="date"
+                    className="chart-year-date"
+                    value={rangeEndDate}
+                    min={rangeStartDate || undefined}
+                    max={todayIso}
+                    onChange={onRangeEndDateChange}
+                    aria-label="Filter end date"
+                  />
+                  {(rangeStartDate || rangeEndDate) && (
+                    <button
+                      type="button"
+                      className="chart-date-range-clear"
+                      onClick={clearDateRange}
+                      title="Clear date range"
+                      aria-label="Clear date range"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

@@ -289,6 +289,7 @@ const Dashboard = () => {
   const [viewType, setViewType] = useState('week');
   const [rangeStartDate, setRangeStartDate] = useState('');
   const [rangeEndDate, setRangeEndDate] = useState('');
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
   /** Restored from session on mount so navigating away/back does not flash empty. */
   const [branches, setBranches] = useState(() => readBranchesCache());
   const [issueReports, setIssueReports] = useState([]);
@@ -598,11 +599,19 @@ const Dashboard = () => {
   const setViewMonth = useCallback(() => setViewType('month'), []);
   const setViewYear = useCallback(() => setViewType('year'), []);
   const onRangeStartDateChange = useCallback((e) => {
-    setRangeStartDate(e.target.value);
-  }, []);
+    const v = e.target.value;
+    setRangeStartDate(v);
+    if (v && rangeEndDate && v > rangeEndDate) setRangeEndDate('');
+  }, [rangeEndDate]);
 
   const onRangeEndDateChange = useCallback((e) => {
-    setRangeEndDate(e.target.value);
+    const v = e.target.value;
+    setRangeEndDate(v);
+    if (v && rangeStartDate && v < rangeStartDate) setRangeStartDate('');
+  }, [rangeStartDate]);
+  const clearDateRange = useCallback(() => {
+    setRangeStartDate('');
+    setRangeEndDate('');
   }, []);
   const onDisputeChartTypeChange = useCallback((e) => {
     setDisputeChartType(e.target.value);
@@ -676,22 +685,36 @@ const Dashboard = () => {
             >
               Yearly
             </button>
-            <div className="chart-date-range">
+            <div className={`chart-date-range${rangeStartDate || rangeEndDate ? ' chart-date-range--active' : ''}`}>
               <input
                 type="date"
                 className="chart-year-date"
                 value={rangeStartDate}
+                max={rangeEndDate || todayIso}
                 onChange={onRangeStartDateChange}
-                aria-label="Select start date for chart range"
+                aria-label="Filter start date"
               />
               <span className="chart-date-range-sep">to</span>
               <input
                 type="date"
                 className="chart-year-date"
                 value={rangeEndDate}
+                min={rangeStartDate || undefined}
+                max={todayIso}
                 onChange={onRangeEndDateChange}
-                aria-label="Select end date for chart range"
+                aria-label="Filter end date"
               />
+              {(rangeStartDate || rangeEndDate) && (
+                <button
+                  type="button"
+                  className="chart-date-range-clear"
+                  onClick={clearDateRange}
+                  title="Clear date range"
+                  aria-label="Clear date range"
+                >
+                  ✕
+                </button>
+              )}
             </div>
           </div>
 
