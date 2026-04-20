@@ -268,26 +268,6 @@ function getEffectiveChartBounds(viewBounds, rangeStartDate, rangeEndDate) {
   return { start, end };
 }
 
-/** One entry per calendar month from start through end (inclusive), capped for safety. */
-function eachMonthInRange(start, end) {
-  const rows = [];
-  const cur = new Date(start.getFullYear(), start.getMonth(), 1);
-  const endMonthStart = new Date(end.getFullYear(), end.getMonth(), 1);
-  let guard = 0;
-  while (cur <= endMonthStart && guard < 48) {
-    const label = cur.toLocaleString('en-PH', { month: 'short', year: '2-digit' });
-    rows.push({
-      name: label,
-      y: cur.getFullYear(),
-      m: cur.getMonth(),
-      monthStart: new Date(cur.getFullYear(), cur.getMonth(), 1),
-      monthEnd: new Date(cur.getFullYear(), cur.getMonth() + 1, 0, 23, 59, 59, 999),
-    });
-    cur.setMonth(cur.getMonth() + 1);
-    guard += 1;
-  }
-  return rows;
-}
 
 function refundReasonDataKeys(issueType) {
   const t = String(issueType || '').toLowerCase();
@@ -543,44 +523,79 @@ export default function AnalyticsPage() {
     [activeTransactions, selectedBranchId]
   );
 
-  const lossMonthlyCharts = useMemo(() => {
-    if (!selectedBranchId) {
-      return {
-        refundRows: [],
-        backjobRows: [],
-        monthlyLossStack12: [],
+  const lossChartData = useMemo(() => {
+    const emptyResult = { refundRows: [], backjobRows: [], lossStack: [] };
+    if (!selectedBranchId) return emptyResult;
+
+    const refundTemplate = () => ({ Damaged: 0, Lost: 0, Other: 0, issueSummaries: [] });
+    const backjobTemplate = () => ({ PoorQuality: 0, Wrinkled: 0, Other: 0, issueSummaries: [] });
+
+    // Build buckets matching the Rush vs Regular chart pattern exactly
+    let buckets;
+    let bucketIndexFn; // (Date) => bucket index | undefined
+    let filterStart, filterEnd;
+
+    if (viewType === 'today') {
+      // Hourly 2-hour slots: 8AM, 10AM, 12PM, 2PM, 4PM, 6PM
+      const labels = ['8AM', '10AM', '12PM', '2PM', '4PM', '6PM'];
+      buckets = labels.map((name) => ({ name }));
+      const bounds = getEffectiveChartBounds(viewBounds, rangeStartDate, rangeEndDate);
+      filterStart = bounds.start;
+      filterEnd = bounds.end;
+      bucketIndexFn = (dt) => {
+        const hour = dt.getHours();
+        if (hour < 8 || hour > 18) return undefined;
+        return Math.min(labels.length - 1, Math.floor((hour - 8) / 2));
       };
-    }
-    const { start, end } = getEffectiveChartBounds(viewBounds, rangeStartDate, rangeEndDate);
-    const months = eachMonthInRange(start, end);
-    if (months.length === 0) {
-      return { refundRows: [], backjobRows: [], monthlyLossStack12: [] };
+    } else if (viewType === 'week') {
+      // Week 1-4: same calendar-month segments as Rush vs Regular
+      buckets = [
+        { name: 'Week 1' }, { name: 'Week 2' }, { name: 'Week 3' }, { name: 'Week 4' },
+      ];
+      const bounds = getEffectiveChartBounds(viewBounds, rangeStartDate, rangeEndDate);
+      filterStart = bounds.start;
+      filterEnd = bounds.end;
+      bucketIndexFn = (dt) => Math.min(3, Math.floor((dt.getDate() - 1) / 7));
+    } else if (viewType === 'month') {
+      // Jan-Dec: full calendar year (same as Rush vs Regular)
+      const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      buckets = monthLabels.map((name) => ({ name }));
+      const y = viewBounds.start.getFullYear();
+      const calStart = new Date(y, 0, 1, 0, 0, 0, 0);
+      const calEnd = new Date(y, 11, 31, 23, 59, 59, 999);
+      const bounds = getEffectiveChartBounds({ start: calStart, end: calEnd }, rangeStartDate, rangeEndDate);
+      filterStart = bounds.start;
+      filterEnd = bounds.end;
+      bucketIndexFn = (dt) => {
+        if (dt.getFullYear() !== y) return undefined;
+        return dt.getMonth();
+      };
+    } else {
+      // year: 5-year window ending at focus year (same as Rush vs Regular)
+      const focusYear = viewBounds.start.getFullYear();
+      const years = [focusYear - 4, focusYear - 3, focusYear - 2, focusYear - 1, focusYear];
+      buckets = years.map((y) => ({ name: String(y) }));
+      const calStart = new Date(focusYear - 4, 0, 1, 0, 0, 0, 0);
+      const calEnd = new Date(focusYear, 11, 31, 23, 59, 59, 999);
+      const bounds = getEffectiveChartBounds({ start: calStart, end: calEnd }, rangeStartDate, rangeEndDate);
+      filterStart = bounds.start;
+      filterEnd = bounds.end;
+      const yearIndexMap = new Map(years.map((y, i) => [y, i]));
+      bucketIndexFn = (dt) => yearIndexMap.get(dt.getFullYear());
     }
 
-    const refundTemplate = () => ({
-      Damaged: 0,
-      Lost: 0,
-      Other: 0,
-      issueSummaries: [],
-    });
-    const backjobTemplate = () => ({
-      PoorQuality: 0,
-      Wrinkled: 0,
-      Other: 0,
-      issueSummaries: [],
-    });
+    const refundRows = buckets.map((b) => ({ name: b.name, ...refundTemplate() }));
+    const backjobRows = buckets.map((b) => ({ name: b.name, ...backjobTemplate() }));
 
-    const refundRows = months.map((mo) => ({ name: mo.name, y: mo.y, m: mo.m, ...refundTemplate() }));
-    const backjobRows = months.map((mo) => ({ name: mo.name, y: mo.y, m: mo.m, ...backjobTemplate() }));
-    const idxKey = (y, m) => `${y}-${m}`;
-    const refundIdx = new Map(months.map((mo, i) => [idxKey(mo.y, mo.m), i]));
+    const start = filterStart;
+    const end = filterEnd;
 
     issueReports.forEach((r) => {
       if (String(r.branch_id) !== String(selectedBranchId)) return;
       if (String(r.status || '').toLowerCase() !== 'resolved') return;
       const dt = new Date(r.resolved_at || r.updated_at || 0);
       if (Number.isNaN(dt.getTime()) || dt < start || dt > end) return;
-      const ix = refundIdx.get(idxKey(dt.getFullYear(), dt.getMonth()));
+      const ix = bucketIndexFn(dt);
       if (ix === undefined) return;
       const rt = String(r.resolution_type || '').toLowerCase();
       const amt = disputeAmountFromReport(r);
@@ -602,46 +617,80 @@ export default function AnalyticsPage() {
 
     const refundOut = refundRows.map(
       ({ issueSummaries, Damaged, Lost, Other, name }) => ({
-        name,
-        Damaged,
-        Lost,
-        Other,
+        name, Damaged, Lost, Other,
         issuesPreview: uniqIssuePreview(issueSummaries),
       })
     );
     const backjobOut = backjobRows.map(
       ({ issueSummaries, PoorQuality, Wrinkled, Other, name }) => ({
-        name,
-        PoorQuality,
-        Wrinkled,
-        Other,
+        name, PoorQuality, Wrinkled, Other,
         issuesPreview: uniqIssuePreview(issueSummaries),
       })
     );
 
-    const monthlyLossStack12 = months.map((_, i) => ({
-      name: months[i].name,
+    const lossStack = buckets.map((_, i) => ({
+      name: buckets[i].name,
       refund: refundRows[i].Damaged + refundRows[i].Lost + refundRows[i].Other,
       backjob: backjobRows[i].PoorQuality + backjobRows[i].Wrinkled + backjobRows[i].Other,
     }));
 
-    return {
-      refundRows: refundOut,
-      backjobRows: backjobOut,
-      monthlyLossStack12,
-    };
-  }, [issueReports, selectedBranchId, viewBounds, rangeStartDate, rangeEndDate]);
+    return { refundRows: refundOut, backjobRows: backjobOut, lossStack };
+  }, [issueReports, selectedBranchId, viewType, viewBounds, rangeStartDate, rangeEndDate]);
 
-  const { refundRows: monthlyLossRefundRows, backjobRows: monthlyLossBackjobRows, monthlyLossStack12 } =
-    lossMonthlyCharts;
+  const { refundRows: lossRefundRows, backjobRows: lossBackjobRows, lossStack: monthlyLossStack12 } =
+    lossChartData;
 
 
-  /** New vs returning customers by month (same date window as loss charts). */
-  const customersGrowthByMonth = useMemo(() => {
-    const { start, end } = getEffectiveChartBounds(viewBounds, rangeStartDate, rangeEndDate);
-    const months = eachMonthInRange(start, end);
-    if (months.length === 0 || branchScopedTxns.length === 0) return [];
+  /** New vs returning customers — bucketing aligned with Rush vs Regular chart. */
+  const customersGrowthData = useMemo(() => {
+    if (branchScopedTxns.length === 0) return [];
 
+    // Build time buckets matching the Rush vs Regular chart pattern exactly
+    let buckets; // { name, bucketStart (ms), bucketEnd (ms) }[]
+
+    if (viewType === 'today') {
+      // Hourly 2-hour slots: 8AM, 10AM, 12PM, 2PM, 4PM, 6PM
+      const labels = ['8AM', '10AM', '12PM', '2PM', '4PM', '6PM'];
+      const dayStart = new Date(viewBounds.start);
+      dayStart.setHours(0, 0, 0, 0);
+      buckets = labels.map((name, idx) => {
+        const h = 8 + idx * 2;
+        const bs = new Date(dayStart); bs.setHours(h, 0, 0, 0);
+        const be = new Date(dayStart); be.setHours(h + 1, 59, 59, 999);
+        return { name, bucketStart: bs.getTime(), bucketEnd: be.getTime() };
+      });
+    } else if (viewType === 'week') {
+      // Week 1-4: same calendar-month segments as Rush vs Regular
+      const anchorYear = viewBounds.start.getFullYear();
+      const anchorMonth = viewBounds.start.getMonth();
+      buckets = [0, 1, 2, 3].map((w) => {
+        const startDay = w * 7 + 1;
+        const endDay = w === 3 ? new Date(anchorYear, anchorMonth + 1, 0).getDate() : (w + 1) * 7;
+        const bs = new Date(anchorYear, anchorMonth, startDay, 0, 0, 0, 0);
+        const be = new Date(anchorYear, anchorMonth, endDay, 23, 59, 59, 999);
+        return { name: `Week ${w + 1}`, bucketStart: bs.getTime(), bucketEnd: be.getTime() };
+      });
+    } else if (viewType === 'month') {
+      // Jan-Dec: full calendar year (same as Rush vs Regular)
+      const y = viewBounds.start.getFullYear();
+      const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      buckets = monthLabels.map((name, idx) => {
+        const bs = new Date(y, idx, 1, 0, 0, 0, 0);
+        const be = new Date(y, idx + 1, 0, 23, 59, 59, 999);
+        return { name, bucketStart: bs.getTime(), bucketEnd: be.getTime() };
+      });
+    } else {
+      // year: 5-year window ending at focus year (same as Rush vs Regular)
+      const focusYear = viewBounds.start.getFullYear();
+      const years = [focusYear - 4, focusYear - 3, focusYear - 2, focusYear - 1, focusYear];
+      buckets = years.map((y) => {
+        const bs = new Date(y, 0, 1, 0, 0, 0, 0);
+        const be = new Date(y, 11, 31, 23, 59, 59, 999);
+        return { name: String(y), bucketStart: bs.getTime(), bucketEnd: be.getTime() };
+      });
+    }
+
+    // Build sorted dates per customer across all branch transactions
     const datesByCustomer = new Map();
     branchScopedTxns.forEach((t) => {
       const k = customerIdentityKey(t);
@@ -652,29 +701,23 @@ export default function AnalyticsPage() {
     });
     datesByCustomer.forEach((arr) => arr.sort((a, b) => a - b));
 
-    return months.map((mo) => {
-      const ms = mo.monthStart.getTime();
-      const me = mo.monthEnd.getTime();
+    return buckets.map((bucket) => {
       let newCustomers = 0;
       let returningCustomers = 0;
       datesByCustomer.forEach((dates) => {
-        const inMonth = dates.some((d) => d >= ms && d <= me);
-        if (!inMonth) return;
+        const inBucket = dates.some((d) => d >= bucket.bucketStart && d <= bucket.bucketEnd);
+        if (!inBucket) return;
         const firstEver = dates[0];
-        if (firstEver >= ms && firstEver <= me) newCustomers += 1;
-        if (firstEver < ms) returningCustomers += 1;
+        if (firstEver >= bucket.bucketStart && firstEver <= bucket.bucketEnd) newCustomers += 1;
+        if (firstEver < bucket.bucketStart) returningCustomers += 1;
       });
-      return {
-        name: mo.name,
-        newCustomers,
-        returningCustomers,
-      };
+      return { name: bucket.name, newCustomers, returningCustomers };
     });
-  }, [branchScopedTxns, viewBounds, rangeStartDate, rangeEndDate]);
+  }, [branchScopedTxns, viewType, viewBounds]);
 
   const showGrowthTrendsSection = useMemo(
-    () => customersGrowthByMonth.length > 0,
-    [customersGrowthByMonth]
+    () => customersGrowthData.length > 0,
+    [customersGrowthData]
   );
 
   const debitCount = useMemo(
@@ -927,9 +970,9 @@ export default function AnalyticsPage() {
       recentTransactions,
       totalWeightProcessed,
       monthlyLossStack12,
-      monthlyLossRefundRows,
-      monthlyLossBackjobRows,
-      customersGrowthByMonth,
+      monthlyLossRefundRows: lossRefundRows,
+      monthlyLossBackjobRows: lossBackjobRows,
+      customersGrowthByMonth: customersGrowthData,
       rushRegularChartData,
     }),
     [
@@ -956,9 +999,9 @@ export default function AnalyticsPage() {
       recentTransactions,
       totalWeightProcessed,
       monthlyLossStack12,
-      monthlyLossRefundRows,
-      monthlyLossBackjobRows,
-      customersGrowthByMonth,
+      lossRefundRows,
+      lossBackjobRows,
+      customersGrowthData,
       rushRegularChartData,
     ]
   );
@@ -1068,11 +1111,11 @@ export default function AnalyticsPage() {
             <div className="analytics-chart-pair">
                 <Card title="Loss & quality — Refunds (resolved)">
                   <p className="analytics-card-sub">
-                    Refund resolutions by month and issue reason (damaged, lost, other). Tooltip lists reported issues
+                    Refund resolutions by issue reason (damaged, lost, other). Tooltip lists reported issues
                     (category and optional customer note), not resolution remarks.
                   </p>
                   <ResponsiveContainer width="100%" height={240}>
-                    <BarChart data={monthlyLossRefundRows} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
+                    <BarChart data={lossRefundRows} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                       <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 11 }} />
                       <YAxis
@@ -1090,11 +1133,11 @@ export default function AnalyticsPage() {
                 </Card>
                 <Card title="Loss & quality — Backjobs (resolved)">
                   <p className="analytics-card-sub">
-                    Backjob / replacement resolutions by month and issue reason. Tooltip lists reported issues (category
+                    Backjob / replacement resolutions by issue reason. Tooltip lists reported issues (category
                     and optional customer note), not resolution remarks.
                   </p>
                   <ResponsiveContainer width="100%" height={240}>
-                    <BarChart data={monthlyLossBackjobRows} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
+                    <BarChart data={lossBackjobRows} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                       <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 11 }} />
                       <YAxis
@@ -1122,11 +1165,11 @@ export default function AnalyticsPage() {
               {showGrowthTrendsSection ? (
                 <Card title="Growth trends">
                   <p className="analytics-card-sub">
-                    New customers: first order at this branch falls in the month. Active returning customers: had orders
-                    before that month and at least one order in the month (name + address match).
+                    New customers: first order at this branch falls in the period. Active returning customers: had orders
+                    before that period and at least one order in it (name + address match).
                   </p>
                   <ResponsiveContainer width="100%" height={240}>
-                    <LineChart data={customersGrowthByMonth} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
+                    <LineChart data={customersGrowthData} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <Legend
                         verticalAlign="top"
