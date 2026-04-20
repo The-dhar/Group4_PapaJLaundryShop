@@ -320,6 +320,10 @@ export default function AnalyticsPage() {
   const backjobChartRef = useRef(null);
   const growthChartRef = useRef(null);
   const rushChartRef = useRef(null);
+
+  // Export dropdown state
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+  const exportDropdownRef = useRef(null);
   const [branches, setBranches] = useState(() => readBranchesCache());
   const [issueReports, setIssueReports] = useState([]);
   /** Avoid flashing "no branches" before the first /branches response (same idea as Dashboard). */
@@ -377,6 +381,18 @@ export default function AnalyticsPage() {
     }, POLL_MS);
     return () => clearInterval(intervalId);
   }, [fetchTransactions, fetchBranchesAndReports]);
+
+  // Close export dropdown when clicking outside
+  useEffect(() => {
+    if (!exportDropdownOpen) return;
+    const handleClickOutside = (e) => {
+      if (exportDropdownRef.current && !exportDropdownRef.current.contains(e.target)) {
+        setExportDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [exportDropdownOpen]);
 
   const sortedBranches = useMemo(
     () => [...branches].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
@@ -1091,12 +1107,30 @@ export default function AnalyticsPage() {
 
   /** Capture all visible chart containers as PNG data URLs for PDF embedding. */
   const captureChartImages = useCallback(async () => {
-    const opts = { backgroundColor: '#ffffff', scale: 2, useCORS: true, logging: false };
     const result = {};
+
+    /** Inline computed SVG styles so html2canvas can see fill/stroke colors. */
+    const inlineSvgStyles = (container) => {
+      const svgEls = container.querySelectorAll('svg *');
+      svgEls.forEach((el) => {
+        const cs = window.getComputedStyle(el);
+        if (cs.fill && cs.fill !== 'none') el.style.fill = cs.fill;
+        if (cs.stroke && cs.stroke !== 'none') el.style.stroke = cs.stroke;
+        if (cs.opacity) el.style.opacity = cs.opacity;
+      });
+    };
+
     const captureRef = async (ref, key) => {
       if (!ref.current) return;
       try {
-        const canvas = await html2canvas(ref.current, opts);
+        inlineSvgStyles(ref.current);
+        const canvas = await html2canvas(ref.current, {
+          backgroundColor: '#ffffff',
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          foreignObjectRendering: false,
+        });
         result[key] = canvas.toDataURL('image/png');
       } catch (err) {
         console.warn(`Chart capture failed for ${key}:`, err);
@@ -1135,17 +1169,41 @@ export default function AnalyticsPage() {
           <>
             <div className="analytics-page-header">
               <h1 className="analytics-page-heading">Report</h1>
-              <div className="analytics-export-toolbar">
-                <span className="analytics-export-label">Export</span>
-                <button type="button" className="analytics-export-btn" onClick={handleExportCsv}>
-                  Excel(.csv)
+              <div className="analytics-export-dropdown" ref={exportDropdownRef}>
+                <button
+                  type="button"
+                  className="analytics-export-toggle"
+                  onClick={() => setExportDropdownOpen((prev) => !prev)}
+                  aria-haspopup="true"
+                  aria-expanded={exportDropdownOpen}
+                >
+                  Export ▾
                 </button>
-                <button type="button" className="analytics-export-btn" onClick={handleExportPdf}>
-                  PDF
-                </button>
-                <button type="button" className="analytics-export-btn" onClick={handlePrint}>
-                  Print
-                </button>
+                {exportDropdownOpen && (
+                  <div className="analytics-export-menu">
+                    <button
+                      type="button"
+                      className="analytics-export-menu-item"
+                      onClick={() => { handleExportCsv(); setExportDropdownOpen(false); }}
+                    >
+                      📊 Excel (.csv)
+                    </button>
+                    <button
+                      type="button"
+                      className="analytics-export-menu-item"
+                      onClick={() => { handleExportPdf(); setExportDropdownOpen(false); }}
+                    >
+                      📄 PDF
+                    </button>
+                    <button
+                      type="button"
+                      className="analytics-export-menu-item"
+                      onClick={() => { handlePrint(); setExportDropdownOpen(false); }}
+                    >
+                      🖨️ Print
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 

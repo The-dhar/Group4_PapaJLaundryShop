@@ -211,16 +211,20 @@ export default function ReportsPage() {
         const noteResult = await Swal.fire({
           title: 'Reject issue report',
           input: 'textarea',
-          inputLabel: 'Optional note',
+          inputLabel: 'Resolution note (required)',
+          inputPlaceholder: 'Explain why this report is being rejected...',
           showCancelButton: true,
           confirmButtonText: 'Reject',
           cancelButtonText: 'Cancel',
+          inputValidator: (value) => {
+            if (!value || !value.trim()) return 'Please provide a resolution note.';
+          },
         });
         if (!noteResult.isConfirmed) return;
 
         await apiRequest(`/issue-reports/${row.id}/reject`, {
           method: 'PUT',
-          body: JSON.stringify({ resolution_note: String(noteResult.value || '').trim() || null }),
+          body: JSON.stringify({ resolution_note: String(noteResult.value || '').trim() }),
         });
       }
 
@@ -230,10 +234,14 @@ export default function ReportsPage() {
           const noteResult = await Swal.fire({
             title: 'Resolve as backjob',
             input: 'textarea',
-            inputLabel: 'Optional note',
+            inputLabel: 'Resolution note (required)',
+            inputPlaceholder: 'Describe what needs to be redone...',
             showCancelButton: true,
             confirmButtonText: 'Resolve backjob',
             cancelButtonText: 'Cancel',
+            inputValidator: (value) => {
+              if (!value || !value.trim()) return 'Please provide a resolution note.';
+            },
           });
           if (!noteResult.isConfirmed) return;
 
@@ -241,7 +249,7 @@ export default function ReportsPage() {
             method: 'PUT',
             body: JSON.stringify({
               resolution_type: 'replacement',
-              resolution_note: String(noteResult.value || '').trim() || null,
+              resolution_note: String(noteResult.value || '').trim(),
             }),
           });
         } else {
@@ -284,8 +292,8 @@ export default function ReportsPage() {
           const refundResult = await Swal.fire({
             title: 'Resolve as refund',
             html: `${lineBlocks}
-              <label style="display:block;text-align:left;margin-bottom:6px;font-weight:600;">Note (optional)</label>
-              <textarea id="swal-refund-note" class="swal2-textarea" placeholder="Resolution note"></textarea>`,
+              <label style="display:block;text-align:left;margin-bottom:6px;font-weight:600;">Note (required)</label>
+              <textarea id="swal-refund-note" class="swal2-textarea" placeholder="Describe the resolution details..."></textarea>`,
             focusConfirm: false,
             showCancelButton: true,
             confirmButtonText: 'Resolve refund',
@@ -319,7 +327,11 @@ export default function ReportsPage() {
                 return false;
               }
               const note = String(document.getElementById('swal-refund-note')?.value || '').trim();
-              return { refund_allocations: allocations, resolution_note: note || null };
+              if (!note) {
+                Swal.showValidationMessage('Please provide a resolution note.');
+                return false;
+              }
+              return { refund_allocations: allocations, resolution_note: note };
             },
           });
           if (!refundResult.isConfirmed || !refundResult.value) return;
