@@ -341,7 +341,7 @@ class ReportController extends Controller
 
         $validated = $request->validate([
             'resolution_type' => 'required|string|in:refund,replacement',
-            'resolution_note' => 'nullable|string|max:2000',
+            'resolution_note' => 'required|string|min:1|max:2000',
         ]);
 
         $report = $this->issueReportForUser($user, $id, true);
@@ -446,7 +446,7 @@ class ReportController extends Controller
         }
 
         $validated = $request->validate([
-            'resolution_note' => 'nullable|string|max:2000',
+            'resolution_note' => 'required|string|min:1|max:2000',
         ]);
 
         $report = $this->issueReportForUser($user, $id, true);
