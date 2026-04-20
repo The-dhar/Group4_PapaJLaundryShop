@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BsBasket, BsGraphDownArrow, BsGraphUpArrow, BsPercent } from 'react-icons/bs';
 import {
   Bar,
@@ -19,6 +19,7 @@ import { API_URL } from '../config/api';
 import { buildAnalyticsCsv, downloadAnalyticsCsv, exportAnalyticsPdf } from '../utils/analyticsExport';
 import '../styles/dashboardstyle.css';
 import '../styles/analyticsstyle.css';
+import html2canvas from 'html2canvas';
 
 const POLL_MS = 45_000;
 const formatPeso = (value, fractionDigits = 2) => {
@@ -338,6 +339,12 @@ export default function AnalyticsPage() {
   const [rangeStartDate, setRangeStartDate] = useState('');
   const [rangeEndDate, setRangeEndDate] = useState('');
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  // Refs for chart containers (used to capture chart images for PDF/print)
+  const refundChartRef = useRef(null);
+  const backjobChartRef = useRef(null);
+  const growthChartRef = useRef(null);
+  const rushChartRef = useRef(null);
   const [branches, setBranches] = useState(() => readBranchesCache());
   const [issueReports, setIssueReports] = useState([]);
   /** Avoid flashing "no branches" before the first /branches response (same idea as Dashboard). */
@@ -1025,13 +1032,37 @@ export default function AnalyticsPage() {
     downloadAnalyticsCsv(buildAnalyticsCsv(exportPayload), 'branch-report');
   }, [exportPayload]);
 
-  const handleExportPdf = useCallback(async () => {
-    await exportAnalyticsPdf(exportPayload);
-  }, [exportPayload]);
-
-  const handlePrint = useCallback(() => {
-    window.print();
+  /** Capture all visible chart containers as PNG data URLs for PDF embedding. */
+  const captureChartImages = useCallback(async () => {
+    const opts = { backgroundColor: '#ffffff', scale: 2, useCORS: true, logging: false };
+    const result = {};
+    const captureRef = async (ref, key) => {
+      if (!ref.current) return;
+      try {
+        const canvas = await html2canvas(ref.current, opts);
+        result[key] = canvas.toDataURL('image/png');
+      } catch (err) {
+        console.warn(`Chart capture failed for ${key}:`, err);
+      }
+    };
+    await Promise.all([
+      captureRef(refundChartRef, 'refundChart'),
+      captureRef(backjobChartRef, 'backjobChart'),
+      captureRef(growthChartRef, 'growthChart'),
+      captureRef(rushChartRef, 'rushChart'),
+    ]);
+    return result;
   }, []);
+
+  const handleExportPdf = useCallback(async () => {
+    const chartImages = await captureChartImages();
+    await exportAnalyticsPdf(exportPayload, chartImages, 'download');
+  }, [exportPayload, captureChartImages]);
+
+  const handlePrint = useCallback(async () => {
+    const chartImages = await captureChartImages();
+    await exportAnalyticsPdf(exportPayload, chartImages, 'print');
+  }, [exportPayload, captureChartImages]);
 
   return (
     <DashboardLayout>
@@ -1155,6 +1186,7 @@ export default function AnalyticsPage() {
                     Refund resolutions by issue reason (damaged, lost, other). Tooltip lists reported issues
                     (category and optional customer note), not resolution remarks.
                   </p>
+                  <div ref={refundChartRef}>
                   <ResponsiveContainer width="100%" height={240}>
                     <BarChart data={lossRefundRows} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
@@ -1171,12 +1203,14 @@ export default function AnalyticsPage() {
                       <Bar dataKey="Other" stackId="ref" name="Other" fill="#99f6e4" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
+                  </div>
                 </Card>
                 <Card title="Loss & quality — Backjobs (resolved)">
                   <p className="analytics-card-sub">
                     Backjob / replacement resolutions by issue reason. Tooltip lists reported issues (category
                     and optional customer note), not resolution remarks.
                   </p>
+                  <div ref={backjobChartRef}>
                   <ResponsiveContainer width="100%" height={240}>
                     <BarChart data={lossBackjobRows} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
@@ -1193,6 +1227,7 @@ export default function AnalyticsPage() {
                       <Bar dataKey="Other" stackId="bj" name="Other" fill="#c4b5fd" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
+                  </div>
                 </Card>
             </div>
 
@@ -1209,6 +1244,7 @@ export default function AnalyticsPage() {
                     New customers: first order at this branch falls in the period. Active returning customers: had orders
                     before that period and at least one order in it (name + address match).
                   </p>
+                  <div ref={growthChartRef}>
                   <ResponsiveContainer width="100%" height={240}>
                     <LineChart data={customersGrowthData} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -1240,6 +1276,7 @@ export default function AnalyticsPage() {
                       />
                     </LineChart>
                   </ResponsiveContainer>
+                  </div>
                 </Card>
               ) : null}
 
@@ -1249,6 +1286,7 @@ export default function AnalyticsPage() {
                   chart). Monthly: Jan–Dec for the calendar year of the selected month. Yearly: five years ending on the
                   selected year (latest on the right). Honors the custom date range when set.
                 </p>
+                <div ref={rushChartRef}>
                 <ResponsiveContainer width="100%" height={240}>
                   <BarChart data={rushRegularChartData} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
@@ -1260,6 +1298,7 @@ export default function AnalyticsPage() {
                     <Bar dataKey="regular" name="Regular" fill="#64748b" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
+                </div>
               </Card>
             </div>
 

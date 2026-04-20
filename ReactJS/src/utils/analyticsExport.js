@@ -408,7 +408,71 @@ function drawTable(doc, { columns, rows, y, margin, pageH, rowH = 6, headH = 7 }
   return y + 3;
 }
 
-export async function exportAnalyticsPdf(payload) {
+/**
+ * Embed a chart data-URL image into the PDF at the specified y position.
+ * Returns the new y coordinate after the image.
+ * Maintains the original aspect ratio of the captured image.
+ */
+function embedChartImage(doc, dataUrl, y, margin, maxW, pageH, maxImgH = 65) {
+  if (!dataUrl) return y;
+  try {
+    const fmt = dataUrl.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG';
+    // Decode dimensions from the data URL via a temp Image
+    const img = new Image();
+    img.src = dataUrl;
+    const natW = img.naturalWidth || img.width || 800;
+    const natH = img.naturalHeight || img.height || 300;
+    const aspect = natW / natH;
+    let imgW = maxW;
+    let imgH = imgW / aspect;
+    if (imgH > maxImgH) {
+      imgH = maxImgH;
+      imgW = imgH * aspect;
+    }
+    const neededSpace = imgH + 4;
+    if (y + neededSpace > pageH - margin) {
+      doc.addPage();
+      y = margin;
+    }
+    const xOffset = margin + (maxW - imgW) / 2;
+    doc.addImage(dataUrl, fmt, xOffset, y, imgW, imgH);
+    y += imgH + 3;
+  } catch {
+    // Silently skip if image is invalid
+  }
+  return y;
+}
+
+/**
+ * Embed two chart images side by side (e.g. Refunds + Backjobs).
+ * Returns the new y coordinate after both images.
+ */
+function embedChartImagePair(doc, leftDataUrl, rightDataUrl, y, margin, maxW, pageH, maxImgH = 55) {
+  const halfW = (maxW - 4) / 2;
+  const leftH = leftDataUrl ? maxImgH : 0;
+  const rightH = rightDataUrl ? maxImgH : 0;
+  const rowH = Math.max(leftH, rightH);
+  if (rowH <= 0) return y;
+  if (y + rowH + 4 > pageH - margin) {
+    doc.addPage();
+    y = margin;
+  }
+  if (leftDataUrl) {
+    try {
+      const fmt = leftDataUrl.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG';
+      doc.addImage(leftDataUrl, fmt, margin, y, halfW, maxImgH);
+    } catch { /* skip */ }
+  }
+  if (rightDataUrl) {
+    try {
+      const fmt = rightDataUrl.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG';
+      doc.addImage(rightDataUrl, fmt, margin + halfW + 4, y, halfW, maxImgH);
+    } catch { /* skip */ }
+  }
+  return y + rowH + 3;
+}
+
+export async function exportAnalyticsPdf(payload, chartImages = {}, mode = 'download') {
   const {
     branchName,
     branchId,
@@ -517,6 +581,8 @@ export async function exportAnalyticsPdf(payload) {
   });
 
   y = drawSectionTitle(doc, 'Revenue Series', y, margin, maxW, pageH);
+  // Embed revenue chart image if provided
+  y = embedChartImage(doc, chartImages.revenueChart, y, margin, maxW, pageH, 65);
   y = drawTable(doc, {
     y,
     margin,
@@ -558,6 +624,8 @@ export async function exportAnalyticsPdf(payload) {
   });
 
   y = drawSectionTitle(doc, 'Loss & Quality — totals', y, margin, maxW, pageH);
+  // Embed refund + backjob charts side by side
+  y = embedChartImagePair(doc, chartImages.refundChart, chartImages.backjobChart, y, margin, maxW, pageH, 55);
   y = drawTable(doc, {
     y,
     margin,
@@ -613,6 +681,8 @@ export async function exportAnalyticsPdf(payload) {
   });
 
   y = drawSectionTitle(doc, 'Growth (new vs returning)', y, margin, maxW, pageH);
+  // Embed growth chart image if provided
+  y = embedChartImage(doc, chartImages.growthChart, y, margin, maxW, pageH, 60);
   y = drawTable(doc, {
     y,
     margin,
@@ -630,6 +700,8 @@ export async function exportAnalyticsPdf(payload) {
   });
 
   y = drawSectionTitle(doc, 'Rush vs regular (paid)', y, margin, maxW, pageH);
+  // Embed rush vs regular chart image if provided
+  y = embedChartImage(doc, chartImages.rushChart, y, margin, maxW, pageH, 60);
   y = drawTable(doc, {
     y,
     margin,
@@ -679,5 +751,22 @@ export async function exportAnalyticsPdf(payload) {
   }
 
   const stamp = new Date().toISOString().slice(0, 10);
+
+  if (mode === 'print') {
+    // Open in a new browser tab and trigger print
+    const pdfBlob = doc.output('blob');
+    const blobUrl = URL.createObjectURL(pdfBlob);
+    const printWin = window.open(blobUrl, '_blank');
+    if (printWin) {
+      printWin.addEventListener('load', () => {
+        setTimeout(() => {
+          printWin.focus();
+          printWin.print();
+        }, 600);
+      });
+    }
+    return;
+  }
+
   doc.save(`branch-report-${stamp}.pdf`);
 }
