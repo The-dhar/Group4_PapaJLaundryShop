@@ -1,6 +1,8 @@
 import React, { useCallback, useMemo, useState } from "react";
 import {
+  Alert,
   ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,11 +17,13 @@ import { BarChart, LineChart } from "react-native-chart-kit";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBranchPages } from "@/contexts/BranchPagesContext";
 import { API_URL } from "../../config/api";
+import { exportBranchReportsPdf } from "@/lib/branchReportsPdfExport";
 
 type ViewType = "today" | "week" | "month" | "year";
 
 type TransactionLike = {
   id?: number;
+  receipt?: string;
   amount?: number | string;
   payment_status?: string;
   inventory_status?: string;
@@ -33,6 +37,8 @@ type TransactionLike = {
   created_at?: string;
   updated_at?: string;
   branch_id?: number | string;
+  weight?: number | string;
+  total_weight?: number | string;
   receipt_items?: TransactionItemLike[];
   services?: TransactionItemLike[];
   transaction_items?: TransactionItemLike[];
@@ -311,6 +317,7 @@ export default function BranchReportsScreen() {
   const [transactions, setTransactions] = useState<TransactionLike[]>([]);
   const [reports, setReports] = useState<IssueReportLike[]>([]);
   const [chartPointHint, setChartPointHint] = useState<string>("");
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
   const loadBranchReports = useCallback(async () => {
     try {
@@ -688,6 +695,20 @@ export default function BranchReportsScreen() {
     };
   }, [branchTransactionsInView]);
 
+  const recentTransactions = useMemo(() => {
+    return [...branchTransactionsInView]
+      .sort((a, b) => new Date(b.created_at || b.updated_at || 0).getTime() - new Date(a.created_at || a.updated_at || 0).getTime())
+      .slice(0, 5)
+      .map((row) => ({
+        receipt: row?.receipt || (row?.id != null ? `TXN-${row.id}` : "TXN"),
+        customer: row?.customer_name || "—",
+        payment: row?.payment_status || "—",
+        status: row?.inventory_status || "—",
+        amount: Number(row?.amount || 0),
+        date: new Date(row?.created_at || row?.updated_at || Date.now()).toLocaleDateString(),
+      }));
+  }, [branchTransactionsInView]);
+
   const viewTypeLabel = useMemo(() => {
     if (viewType === "today") return "Today";
     if (viewType === "week") return "Weekly";
@@ -713,6 +734,74 @@ export default function BranchReportsScreen() {
     [chartWidth]
   );
 
+  const exportPayload = useMemo(
+    () => ({
+      generatedAt: new Date().toISOString(),
+      branchName: branchName || "Branch Reports",
+      branchId: branchId ? String(branchId) : "—",
+      viewTypeLabel,
+      rangeStartDate: viewBounds.start.toISOString().slice(0, 10),
+      rangeEndDate: viewBounds.end.toISOString().slice(0, 10),
+      totalRevenue,
+      totalLosses,
+      netProfit,
+      totalDisputeValue,
+      totalWeightProcessed: branchTransactionsInView.reduce((sum, row) => sum + Number(row?.weight ?? row?.total_weight ?? 0), 0),
+      issueStatusTrend,
+      paymentTrend: paidUnpaidSeries,
+      performanceRows,
+      growthSeries,
+      lossReasonSeries,
+      whiteVsColored,
+      serviceItems: serviceItems.labels.map((name, index) => ({
+        name,
+        amount: Number(serviceItems.values[index] || 0),
+      })),
+      recentTransactions,
+    }),
+    [
+      branchId,
+      branchName,
+      branchTransactionsInView,
+      growthSeries,
+      issueStatusTrend,
+      lossReasonSeries,
+      netProfit,
+      paidUnpaidSeries,
+      performanceRows,
+      recentTransactions,
+      serviceItems.labels,
+      serviceItems.values,
+      totalDisputeValue,
+      totalLosses,
+      totalRevenue,
+      viewBounds.end,
+      viewBounds.start,
+      viewTypeLabel,
+      whiteVsColored,
+    ]
+  );
+
+  const handleExportPdf = useCallback(async () => {
+    setExportMenuOpen(false);
+    try {
+      await exportBranchReportsPdf(exportPayload, "download");
+    } catch (error) {
+      console.log(error);
+      Alert.alert("Export failed", error instanceof Error ? error.message : "Could not export reports.");
+    }
+  }, [exportPayload]);
+
+  const handlePrintReports = useCallback(async () => {
+    setExportMenuOpen(false);
+    try {
+      await exportBranchReportsPdf(exportPayload, "print");
+    } catch (error) {
+      console.log(error);
+      Alert.alert("Print failed", error instanceof Error ? error.message : "Could not open the print dialog.");
+    }
+  }, [exportPayload]);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerRow}>
@@ -720,10 +809,30 @@ export default function BranchReportsScreen() {
           <Text style={styles.title}>{branchName ? `${branchName} Reports` : "Branch Reports"}</Text>
           <View style={styles.underline} />
         </View>
-        <TouchableOpacity style={styles.refreshBtn} onPress={loadBranchReports}>
-          <Text style={styles.refreshText}>{isLoading ? "Loading..." : "Refresh"}</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.exportBtn} onPress={() => setExportMenuOpen((prev) => !prev)}>
+            <Text style={styles.exportText}>Export ▾</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.refreshBtn} onPress={loadBranchReports}>
+            <Text style={styles.refreshText}>{isLoading ? "Loading..." : "Refresh"}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      <Modal transparent visible={exportMenuOpen} animationType="fade" onRequestClose={() => setExportMenuOpen(false)}>
+        <View style={styles.exportModalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setExportMenuOpen(false)} />
+          <View style={styles.exportMenuCard}>
+            <Text style={styles.exportMenuTitle}>Export reports</Text>
+            <TouchableOpacity style={styles.exportMenuItem} onPress={handleExportPdf}>
+              <Text style={styles.exportMenuItemText}>Download PDF</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.exportMenuItem} onPress={handlePrintReports}>
+              <Text style={styles.exportMenuItemText}>Print</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {isLoading ? (
         <View style={styles.loaderWrap}>
@@ -1170,6 +1279,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   title: {
     fontSize: 24,
     fontWeight: "800",
@@ -1188,10 +1302,62 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
+  exportBtn: {
+    backgroundColor: "#dbeafe",
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#93c5fd",
+  },
+  exportText: {
+    color: "#1d4ed8",
+    fontWeight: "700",
+    fontSize: 12,
+  },
   refreshText: {
     color: "#1e293b",
     fontWeight: "700",
     fontSize: 12,
+  },
+  exportModalOverlay: {
+    flex: 1,
+    justifyContent: "flex-start",
+    alignItems: "flex-end",
+    paddingTop: 64,
+    paddingRight: 16,
+    backgroundColor: "rgba(15, 23, 42, 0.22)",
+  },
+  exportMenuCard: {
+    width: 180,
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    shadowColor: "#000",
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  exportMenuTitle: {
+    color: "#0f172a",
+    fontSize: 13,
+    fontWeight: "800",
+    marginBottom: 8,
+  },
+  exportMenuItem: {
+    borderRadius: 10,
+    backgroundColor: "#f8fafc",
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    marginTop: 6,
+  },
+  exportMenuItemText: {
+    color: "#1e293b",
+    fontSize: 12,
+    fontWeight: "700",
   },
   loaderWrap: {
     flex: 1,
@@ -1288,3 +1454,5 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+
+export { BranchReportsScreen };
