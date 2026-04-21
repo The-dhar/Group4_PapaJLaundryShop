@@ -40,6 +40,17 @@ export default function BranchPagesLayout() {
           ),
         }}
       />
+
+      {/* Reports */}
+      <Tabs.Screen
+        name="reports"
+        options={{
+          title: 'Reports',
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="bar-chart-outline" size={26} color={color} />
+          ),
+        }}
+      />
     </Tabs>
     </BranchPagesProvider>
   );

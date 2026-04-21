@@ -1,5 +1,6 @@
 import './App.css';
 import LogIn from './pages/login';
+import LandingPage from './pages/LandingPage';
 import SignUp from './pages/signUp';
 import Dashboard from './pages/Dashboard';
 import POS from './pages/POs';
@@ -20,7 +21,8 @@ function App() {
     <TransactionsProvider>
       <Router>
         <Routes>
-          <Route path="/" element={<LogIn />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<LogIn />} />
           <Route path="/signup" element={<SignUp />} />
           <Route path="/profile" element={<Navigate to="/dashboard" replace />} />
           <Route
