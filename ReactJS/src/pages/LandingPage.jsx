@@ -91,7 +91,7 @@ export default function PapaJWebsite() {
       <nav className={scrolled ? "scrolled" : ""}>
         <a className="nav-brand" href="#hero">
           <div className="nav-icon">
-            <img src="logo.png" alt="PapaJ Logo" style={{ height: "40px" }} />
+            <img src="/landingpage/logo.png" alt="PapaJ Logo" style={{ height: "40px" }} />
           </div>
           <span className="nav-name">PapaJ</span>
         </a>
@@ -131,7 +131,7 @@ export default function PapaJWebsite() {
         <div className="hero-right reveal right">
           <div className="hero-img-box">
             {/* add your real hero image directly; the placeholder styling is only for dev */}
-            <img src="homepage.png" alt="PapaJ App" />
+            <img src="/landingpage/homepage.png" alt="PapaJ App" />
           </div>
           <div className="hero-badge">
             <div className="badge-dot" />
@@ -241,7 +241,7 @@ export default function PapaJWebsite() {
         <div className="ss-scroll">
           {screenshots.map((sc, i) => (
             <div key={i} className={`ss-card reveal d${Math.min(i + 1, 5)}`}>
-              <img src={`/screen-${i + 1}.jpg`} alt={sc} />
+              <img src={`/landingpage/screen-${i + 1}.jpg`} alt={sc} />
             </div>
           ))}
         </div>
@@ -316,9 +316,8 @@ export default function PapaJWebsite() {
           {team.map((m, i) => (
             <div key={m.name} className={`team-card reveal d${i + 1}`}>
               <div className="team-photo">
-                {/* Replace placeholder with actual image */}
                 <img
-                  src={`/team-${i + 1}.jpg`}
+                  src={`/landingpage/team-${i + 1}.jpg`}
                   alt={m.name}
                   className="team-img"
                 />

@@ -1186,21 +1186,21 @@ export default function AnalyticsPage() {
                       className="analytics-export-menu-item"
                       onClick={() => { handleExportCsv(); setExportDropdownOpen(false); }}
                     >
-                      📊 Excel (.csv)
+                      .csv
                     </button>
                     <button
                       type="button"
                       className="analytics-export-menu-item"
                       onClick={() => { handleExportPdf(); setExportDropdownOpen(false); }}
                     >
-                      📄 PDF
+                      PDF
                     </button>
                     <button
                       type="button"
                       className="analytics-export-menu-item"
                       onClick={() => { handlePrint(); setExportDropdownOpen(false); }}
                     >
-                      🖨️ Print
+                      Print
                     </button>
                   </div>
                 )}

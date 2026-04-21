@@ -656,3 +656,15 @@
         font-size: 16px;
     }
 }
+
+.rdt_Pagination {
+    position: static !important;
+    width: 100% !important;
+    display: flex !important;
+    justify-content: flex-end !important;
+    background-color: white !important;
+    border-top: 1px solid #e5e7eb !important;
+    border-bottom-left-radius: 15px !important;
+    border-bottom-right-radius: 15px !important;
+    padding: 10px 20px !important;
+}
