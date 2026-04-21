@@ -14,6 +14,7 @@
 }
 
 .reports-header h2 {
+  font-family: 'Poppins', sans-serif;
   margin: 0;
 }
 
@@ -233,6 +234,12 @@
   cursor: pointer;
 }
 
+.reports-actions button:not(:disabled) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .reports-actions button:nth-child(3) {
   background: #16a34a;
 }
@@ -244,6 +251,22 @@
 .reports-actions button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.reports-action-spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: reports-spin 0.8s linear infinite;
+  flex: 0 0 auto;
+}
+
+@keyframes reports-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .reports-muted {

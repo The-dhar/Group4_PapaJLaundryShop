@@ -48,7 +48,7 @@ const Express = () => {
   /** Suggested policy: warning for 7-29 days, full-amount penalty for 30+ days while still in shop. */
   const calculateSuggestedPenalty = (amount, dueDate, inventoryStatus) => {
     if (String(inventoryStatus || '').toLowerCase() !== 'in_shop') return 0;
-    return isThirtyOrMoreDaysPastDueDate(dueDate) ? Number(amount || 0) : 0;
+    return isThirtyOrMoreDaysPastDueDate(dueDate) ? Math.round((Number(amount) || 0) * 100) / 100 : 0;
   };
 
   const parseMoneyInput = (str) => {
@@ -57,13 +57,15 @@ const Express = () => {
     return Number.isFinite(n) ? n : null;
   };
 
+  const roundMoney = (value) => Math.round((Number(value) || 0) * 100) / 100;
+
   const selectedTxnPenalty = selectedTxn
-    ? Number(selectedTxn.penalty_amount ?? selectedTxn.penalty ?? 0)
+    ? roundMoney(selectedTxn.penalty_amount ?? selectedTxn.penalty ?? 0)
     : 0;
   const selectedSuggestedPenalty = selectedTxn
     ? (() => {
         const storedSuggested = Number(selectedTxn.penalty_suggested_amount || 0);
-        if (storedSuggested > 0) return storedSuggested;
+        if (storedSuggested > 0) return roundMoney(storedSuggested);
         return calculateSuggestedPenalty(
           selectedTxn.amount,
           selectedTxn.due_date,
@@ -72,12 +74,12 @@ const Express = () => {
       })()
     : 0;
   const penaltyParsed = parseMoneyInput(penaltyInput);
-  const penaltyEntered = penaltyParsed !== null ? penaltyParsed : 0;
+  const penaltyEntered = penaltyParsed !== null ? roundMoney(penaltyParsed) : 0;
   const requiredPaymentTotal = selectedTxn
-    ? Number(selectedTxn.amount) + penaltyEntered
+    ? roundMoney(selectedTxn.amount) + penaltyEntered
     : 0;
   const paidParsed = parseMoneyInput(paidAmountInput);
-  const paidEntered = paidParsed !== null ? paidParsed : 0;
+  const paidEntered = paidParsed !== null ? roundMoney(paidParsed) : 0;
   const showInsufficientPayment =
     viewMode === 'edit' &&
     selectedTxn &&
@@ -120,7 +122,7 @@ const Express = () => {
     if (paidAmount === null) return;
 
     const penalty = penaltyEntered;
-    const required = Number(selectedTxn.amount) + penalty;
+    const required = roundMoney(selectedTxn.amount) + penalty;
     if (paidAmount + 0.001 < required) return;
     if (showPenaltyOverrideReasonError) return;
 
@@ -188,13 +190,13 @@ const Express = () => {
                 ...row,
                 payment_method: "Cash" // force cash on edit
               });
-              setPaidAmountInput(row.paid_amount && row.paid_amount !== 0 ? String(row.paid_amount) : '');
-              const existingPenalty = Number(row.penalty_amount ?? row.penalty ?? 0) || 0;
+              setPaidAmountInput(row.paid_amount && row.paid_amount !== 0 ? String(roundMoney(row.paid_amount)) : '');
+              const existingPenalty = roundMoney(row.penalty_amount ?? row.penalty ?? 0);
               const suggestedPenalty =
-                Number(row.penalty_suggested_amount) ||
+                roundMoney(row.penalty_suggested_amount) ||
                 calculateSuggestedPenalty(row.amount, row.due_date, row.inventory_status);
               const nextPenalty = existingPenalty > 0 ? existingPenalty : suggestedPenalty;
-              setPenaltyInput(nextPenalty > 0 ? String(nextPenalty) : '');
+              setPenaltyInput(nextPenalty > 0 ? String(roundMoney(nextPenalty)) : '');
               setPenaltyOverrideReason(String(row.penalty_override_reason || ''));
             }}
           >
@@ -292,7 +294,7 @@ const Express = () => {
                 <span
                   style={{
                     color:
-                      selectedTxn.amount +
+                      roundMoney(selectedTxn.amount) +
                         selectedTxnPenalty -
                         (Number(selectedTxn.paid_amount) || 0) >
                       0
@@ -302,7 +304,7 @@ const Express = () => {
                 >
                   ₱
                   {(
-                    selectedTxn.amount +
+                    roundMoney(selectedTxn.amount) +
                     selectedTxnPenalty -
                     (Number(selectedTxn.paid_amount) || 0)
                   ).toFixed(2)}

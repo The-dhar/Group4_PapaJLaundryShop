@@ -228,6 +228,16 @@ function todayInputDate() {
   return `${year}-${month}-${day}`;
 }
 
+function parseMoneyInput(value) {
+  if (value == null || String(value).trim() === '') return null;
+  const parsed = Number(String(value).trim());
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function roundMoney(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
 function parseChargeTypeFromDescription(raw) {
   const text = String(raw || '').trim();
   const m = text.match(/^\[(?:charge_)?type:(fixed|incremental)\]\s*/i);
@@ -1018,9 +1028,11 @@ const POs = () => {
 
   const totalPayment = useMemo(() => preTaxTotal + vatAmount, [preTaxTotal, vatAmount]);
 
-  const amountPaidNum = Number(amountPaid) || 0;
+  const amountPaidParsed = parseMoneyInput(amountPaid);
+  const amountPaidNum = amountPaidParsed !== null ? roundMoney(amountPaidParsed) : 0;
+  const fullPaymentNeedsAmount = paymentStatus === 'full' && (amountPaidParsed === null || amountPaidNum + 0.005 < totalPayment);
   const changeDue =
-    paymentStatus === 'full' ? Math.max(0, Math.round((amountPaidNum - totalPayment) * 100) / 100) : 0;
+    paymentStatus === 'full' ? Math.max(0, roundMoney(amountPaidNum - totalPayment)) : 0;
 
   const resetForm = () => {
     setSelectedServices([]);
@@ -1371,6 +1383,28 @@ const POs = () => {
       return;
     }
 
+    if (paymentStatus === 'full') {
+      if (amountPaidParsed === null) {
+        Swal.fire({
+          title: 'Missing amount paid',
+          text: 'Enter the amount received before saving a Full Payment Now transaction.',
+          icon: 'warning',
+          width: 390,
+        });
+        return;
+      }
+
+      if (amountPaidNum + 0.005 < totalPayment) {
+        Swal.fire({
+          title: 'Insufficient amount',
+          text: `Full Payment Now requires at least P${totalPayment.toFixed(2)}.`,
+          icon: 'warning',
+          width: 390,
+        });
+        return;
+      }
+    }
+
     const fullName = buildFullName(firstName, middleName, lastName);
     const fullAddress = `${street.trim()}, ${barangay.trim()}, ${city.trim()}`;
     const normalizedExtras = {
@@ -1437,7 +1471,7 @@ const POs = () => {
         sub_extras: {},
         payment_status: paymentStatus === 'full' ? 'paid' : 'unpaid',
         payment_method: paymentMethod,
-        paid_amount: Number(amountPaid) || 0,
+        paid_amount: paymentStatus === 'full' ? amountPaidNum : 0,
         branch_id: sessionUser?.role === 'owner' ? ownerBranchId : undefined,
       });
 
@@ -1705,6 +1739,11 @@ const POs = () => {
                   <div className="payment-amount-section">
                     <label>Amount Paid</label>
                     <input type="number" className="for-receipt-customerinput" value={amountPaid} onChange={e => setAmountPaid(e.target.value)} />
+                    {fullPaymentNeedsAmount && (
+                      <small style={{ display: 'block', marginTop: 4, color: '#b45309', fontWeight: 500 }}>
+                        Enter at least P{totalPayment.toFixed(2)} to save a Full Payment Now transaction.
+                      </small>
+                    )}
                   </div>
                 )}
                 <div className="payment-amount-section" style={{ marginTop: 10 }}>
@@ -1919,7 +1958,7 @@ const POs = () => {
 
             <div className="for-receipt-button">
               <button className="for-receipt-clear" onClick={resetForm}>Clear</button>
-              <button onClick={handleCompleteTransaction} className="for-receipt-savebtn" disabled={isSaving}>
+              <button onClick={handleCompleteTransaction} className="for-receipt-savebtn" disabled={isSaving || fullPaymentNeedsAmount}>
                 {isSaving ? 'Saving...' : 'Complete and Save'}
               </button>
             </div>

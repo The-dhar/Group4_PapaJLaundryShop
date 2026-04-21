@@ -115,6 +115,7 @@ export default function ReportsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [mutatingId, setMutatingId] = useState(null);
+  const [mutatingAction, setMutatingAction] = useState(null);
   const [issueStatusFilter, setIssueStatusFilter] = useState('all');
   const [issueTypeFilter, setIssueTypeFilter] = useState('all');
 
@@ -207,9 +208,9 @@ export default function ReportsPage() {
     if (!canResolve) return;
 
     try {
-      setMutatingId(`issue-${row.id}`);
-
       if (action === 'under_review') {
+        setMutatingId(`issue-${row.id}`);
+        setMutatingAction(action);
         await apiRequest(`/issue-reports/${row.id}/under-review`, { method: 'PUT' });
       }
 
@@ -228,6 +229,8 @@ export default function ReportsPage() {
         });
         if (!noteResult.isConfirmed) return;
 
+        setMutatingId(`issue-${row.id}`);
+        setMutatingAction(action);
         await apiRequest(`/issue-reports/${row.id}/reject`, {
           method: 'PUT',
           body: JSON.stringify({ resolution_note: String(noteResult.value || '').trim() }),
@@ -342,6 +345,8 @@ export default function ReportsPage() {
           });
           if (!refundResult.isConfirmed || !refundResult.value) return;
 
+          setMutatingId(`issue-${row.id}`);
+          setMutatingAction(action);
           await apiRequest(`/issue-reports/${row.id}/resolve`, {
             method: 'PUT',
             body: JSON.stringify({
@@ -358,6 +363,7 @@ export default function ReportsPage() {
       await Swal.fire({ title: 'Action failed', text: e.message || 'Request failed.', icon: 'error' });
     } finally {
       setMutatingId(null);
+      setMutatingAction(null);
     }
   };
 
@@ -372,6 +378,7 @@ export default function ReportsPage() {
 
     try {
       setMutatingId(`issue-${row.id}`);
+      setMutatingAction('escalate');
       const clerkId = await pickClerkForEscalation(transactionId);
       if (!clerkId) return;
 
@@ -385,15 +392,33 @@ export default function ReportsPage() {
       await Swal.fire({ title: 'Escalation failed', text: e.message || 'Request failed.', icon: 'error' });
     } finally {
       setMutatingId(null);
+      setMutatingAction(null);
     }
   };
 
   const renderIssueActions = (row) => {
     const status = String(row.status || '').toLowerCase();
     const issueType = normalizeIssueType(row.issue_type);
+    const preferredResolutionType = String(row.resolution_type || '').toLowerCase();
     const isMutating = mutatingId === `issue-${row.id}`;
     const refundTypes = new Set(['damaged', 'lost']);
     const backjobTypes = new Set(['poor_quality_cleaning', 'wrinkled_not_folded_well']);
+    const isOtherType = issueType === 'other';
+    const showRefundAction = refundTypes.has(issueType) || (isOtherType && (!preferredResolutionType || preferredResolutionType === 'refund'));
+    const showBackjobAction = backjobTypes.has(issueType) || (isOtherType && (!preferredResolutionType || preferredResolutionType === 'replacement'));
+
+    const actionLabel = (label, actionKey) => (
+      <>
+        {isMutating && mutatingAction === actionKey ? (
+          <>
+            <span className="reports-action-spinner" aria-hidden="true" />
+            Working...
+          </>
+        ) : (
+          label
+        )}
+      </>
+    );
 
     if (!canResolve) {
       if (
@@ -404,7 +429,9 @@ export default function ReportsPage() {
       ) {
         return (
           <div className="reports-actions">
-            <button disabled={isMutating} onClick={() => escalateIssue(row)}>Escalate to clerk</button>
+            <button disabled={isMutating} onClick={() => escalateIssue(row)}>
+              {actionLabel('Escalate to clerk', 'escalate')}
+            </button>
           </div>
         );
       }
@@ -420,17 +447,25 @@ export default function ReportsPage() {
     return (
       <div className="reports-actions">
         {status === 'pending' && (
-          <button disabled={isMutating} onClick={() => updateIssue(row, 'under_review')}>Under review</button>
+          <button disabled={isMutating} onClick={() => updateIssue(row, 'under_review')}>
+            {actionLabel('Under review', 'under_review')}
+          </button>
         )}
-        {status === 'under_review' && refundTypes.has(issueType) && (
+        {status === 'under_review' && showRefundAction && (
           <>
-            <button disabled={isMutating} onClick={() => updateIssue(row, 'resolve_refund')}>Resolve refund</button>
+            <button disabled={isMutating} onClick={() => updateIssue(row, 'resolve_refund')}>
+              {actionLabel('Resolve refund', 'resolve_refund')}
+            </button>
           </>
         )}
-        {status === 'under_review' && backjobTypes.has(issueType) && (
-          <button disabled={isMutating} onClick={() => updateIssue(row, 'resolve_backjob')}>Backjob</button>
+        {status === 'under_review' && showBackjobAction && (
+          <button disabled={isMutating} onClick={() => updateIssue(row, 'resolve_backjob')}>
+            {actionLabel('Backjob', 'resolve_backjob')}
+          </button>
         )}
-        <button disabled={isMutating} onClick={() => updateIssue(row, 'reject')}>Reject</button>
+        <button disabled={isMutating} onClick={() => updateIssue(row, 'reject')}>
+          {actionLabel('Reject', 'reject')}
+        </button>
       </div>
     );
   };
@@ -519,6 +554,11 @@ export default function ReportsPage() {
                     <td>{row.transaction?.customer_name || '—'}</td>
                     <td>
                       <div className="reports-cell-title">{issueTypeLabel(row.issue_type)}</div>
+                      {String(row.issue_type || '').toLowerCase() === 'other' && row.resolution_type ? (
+                        <div className="reports-cell-sub">
+                          Classified as: {String(row.resolution_type).toLowerCase() === 'refund' ? 'Refund' : 'Backjob'}
+                        </div>
+                      ) : null}
                       {Array.isArray(row.affected_lines) && row.affected_lines.length > 0 ? (
                         row.affected_lines.map((line) => (
                           <div key={`aff-${row.id}-${line.transaction_item_id}`} className="reports-cell-sub">

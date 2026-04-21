@@ -8,6 +8,17 @@
   z-index: 11000 !important;
 }
 
+.swal2-popup,
+.swal2-title,
+.swal2-html-container,
+.swal2-input,
+.swal2-textarea,
+.swal2-select,
+.swal2-confirm,
+.swal2-cancel {
+    font-family: 'Poppins', sans-serif !important;
+}
+
 body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Poppins", 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
