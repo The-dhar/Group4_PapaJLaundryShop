@@ -6,6 +6,8 @@ import DashboardLayout from '../components/dashboardlayout';
 import { useTransactions } from '../context/transactionsContext';
 import { API_URL } from '../config/api';
 import '../styles/dashboardstyle.css';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 
 const POLL_MS = 45_000;
 
@@ -289,8 +291,6 @@ const Dashboard = () => {
   const [viewType, setViewType] = useState('week');
   const [rangeStartDate, setRangeStartDate] = useState('');
   const [rangeEndDate, setRangeEndDate] = useState('');
-  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  /** Restored from session on mount so navigating away/back does not flash empty. */
   const [branches, setBranches] = useState(() => readBranchesCache());
   const [issueReports, setIssueReports] = useState([]);
   const [disputeChartType, setDisputeChartType] = useState('refund');
@@ -598,17 +598,6 @@ const Dashboard = () => {
   const setViewWeek = useCallback(() => setViewType('week'), []);
   const setViewMonth = useCallback(() => setViewType('month'), []);
   const setViewYear = useCallback(() => setViewType('year'), []);
-  const onRangeStartDateChange = useCallback((e) => {
-    const v = e.target.value;
-    setRangeStartDate(v);
-    if (v && rangeEndDate && v > rangeEndDate) setRangeEndDate('');
-  }, [rangeEndDate]);
-
-  const onRangeEndDateChange = useCallback((e) => {
-    const v = e.target.value;
-    setRangeEndDate(v);
-    if (v && rangeStartDate && v < rangeStartDate) setRangeStartDate('');
-  }, [rangeStartDate]);
   const clearDateRange = useCallback(() => {
     setRangeStartDate('');
     setRangeEndDate('');
@@ -638,8 +627,8 @@ const Dashboard = () => {
             </div>
           </div>
 
-        
-         
+
+
 
           <div className='card-items'>
             <div className="chart-title">Items in Shop</div>
@@ -648,7 +637,7 @@ const Dashboard = () => {
               <span>{inShopCount}</span>
             </div>
           </div>
-          
+
           <div className='card-inshop'>
             <div className="chart-title">Overdue Items</div>
             <div className="icon-value">
@@ -667,13 +656,13 @@ const Dashboard = () => {
             >
               Today
             </button>
-            <button 
+            <button
               className={`chart-toggle-btn ${viewType === 'week' ? 'active' : ''}`}
               onClick={setViewWeek}
             >
               Weekly
             </button>
-            <button 
+            <button
               className={`chart-toggle-btn ${viewType === 'month' ? 'active' : ''}`}
               onClick={setViewMonth}
             >
@@ -686,23 +675,43 @@ const Dashboard = () => {
               Yearly
             </button>
             <div className={`chart-date-range${rangeStartDate || rangeEndDate ? ' chart-date-range--active' : ''}`}>
-              <input
-                type="date"
+              <DatePicker
+                selected={rangeStartDate ? new Date(`${rangeStartDate}T00:00:00`) : null}
+                onChange={(date) => {
+                  const v = date ? date.toISOString().slice(0, 10) : '';
+                  setRangeStartDate(v);
+                  if (v && rangeEndDate && v > rangeEndDate) setRangeEndDate('');
+                }}
+                selectsStart
+                startDate={rangeStartDate ? new Date(`${rangeStartDate}T00:00:00`) : null}
+                endDate={rangeEndDate ? new Date(`${rangeEndDate}T00:00:00`) : null}
+                maxDate={rangeEndDate ? new Date(`${rangeEndDate}T00:00:00`) : new Date()}
+                dateFormat="dd/MM/yyyy"
+                placeholderText="dd/mm/yyyy"
                 className="chart-year-date"
-                value={rangeStartDate}
-                max={rangeEndDate || todayIso}
-                onChange={onRangeStartDateChange}
-                aria-label="Filter start date"
+                todayButton="Today"
+                isClearable={false} /* We handle clearing with your custom X button */
               />
+
               <span className="chart-date-range-sep">to</span>
-              <input
-                type="date"
+
+              <DatePicker
+                selected={rangeEndDate ? new Date(`${rangeEndDate}T00:00:00`) : null}
+                onChange={(date) => {
+                  const v = date ? date.toISOString().slice(0, 10) : '';
+                  setRangeEndDate(v);
+                  if (v && rangeStartDate && v < rangeStartDate) setRangeStartDate('');
+                }}
+                selectsEnd
+                startDate={rangeStartDate ? new Date(`${rangeStartDate}T00:00:00`) : null}
+                endDate={rangeEndDate ? new Date(`${rangeEndDate}T00:00:00`) : null}
+                minDate={rangeStartDate ? new Date(`${rangeStartDate}T00:00:00`) : undefined}
+                maxDate={new Date()}
+                dateFormat="dd/MM/yyyy"
+                placeholderText="dd/mm/yyyy"
                 className="chart-year-date"
-                value={rangeEndDate}
-                min={rangeStartDate || undefined}
-                max={todayIso}
-                onChange={onRangeEndDateChange}
-                aria-label="Filter end date"
+                todayButton="Today"
+                isClearable={false}
               />
               {(rangeStartDate || rangeEndDate) && (
                 <button
@@ -719,37 +728,37 @@ const Dashboard = () => {
           </div>
 
           <ResponsiveContainer width="100%" height={220}>
-  <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
-    <CartesianGrid strokeDasharray="3 3" />
-    <Legend
-      verticalAlign="top"
-      align="center"
-      iconType="circle"
-      iconSize={10}
-      wrapperStyle={{ paddingBottom: 8 }}
-      formatter={revenueLegendFormatter}
-    />
-    <XAxis dataKey="name" />
-    <YAxis tickFormatter={revenueYAxisTick} />
-    <Tooltip formatter={revenueTooltipFormatter} />
-    <Line
-      type="monotone"
-      dataKey="revenue"
-      name="Revenue"
-      stroke="#185BCB"
-      strokeWidth={3}
-      dot={{ r: 4 }}
-    />
-    <Line
-      type="monotone"
-      dataKey="unpaid"
-      name="Debit sales"
-      stroke="#E63946"
-      strokeWidth={3}
-      dot={{ r: 4 }}
-    />
-  </LineChart>
-</ResponsiveContainer>
+            <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <Legend
+                verticalAlign="top"
+                align="center"
+                iconType="circle"
+                iconSize={10}
+                wrapperStyle={{ paddingBottom: 8 }}
+                formatter={revenueLegendFormatter}
+              />
+              <XAxis dataKey="name" />
+              <YAxis tickFormatter={revenueYAxisTick} />
+              <Tooltip formatter={revenueTooltipFormatter} />
+              <Line
+                type="monotone"
+                dataKey="revenue"
+                name="Revenue"
+                stroke="#185BCB"
+                strokeWidth={3}
+                dot={{ r: 4 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="unpaid"
+                name="Debit sales"
+                stroke="#E63946"
+                strokeWidth={3}
+                dot={{ r: 4 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </Card>
 
         <div className="dashboard-refunds-section">

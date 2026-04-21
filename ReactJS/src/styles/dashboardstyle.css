@@ -250,6 +250,98 @@
     background: #cbd5e1;
 }
 
+.chart-date-range {
+    display: inline-flex;
+    align-items: center;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 99px; /* Pill shape */
+    padding: 6px 14px;
+    gap: 10px;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}
+
+.chart-date-range:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+/* When a date is actively selected */
+.chart-date-range--active {
+    border-color: #3b82f6;
+    background: #eff6ff;
+}
+
+/* The actual input fields */
+.chart-year-date {
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    font-size: 13px;
+    color: #334155;
+    outline: none;
+    padding: 2px 0;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.chart-year-date:focus {
+    color: #1d4ed8;
+}
+
+/* Hide default browser focus rings on the input */
+.chart-year-date:focus-visible {
+    outline: none;
+}
+
+/* Customizing the Webkit Calendar Icon */
+.chart-year-date::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+    /* Optional: This filter trick tints the default black calendar icon to a slate blue */
+    filter: invert(0.4) sepia(1) hue-rotate(180deg) saturate(200%);
+    padding: 4px;
+}
+
+.chart-year-date::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+}
+
+/* The "to" text separator */
+.chart-date-range-sep {
+    font-size: 12px;
+    color: #94a3b8;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* The clear (X) button */
+.chart-date-range-clear {
+    background: #fee2e2;
+    color: #ef4444;
+    border: none;
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    cursor: pointer;
+    margin-left: 4px;
+    transition: all 0.2s ease;
+    font-weight: bold;
+}
+
+.chart-date-range-clear:hover {
+    background: #ef4444;
+    color: white;
+    transform: scale(1.1);
+}
+
 .card-transaction {
     background: #ffffff;
     padding: 0 0 12px 0;
@@ -492,4 +584,24 @@ tr:hover {
     width: 100%;
     min-height: 228px;
     overflow: visible;
+}
+
+.react-datepicker-wrapper {
+  display: inline-block;
+  width: 100px; /* Adjust this to fit the dd/mm/yyyy text */
+}
+
+/* Optional: Style the popup calendar to match your blue branding */
+.react-datepicker__day--selected, 
+.react-datepicker__day--in-selecting-range, 
+.react-datepicker__day--in-range {
+  background-color: #1976d2 !important;
+  color: white !important;
+}
+
+.react-datepicker__today-button {
+  background: white;
+  color: #1976d2;
+  border-top: 1px solid #e2e8f0;
+  font-weight: bold;
 }
