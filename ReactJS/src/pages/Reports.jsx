@@ -1,8 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { BsArrowClockwise } from 'react-icons/bs';
 import Swal from 'sweetalert2';
+import Card from '../components/card';
+import IssueStatusChart from '../components/IssueStatusChart';
 import DashboardLayout from '../components/dashboardlayout';
 import { API_URL } from '../config/api';
+import { buildIssueStatusSummarySeries } from '../utils/issueStatusSeries';
 import '../styles/reportsstyle.css';
 
 function getToken() {
@@ -154,6 +157,9 @@ export default function ReportsPage() {
       return byStatus && byType;
     });
   }, [issueRows, issueStatusFilter, issueTypeFilter]);
+
+  const issueStatusSummaryData = useMemo(() => buildIssueStatusSummarySeries(filteredIssueRows), [filteredIssueRows]);
+  const issueStatusSummary = issueStatusSummaryData[0] || { resolved: 0, unresolved: 0 };
 
   const pickClerkForEscalation = async (transactionId) => {
     const rows = await apiRequest(`/report-escalation-clerks?transaction_id=${encodeURIComponent(transactionId)}`);
@@ -447,6 +453,23 @@ export default function ReportsPage() {
             <BsArrowClockwise />
           </button>
         </div>
+
+        <Card title="Resolved vs unresolved cases">
+          <p className="reports-summary-sub">Current totals follow the filters below.</p>
+          <div className="reports-summary-metrics">
+            <div className="reports-summary-metric">
+              <span className="reports-summary-label">Resolved</span>
+              <span className="reports-summary-value">{issueStatusSummary.resolved}</span>
+            </div>
+            <div className="reports-summary-metric">
+              <span className="reports-summary-label">Unresolved</span>
+              <span className="reports-summary-value">{issueStatusSummary.unresolved}</span>
+            </div>
+          </div>
+          <div className="reports-summary-chart">
+            <IssueStatusChart data={issueStatusSummaryData} height={200} emptyMessage="No issue reports yet." />
+          </div>
+        </Card>
 
         <div className="reports-filterbar">
           <label>

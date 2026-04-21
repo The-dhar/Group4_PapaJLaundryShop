@@ -2,9 +2,11 @@ import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, 
 import { BsBoxSeam, BsExclamationTriangle, BsCreditCard } from 'react-icons/bs';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import Card from '../components/card';
+import IssueStatusChart from '../components/IssueStatusChart';
 import DashboardLayout from '../components/dashboardlayout';
 import { useTransactions } from '../context/transactionsContext';
 import { API_URL } from '../config/api';
+import { buildResolvedUnresolvedSeries } from '../utils/issueStatusSeries';
 import '../styles/dashboardstyle.css';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -431,6 +433,16 @@ const Dashboard = () => {
     return map;
   }, [branchesForRefunds, disputesInView, viewType]);
 
+  const caseStatusStatsByBranch = useMemo(() => {
+    const map = new Map();
+    branchesForRefunds.forEach((branch) => {
+      const id = Number(branch.id);
+      const list = issueReports.filter((r) => Number(r.branch_id) === id);
+      map.set(id, buildResolvedUnresolvedSeries(viewType, list, viewBounds.start));
+    });
+    return map;
+  }, [branchesForRefunds, issueReports, viewType, viewBounds.start]);
+
   const paidTotal = useMemo(
     () =>
       filteredTransactions
@@ -795,9 +807,15 @@ const Dashboard = () => {
                       <span className="refund-kpi-label">Total {config.label.toLowerCase()} amount (est.)</span>
                       <span className="refund-kpi-value">{formatPeso(stats.total)}</span>
                     </div>
-                    <div className="refund-kpi">
-                      <span className="refund-kpi-label">{config.pluralLabel} cases resolved</span>
-                      <span className="refund-kpi-value">{stats.count}</span>
+                    <div className="refund-kpi refund-kpi-chart">
+                      <span className="refund-kpi-label">Resolved vs unresolved</span>
+                      <div className="refund-kpi-chart-wrap">
+                        <IssueStatusChart
+                          data={caseStatusStatsByBranch.get(Number(branch.id)) || []}
+                          height={150}
+                          emptyMessage="No issue cases in this period."
+                        />
+                      </div>
                     </div>
                   </div>
                   <div className="refund-chart-wrap">

@@ -66,6 +66,7 @@ type IssueReportLike = {
   issue_note?: string;
   resolution_type?: string;
   refund_amount?: number | string;
+  created_at?: string;
   resolved_at?: string;
   updated_at?: string;
   branch_id?: number | string;
@@ -188,6 +189,12 @@ function disputeAmountFromReport(row: IssueReportLike): number {
 
 function reportDate(row: IssueReportLike): Date {
   const dt = new Date(row?.resolved_at || row?.updated_at || 0);
+  return dt;
+}
+
+function issueStatusDate(row: IssueReportLike): Date {
+  const isResolved = String(row?.status || "").toLowerCase() === "resolved";
+  const dt = new Date(isResolved ? (row?.resolved_at || row?.updated_at || 0) : (row?.created_at || row?.updated_at || 0));
   return dt;
 }
 
@@ -359,6 +366,28 @@ export default function BranchReportsScreen() {
   const branchReportsInView = useMemo(() => {
     return branchReports.filter((row) => inRange(reportDate(row), viewBounds.start, viewBounds.end));
   }, [branchReports, viewBounds]);
+
+  const issueStatusTrend = useMemo(() => {
+    const rows = buckets.map((bucket) => ({
+      name: bucket.name,
+      resolved: 0,
+      unresolved: 0,
+    }));
+
+    branchReports.forEach((row) => {
+      const dt = issueStatusDate(row);
+      const index = bucketIndexForDate(dt, buckets);
+      if (index < 0) return;
+      if (String(row?.status || "").toLowerCase() === "resolved") rows[index].resolved += 1;
+      else rows[index].unresolved += 1;
+    });
+
+    return {
+      labels: rows.map((row) => row.name),
+      resolved: rows.map((row) => row.resolved),
+      unresolved: rows.map((row) => row.unresolved),
+    };
+  }, [branchReports, buckets]);
 
   const resolvedBranchReports = useMemo(() => {
     return branchReportsInView.filter((row) => {
@@ -743,13 +772,48 @@ export default function BranchReportsScreen() {
               <Text style={styles.kpiValue}>{formatPhp(netProfit)}</Text>
             </View>
             <View style={styles.kpiCard}>
-              <Text style={styles.kpiLabel}>Resolved Cases</Text>
-              <Text style={styles.kpiValue}>{resolvedBranchReports.length}</Text>
-            </View>
-            <View style={styles.kpiCard}>
               <Text style={styles.kpiLabel}>Dispute Value</Text>
               <Text style={styles.kpiValue}>{formatPhp(totalDisputeValue)}</Text>
             </View>
+          </View>
+
+          <View style={styles.chartCard}>
+            <Text style={styles.chartTitle}>Resolved vs Unresolved Cases</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <BarChart
+                data={{
+                  labels: issueStatusTrend.labels,
+                  datasets: [
+                    {
+                      data: issueStatusTrend.resolved,
+                      color: () => "rgba(37, 99, 235, 1)",
+                    },
+                    {
+                      data: issueStatusTrend.unresolved,
+                      color: () => "rgba(239, 68, 68, 1)",
+                    },
+                  ],
+                }}
+                width={chartWidthForLabels(issueStatusTrend.labels, 72)}
+                height={220}
+                yAxisLabel=""
+                yAxisSuffix=""
+                chartConfig={{
+                  backgroundColor: "#ffffff",
+                  backgroundGradientFrom: "#ffffff",
+                  backgroundGradientTo: "#ffffff",
+                  decimalPlaces: 0,
+                  color: () => "rgba(37, 99, 235, 1)",
+                  labelColor: () => "#475569",
+                  propsForBackgroundLines: { stroke: "#e2e8f0" },
+                }}
+                fromZero
+                showValuesOnTopOfBars
+                withInnerLines={false}
+                flatColor
+                style={styles.chart}
+              />
+            </ScrollView>
           </View>
 
           <View style={styles.chartCard}>

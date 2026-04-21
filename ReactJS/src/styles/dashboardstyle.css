@@ -524,6 +524,7 @@ tr:hover {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
     margin-bottom: 16px;
+    align-items: stretch;
 }
 
 .refund-kpi {
@@ -549,6 +550,14 @@ tr:hover {
     font-weight: 800;
     color: #0f172a;
     font-variant-numeric: tabular-nums;
+}
+
+.refund-kpi-chart {
+    min-height: 188px;
+}
+
+.refund-kpi-chart-wrap {
+    min-height: 150px;
 }
 
 @media (max-width: 520px) {
