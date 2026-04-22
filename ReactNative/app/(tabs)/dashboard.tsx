@@ -1293,28 +1293,8 @@ export default function DashboardAnalytics() {
           <View style={styles.headerAccent} />
         </View>
 
-        {/* RIGHT SIDE: Export + Profile */}
+        {/* RIGHT SIDE: Profile */}
         <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={[styles.exportBtn, isExporting && styles.exportBtnDisabled]}
-            onPress={handleExportDashboard}
-            disabled={isExporting}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="download-outline" size={16} color="#ffffff" />
-            <Text style={styles.exportBtnText}>{isExporting ? "CSV..." : "CSV"}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.exportPdfBtn, isExportingPdf && styles.exportBtnDisabled]}
-            onPress={handleExportDashboardPdf}
-            disabled={isExportingPdf}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="document-text-outline" size={16} color="#ffffff" />
-            <Text style={styles.exportBtnText}>{isExportingPdf ? "PDF..." : "PDF"}</Text>
-          </TouchableOpacity>
-
           <View style={styles.profileContainer}>
             <TouchableOpacity
               style={styles.profileBtn}
