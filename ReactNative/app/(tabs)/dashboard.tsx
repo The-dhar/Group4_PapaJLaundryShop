@@ -827,7 +827,7 @@ export default function DashboardAnalytics() {
           datasets: [{ data: values.length ? values : [0] }],
         }}
         width={detailMiniChartWidth}
-        height={140}
+        height={156}
         withDots={false}
         withInnerLines
         withOuterLines={false}
@@ -835,7 +835,7 @@ export default function DashboardAnalytics() {
         withVerticalLabels
         withHorizontalLabels
         yLabelsOffset={10}
-        xLabelsOffset={8}
+        xLabelsOffset={-6}
         fromZero
         segments={4}
         chartConfig={{
@@ -868,11 +868,11 @@ export default function DashboardAnalytics() {
       <BarChart
         data={{ labels, datasets: [{ data: values.length ? values : [0] }] }}
         width={Math.max(180, labels.length * 72)}
-        height={160}
+        height={182}
         withHorizontalLabels
         withVerticalLabels
         yLabelsOffset={10}
-        xLabelsOffset={8}
+        xLabelsOffset={-6}
         fromZero
         segments={4}
         yAxisLabel=""
@@ -2630,11 +2630,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
     backgroundColor: "#f8fafc",
-    overflow: "hidden",
+    overflow: "visible",
     paddingTop: 6,
     paddingLeft: 10,
     paddingRight: 8,
-    paddingBottom: 10,
+    paddingBottom: 24,
   },
   detailMiniChart: {
     marginLeft: 0,
