@@ -181,6 +181,13 @@ function formatMetricValue(value: number, format: BranchMetricFormat): string {
   return `${Math.round(value).toLocaleString()}`;
 }
 
+function compactAxisLabel(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
+  return Number.isInteger(value) ? `${value}` : value.toFixed(1);
+}
+
 function normalizeMetricValues(values: number[]): number[] {
   const max = Math.max(...values.map((v) => Math.max(0, v)), 0);
   if (max <= 0) return values.map(() => 0);
@@ -360,6 +367,9 @@ export default function DashboardAnalytics() {
     label: "",
     visible: false,
   });
+  const [metricPickerVisible, setMetricPickerVisible] = useState(false);
+  const [branchPickerVisible, setBranchPickerVisible] = useState(false);
+  const [selectedBranchCompareId, setSelectedBranchCompareId] = useState<number | null>(null);
   const [selectedBranchReportId, setSelectedBranchReportId] = useState<number | null>(null);
   const [branchDetailVisible, setBranchDetailVisible] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -757,7 +767,7 @@ export default function DashboardAnalytics() {
   );
 
   const branchCompareLabels = useMemo(
-    () => (branchAnalytics.length > 0 ? branchAnalytics.map((b) => b.shortName) : ["No Branches"]),
+    () => (branchAnalytics.length > 0 ? branchAnalytics.map((b) => b.name) : ["No Branches"]),
     [branchAnalytics]
   );
 
@@ -771,11 +781,33 @@ export default function DashboardAnalytics() {
     [branchCompareRawValues]
   );
 
-  const branchCompareChartWidth = getResponsiveChartWidth(branchCompareLabels);
+  const branchCompareChartWidth = useMemo(() => {
+    const minWidth = isSmallScreen ? 190 : 230;
+    const longestLabel = branchCompareLabels.reduce((longest, label) => Math.max(longest, label.length), 0);
+    const labelWidth = Math.max(isSmallScreen ? 62 : 74, longestLabel * (isSmallScreen ? 6.2 : 6.8));
+    const slotWidth = Math.max(isSmallScreen ? 42 : 50, labelWidth + 4);
+    return Math.max(minWidth, branchCompareLabels.length * slotWidth);
+  }, [branchCompareLabels]);
   const branchCompareChartKey = useMemo(
     () => `branch-kpi-${branchCompareMetric}-${branchCompareNormalizedValues.join(",")}`,
     [branchCompareMetric, branchCompareNormalizedValues]
   );
+
+  const selectedBranchCompare = useMemo(
+    () => branchAnalytics.find((b) => b.id === selectedBranchCompareId) || null,
+    [branchAnalytics, selectedBranchCompareId]
+  );
+
+  React.useEffect(() => {
+    if (branchAnalytics.length === 0) {
+      if (selectedBranchCompareId !== null) setSelectedBranchCompareId(null);
+      return;
+    }
+    const exists = selectedBranchCompareId != null && branchAnalytics.some((b) => b.id === selectedBranchCompareId);
+    if (!exists) {
+      setSelectedBranchCompareId(null);
+    }
+  }, [branchAnalytics, selectedBranchCompareId]);
 
   const selectedBranchReport = useMemo(
     () => branchAnalytics.find((b) => b.id === selectedBranchReportId) || null,
@@ -788,51 +820,89 @@ export default function DashboardAnalytics() {
   };
 
   const renderMiniLine = (values: number[], color: string) => (
-    <LineChart
-      data={{
-        labels: values.map(() => ""),
-        datasets: [{ data: values.length ? values : [0] }],
-      }}
-      width={200}
-      height={100}
-      withDots={false}
-      withInnerLines={false}
-      withOuterLines={false}
-      withVerticalLabels={false}
-      withHorizontalLabels={false}
-      chartConfig={{
-        backgroundColor: "#ffffff",
-        backgroundGradientFrom: "#ffffff",
-        backgroundGradientTo: "#ffffff",
-        decimalPlaces: 0,
-        color: () => color,
-        labelColor: () => "rgba(30,41,59,1)",
-      }}
-      bezier
-      style={styles.detailMiniChart}
-    />
+    <View style={styles.detailMiniChartContainer}>
+      <LineChart
+        data={{
+          labels: values.map((_, idx) => `P${idx + 1}`),
+          datasets: [{ data: values.length ? values : [0] }],
+        }}
+        width={detailMiniChartWidth}
+        height={140}
+        withDots={false}
+        withInnerLines
+        withOuterLines={false}
+        withVerticalLines={false}
+        withVerticalLabels
+        withHorizontalLabels
+        yLabelsOffset={10}
+        xLabelsOffset={8}
+        fromZero
+        segments={4}
+        chartConfig={{
+          backgroundColor: "#f8fafc",
+          backgroundGradientFrom: "#f8fafc",
+          backgroundGradientTo: "#f8fafc",
+          decimalPlaces: 0,
+          color: () => color,
+          labelColor: () => "rgba(71,85,105,1)",
+          propsForLabels: { fontSize: 10 },
+          propsForBackgroundLines: {
+            stroke: "#cbd5e1",
+            strokeDasharray: "4 5",
+            strokeWidth: 1,
+          },
+          fillShadowGradientFrom: color,
+          fillShadowGradientFromOpacity: 0.16,
+          fillShadowGradientTo: color,
+          fillShadowGradientToOpacity: 0.04,
+        }}
+        formatYLabel={(yValue) => compactAxisLabel(Number(yValue))}
+        bezier
+        style={styles.detailMiniChart}
+      />
+    </View>
   );
 
   const renderMiniBar = (labels: string[], values: number[], color: string) => (
-    <BarChart
-      data={{ labels, datasets: [{ data: values.length ? values : [0] }] }}
-      width={220}
-      height={120}
-      withHorizontalLabels={false}
-      fromZero
-      showValuesOnTopOfBars
-      chartConfig={{
-        backgroundColor: "#ffffff",
-        backgroundGradientFrom: "#ffffff",
-        backgroundGradientTo: "#ffffff",
-        decimalPlaces: 0,
-        color: () => color,
-        labelColor: () => "rgba(51,65,85,1)",
-        propsForLabels: { fontSize: 10 },
-      }}
-      style={styles.detailMiniChart}
-    />
+    <View style={styles.detailMiniChartContainer}>
+      <BarChart
+        data={{ labels, datasets: [{ data: values.length ? values : [0] }] }}
+        width={Math.max(180, labels.length * 72)}
+        height={160}
+        withHorizontalLabels
+        withVerticalLabels
+        yLabelsOffset={10}
+        xLabelsOffset={8}
+        fromZero
+        segments={4}
+        yAxisLabel=""
+        showValuesOnTopOfBars
+        chartConfig={{
+          backgroundColor: "#f8fafc",
+          backgroundGradientFrom: "#f8fafc",
+          backgroundGradientTo: "#f8fafc",
+          decimalPlaces: 0,
+          color: () => color,
+          labelColor: () => "rgba(71,85,105,1)",
+          barPercentage: 0.95,
+          propsForLabels: { fontSize: 10 },
+          propsForBackgroundLines: {
+            stroke: "#cbd5e1",
+            strokeDasharray: "4 5",
+            strokeWidth: 1,
+          },
+          fillShadowGradientFrom: color,
+          fillShadowGradientFromOpacity: 0.16,
+          fillShadowGradientTo: color,
+          fillShadowGradientToOpacity: 0.06,
+        }}
+        formatYLabel={(yValue) => compactAxisLabel(Number(yValue))}
+        style={styles.detailMiniChart}
+      />
+    </View>
   );
+
+  const detailMiniChartWidth = isSmallScreen ? screenWidth - 122 : screenWidth - 132;
   
   const totalSales = transactions.reduce((sum, t) => sum + Number(t.amount || 0), 0);
   const totalOrders = transactions.length;
@@ -1657,36 +1727,49 @@ export default function DashboardAnalytics() {
           <View style={styles.chartHeader}>
             <Text style={styles.chartTitle}>Branch KPI Comparison</Text>
             <Text style={styles.kpiCompareSubtext}>
-              One normalized graph for side-by-side branch comparison. Select a metric, then tap a branch for full detail.
+              One normalized graph for side-by-side branch comparison. Select a metric and branch to view details.
             </Text>
           </View>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.kpiMetricSelectorRow}
-          >
-            {BRANCH_COMPARE_METRICS.map((metric) => (
+          <View style={styles.kpiFilterRow}>
+            <View style={styles.kpiFilterField}>
+              <Text style={styles.kpiFilterLabel}>Metric</Text>
               <TouchableOpacity
-                key={metric.key}
-                style={[
-                  styles.kpiMetricChip,
-                  branchCompareMetric === metric.key && styles.kpiMetricChipActive,
-                ]}
-                onPress={() => setBranchCompareMetric(metric.key)}
+                style={styles.kpiDropdownTrigger}
+                onPress={() => setMetricPickerVisible(true)}
                 activeOpacity={0.85}
+              >
+                <Text style={styles.kpiDropdownTriggerText} numberOfLines={1}>
+                  {selectedBranchMetricMeta.label}
+                </Text>
+                <Ionicons name="chevron-down" size={16} color="#475569" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.kpiFilterField}>
+              <Text style={styles.kpiFilterLabel}>Branch</Text>
+              <TouchableOpacity
+                style={[
+                  styles.kpiDropdownTrigger,
+                  branchAnalytics.length === 0 && styles.kpiDropdownTriggerDisabled,
+                ]}
+                onPress={() => setBranchPickerVisible(true)}
+                activeOpacity={0.85}
+                disabled={branchAnalytics.length === 0}
               >
                 <Text
                   style={[
-                    styles.kpiMetricChipText,
-                    branchCompareMetric === metric.key && styles.kpiMetricChipTextActive,
+                    styles.kpiDropdownTriggerText,
+                    !selectedBranchCompare && styles.kpiDropdownPlaceholder,
                   ]}
+                  numberOfLines={1}
                 >
-                  {metric.label}
+                  {selectedBranchCompare?.shortName || (branchAnalytics.length > 0 ? "Branches" : "No branches available")}
                 </Text>
+                <Ionicons name="chevron-down" size={16} color="#475569" />
               </TouchableOpacity>
-            ))}
-          </ScrollView>
+            </View>
+          </View>
 
           <Text style={styles.kpiMetricSummaryText}>
             Metric: {selectedBranchMetricMeta.label} ({selectedBranchMetricMeta.format === "currency" ? "PHP" : selectedBranchMetricMeta.format === "percent" ? "Percent" : "Count"})
@@ -1727,10 +1810,12 @@ export default function DashboardAnalytics() {
                     datasets: [{ data: branchCompareNormalizedValues }],
                   }}
                   width={branchCompareChartWidth + 30}
-                  height={240}
+                  height={300}
                   fromZero
                   yAxisSuffix=""
                   showValuesOnTopOfBars
+                  verticalLabelRotation={38}
+                  xLabelsOffset={0}
                   chartConfig={{
                     backgroundColor: "#ffffff",
                     backgroundGradientFrom: "#ffffff",
@@ -1739,8 +1824,9 @@ export default function DashboardAnalytics() {
                     color: () => "rgba(15,118,110,1)",
                     labelColor: () => "rgba(30,41,59,1)",
                     propsForLabels: {
-                      fontSize: isSmallScreen ? 10 : 12,
+                      fontSize: isSmallScreen ? 8 : 10,
                     },
+                    barPercentage: 1,
                     propsForBackgroundLines: {
                       stroke: "#0000002d",
                       strokeWidth: 1,
@@ -1765,18 +1851,84 @@ export default function DashboardAnalytics() {
             </ScrollView>
           </View>
 
-          <View style={styles.branchDrillRow}>
-            {branchAnalytics.map((b) => (
-              <TouchableOpacity
-                key={`drill-${b.id}`}
-                style={styles.branchDrillChip}
-                onPress={() => openBranchDetail(b.id)}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.branchDrillChipText}>{b.shortName}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <Modal
+            visible={metricPickerVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setMetricPickerVisible(false)}
+          >
+            <View style={styles.selectorOverlay}>
+              <Pressable style={styles.selectorBackdrop} onPress={() => setMetricPickerVisible(false)} />
+              <View style={styles.selectorSheet}>
+                <Text style={styles.selectorTitle}>Select KPI Metric</Text>
+                <ScrollView style={styles.selectorList} showsVerticalScrollIndicator={false}>
+                  {BRANCH_COMPARE_METRICS.map((metric) => (
+                    <TouchableOpacity
+                      key={`metric-${metric.key}`}
+                      style={[
+                        styles.selectorOption,
+                        branchCompareMetric === metric.key && styles.selectorOptionActive,
+                      ]}
+                      onPress={() => {
+                        setBranchCompareMetric(metric.key);
+                        setMetricPickerVisible(false);
+                      }}
+                      activeOpacity={0.85}
+                    >
+                      <Text
+                        style={[
+                          styles.selectorOptionText,
+                          branchCompareMetric === metric.key && styles.selectorOptionTextActive,
+                        ]}
+                      >
+                        {metric.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
+
+          <Modal
+            visible={branchPickerVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setBranchPickerVisible(false)}
+          >
+            <View style={styles.selectorOverlay}>
+              <Pressable style={styles.selectorBackdrop} onPress={() => setBranchPickerVisible(false)} />
+              <View style={styles.selectorSheet}>
+                <Text style={styles.selectorTitle}>Select Branch</Text>
+                <ScrollView style={styles.selectorList} showsVerticalScrollIndicator={false}>
+                  {branchAnalytics.map((branch) => (
+                    <TouchableOpacity
+                      key={`branch-select-${branch.id}`}
+                      style={[
+                        styles.selectorOption,
+                        selectedBranchCompare?.id === branch.id && styles.selectorOptionActive,
+                      ]}
+                      onPress={() => {
+                        setSelectedBranchCompareId(branch.id);
+                        setBranchPickerVisible(false);
+                        openBranchDetail(branch.id);
+                      }}
+                      activeOpacity={0.85}
+                    >
+                      <Text
+                        style={[
+                          styles.selectorOptionText,
+                          selectedBranchCompare?.id === branch.id && styles.selectorOptionTextActive,
+                        ]}
+                      >
+                        {branch.shortName}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
         </View>
 
         {/* OVERALL DISPUTES (ALL BRANCHES) */}
@@ -2318,56 +2470,96 @@ const styles = StyleSheet.create({
     color: "#64748b",
     marginTop: -6,
   },
-  kpiMetricSelectorRow: {
-    flexDirection: "row",
-    gap: 8,
-    paddingBottom: 10,
-    paddingRight: 6,
+  kpiFilterRow: {
+    gap: 10,
+    marginBottom: 10,
   },
-  kpiMetricChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: "#f1f5f9",
-    borderWidth: 1,
-    borderColor: "#dbeafe",
+  kpiFilterField: {
+    gap: 6,
   },
-  kpiMetricChipActive: {
-    backgroundColor: "#0f766e",
-    borderColor: "#0f766e",
-  },
-  kpiMetricChipText: {
+  kpiFilterLabel: {
     fontSize: 12,
     fontWeight: "700",
     color: "#475569",
   },
-  kpiMetricChipTextActive: {
-    color: "#ffffff",
+  kpiDropdownTrigger: {
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    backgroundColor: "#f8fafc",
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  kpiDropdownTriggerDisabled: {
+    opacity: 0.65,
+  },
+  kpiDropdownTriggerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  kpiDropdownPlaceholder: {
+    color: "#94a3b8",
   },
   kpiMetricSummaryText: {
     fontSize: 12,
     color: "#0f172a",
     fontWeight: "700",
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  branchDrillRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 8,
+  selectorOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
   },
-  branchDrillChip: {
-    backgroundColor: "#ecfeff",
-    borderColor: "#a5f3fc",
+  selectorBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(2, 6, 23, 0.35)",
+  },
+  selectorSheet: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 14,
+    paddingBottom: 18,
+    paddingHorizontal: 14,
+    maxHeight: "70%",
+    borderTopWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  selectorTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginBottom: 10,
+  },
+  selectorList: {
+    maxHeight: 380,
+  },
+  selectorOption: {
     borderWidth: 1,
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    marginBottom: 8,
+    backgroundColor: "#f8fafc",
   },
-  branchDrillChipText: {
-    color: "#155e75",
-    fontSize: 12,
+  selectorOptionActive: {
+    backgroundColor: "#ecfeff",
+    borderColor: "#67e8f9",
+  },
+  selectorOptionText: {
+    fontSize: 13,
+    color: "#1e293b",
     fontWeight: "700",
+  },
+  selectorOptionTextActive: {
+    color: "#0f766e",
   },
   branchDetailContainer: {
     flex: 1,
@@ -2413,7 +2605,8 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
     borderRadius: 14,
     paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 14,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -2430,10 +2623,22 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#0f172a",
     fontWeight: "800",
-    marginBottom: 8,
+    marginBottom: 10,
+  },
+  detailMiniChartContainer: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+    overflow: "hidden",
+    paddingTop: 6,
+    paddingLeft: 10,
+    paddingRight: 8,
+    paddingBottom: 10,
   },
   detailMiniChart: {
-    marginLeft: -12,
+    marginLeft: 0,
+    marginRight: 0,
     borderRadius: 10,
   },
   branchPerformanceBox: {
