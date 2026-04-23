@@ -528,6 +528,24 @@ export default function BranchReportsScreen() {
     [performanceRows]
   );
 
+  const branchPerformancePercentSeries = useMemo(() => {
+    const combined = [...branchPerformanceSeries.revenue, ...branchPerformanceSeries.losses];
+    const maxValue = Math.max(...combined, 0);
+    if (maxValue <= 0) {
+      return {
+        labels: branchPerformanceSeries.labels,
+        revenue: branchPerformanceSeries.revenue.map(() => 0),
+        losses: branchPerformanceSeries.losses.map(() => 0),
+      };
+    }
+    const normalize = (value: number) => Number(((Math.max(0, value) / maxValue) * 100).toFixed(2));
+    return {
+      labels: branchPerformanceSeries.labels,
+      revenue: branchPerformanceSeries.revenue.map(normalize),
+      losses: branchPerformanceSeries.losses.map(normalize),
+    };
+  }, [branchPerformanceSeries]);
+
   const rushRegularSeries = useMemo(
     () => ({
       labels: performanceRows.map((row) => row.name),
@@ -1083,24 +1101,25 @@ export default function BranchReportsScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <LineChart
                 data={{
-                  labels: safeLabels(branchPerformanceSeries.labels),
+                  labels: safeLabels(branchPerformancePercentSeries.labels),
                   datasets: [
                     {
-                      data: safeBarValues(branchPerformanceSeries.revenue),
+                      data: safeBarValues(branchPerformancePercentSeries.revenue),
                       color: () => "rgba(5, 150, 105, 1)",
                       strokeWidth: 2,
                     },
                     {
-                      data: safeBarValues(branchPerformanceSeries.losses),
+                      data: safeBarValues(branchPerformancePercentSeries.losses),
                       color: () => "rgba(239, 68, 68, 1)",
                       strokeWidth: 2,
                     },
                   ],
-                  legend: ["Revenue", "Losses"],
+                  legend: ["Revenue %", "Losses %"],
                 }}
-                width={chartWidthForLabels(branchPerformanceSeries.labels)}
+                width={chartWidthForLabels(branchPerformancePercentSeries.labels)}
                 height={240}
                 withShadow={false}
+                yAxisSuffix="%"
                 chartConfig={{
                   backgroundColor: "#ffffff",
                   backgroundGradientFrom: "#ffffff",

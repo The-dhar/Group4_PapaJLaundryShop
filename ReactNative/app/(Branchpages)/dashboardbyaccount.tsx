@@ -2,15 +2,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBranchPages } from "@/contexts/BranchPagesContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View, Pressable } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Pressable, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LineChart } from 'react-native-chart-kit';
 import { useFocusEffect } from "@react-navigation/native";
 import { API_URL } from "../../config/api";
 
-const { width } = Dimensions.get('window');
-
 export default function RevenueDashboard() {
+  const { width } = useWindowDimensions();
   const [revenueView, setRevenueView] = useState("weekly");
   const router = useRouter();
   const { token } = useAuth();
@@ -153,7 +152,14 @@ export default function RevenueDashboard() {
         ? ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
         : currentLabels;
 
-  const chartWidth = width - 32;
+  const chartBaseWidth = Math.max(220, width - 80);
+  const chartWidthForLabels = useCallback(
+    (labels: string[]) => {
+      const minPerLabel = revenueView === "yearly" ? 48 : 40;
+      return Math.max(chartBaseWidth, Math.max(1, labels.length) * minPerLabel);
+    },
+    [chartBaseWidth, revenueView]
+  );
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -226,49 +232,55 @@ export default function RevenueDashboard() {
           </View>
 
           <View style={styles.chartWrapper}>
-            <Pressable
-              onPressIn={() => setTooltipPos(prev => ({ ...prev, visible: true }))}
-              onPressOut={() => setTooltipPos(prev => ({ ...prev, visible: false }))}
-            >
-              {tooltipPos.visible && (
-                <View style={[styles.tooltip, { left: tooltipPos.x - 40, top: tooltipPos.y - 50 }]}>
-                  <Text style={styles.tooltipText}>
-                    ₱{Number(tooltipPos.value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </Text>
-                </View>
-              )}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <Pressable
+                onPressIn={() => setTooltipPos(prev => ({ ...prev, visible: true }))}
+                onPressOut={() => setTooltipPos(prev => ({ ...prev, visible: false }))}
+              >
+                {tooltipPos.visible && (
+                  <View style={[styles.tooltip, { left: tooltipPos.x - 40, top: tooltipPos.y - 50 }]}>
+                    <Text style={styles.tooltipText}>
+                      ₱{Number(tooltipPos.value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                )}
 
-              <LineChart
-                data={{
-                    labels: finalLabels,
-                    datasets: [{ data: finalRevenue }],
-                }}
-                width={chartWidth - 48}
-                height={220}
-                yAxisLabel="₱"
-                yAxisSuffix=""
-                yLabelsOffset={10}
-                chartConfig={{
-                  backgroundColor: "#ffffff",
-                  backgroundGradientFrom: "#ffffff",
-                  backgroundGradientTo: "#ffffff",
-                  decimalPlaces: 2,
-                  color: () => `rgba(59, 130, 246, 1)`,
-                  labelColor: () => `#64748b`,
-                  propsForBackgroundLines: { stroke: "#e2e8f0", strokeWidth: 1 },
-                  propsForDots: {
-                    r: "5",
-                    strokeWidth: "2",
-                    stroke: "#3b82f6"
-                  },
-                  formatYLabel: (y: string) => `₱${Number(y).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                }}
-                bezier
-                formatYLabel={(yValue) => `₱${Number(yValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                style={styles.chart}
-                onDataPointClick={(data) => setTooltipPos({ x: data.x, y: data.y, value: data.value, visible: true })}
-              />
-            </Pressable>
+                <LineChart
+                  data={{
+                      labels: finalLabels,
+                      datasets: [{ data: finalRevenue }],
+                  }}
+                  width={chartWidthForLabels(finalLabels)}
+                  height={220}
+                  yAxisLabel="₱"
+                  yAxisSuffix=""
+                  yLabelsOffset={10}
+                  xLabelsOffset={revenueView === "yearly" ? 8 : 2}
+                  chartConfig={{
+                    backgroundColor: "#ffffff",
+                    backgroundGradientFrom: "#ffffff",
+                    backgroundGradientTo: "#ffffff",
+                    decimalPlaces: 2,
+                    color: () => `rgba(59, 130, 246, 1)`,
+                    labelColor: () => `#64748b`,
+                    propsForBackgroundLines: { stroke: "#e2e8f0", strokeWidth: 1 },
+                    propsForDots: {
+                      r: "5",
+                      strokeWidth: "2",
+                      stroke: "#3b82f6"
+                    },
+                    propsForLabels: {
+                      fontSize: revenueView === "yearly" ? 10 : 11,
+                    },
+                    formatYLabel: (y: string) => `₱${Number(y).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  }}
+                  bezier
+                  formatYLabel={(yValue) => `₱${Number(yValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  style={styles.chart}
+                  onDataPointClick={(data) => setTooltipPos({ x: data.x, y: data.y, value: data.value, visible: true })}
+                />
+              </Pressable>
+            </ScrollView>
           </View>
         </View>
 
