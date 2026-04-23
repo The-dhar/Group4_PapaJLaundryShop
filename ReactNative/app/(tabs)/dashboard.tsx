@@ -236,10 +236,52 @@ function looksRush(txn: any): boolean {
 }
 
 function extractLineItems(txn: any): any[] {
+  if (Array.isArray(txn?.receipt_items) && txn.receipt_items.length > 0) return txn.receipt_items;
+  if (Array.isArray(txn?.services) && txn.services.length > 0) return txn.services;
   if (Array.isArray(txn?.transaction_items)) return txn.transaction_items;
-  if (Array.isArray(txn?.items)) return txn.items;
+  if (Array.isArray(txn?.items) && txn.items.length > 0) return txn.items;
   if (Array.isArray(txn?.lines)) return txn.lines;
+  if (txn?.transaction_item && typeof txn.transaction_item === "object") return [txn.transaction_item];
   return [];
+}
+
+function serviceItemDisplayName(item: any, txn?: any): string {
+  const washType = String(item?.laundryType || item?.laundry_type || "").trim().toLowerCase();
+  const candidates = [
+    item?.serviceName,
+    item?.service_name,
+    item?.item,
+    item?.product,
+    item?.name,
+    item?.service,
+    txn?.service_name,
+  ]
+    .map((v) => String(v || "").trim())
+    .filter(Boolean);
+
+  for (const candidate of candidates) {
+    const normalized = candidate.toLowerCase();
+    if (!washType) return candidate;
+    if (normalized === washType) continue;
+
+    const withDashPrefix = `${washType} - `;
+    const withColonPrefix = `${washType}: `;
+    if (normalized.startsWith(withDashPrefix)) {
+      const stripped = candidate.slice(withDashPrefix.length).trim();
+      if (stripped) return stripped;
+      continue;
+    }
+    if (normalized.startsWith(withColonPrefix)) {
+      const stripped = candidate.slice(withColonPrefix.length).trim();
+      if (stripped) return stripped;
+      continue;
+    }
+
+    return candidate;
+  }
+
+  if (washType) return String(item?.laundryType || item?.laundry_type || "").trim();
+  return "Unknown";
 }
 
 function issueBranchId(row: any, txToBranch: Map<number, number>): number {
@@ -268,6 +310,8 @@ type BranchAnalytics = {
     whiteVsColored: number[];
     backjobVsOtherLoss: number[];
     serviceItemsVsOrders: number[];
+    serviceItemsBreakdownLabels: string[];
+    serviceItemsBreakdownValues: number[];
   };
   counts: {
     resolved: number;
@@ -605,6 +649,7 @@ export default function DashboardAnalytics() {
         whiteRevenue: 0,
         coloredRevenue: 0,
         serviceItems: 0,
+        serviceItemTotals: new Map<string, number>(),
         paidOrders: 0,
         unpaidOrders: 0,
         totalOrders: 0,
@@ -655,9 +700,14 @@ export default function DashboardAnalytics() {
       if (lines.length > 0) {
         lines.forEach((line) => {
           const serviceName = lower(line?.service_name || line?.name || txn?.service_name);
+          const serviceLabel = serviceItemDisplayName(line, txn);
           const pieceCount = Math.max(1, safeNum(line?.piece_count || line?.quantity || 1));
           const lineAmount = safeNum(line?.line_total || line?.amount || 0);
           bucket.serviceItems += pieceCount;
+          if (serviceLabel) {
+            const currentTotal = Number(bucket.serviceItemTotals.get(serviceLabel) || 0);
+            bucket.serviceItemTotals.set(serviceLabel, currentTotal + (lineAmount > 0 ? lineAmount : amount / Math.max(lines.length, 1)));
+          }
           if (paid && serviceName.includes("white")) bucket.whiteRevenue += lineAmount > 0 ? lineAmount : amount;
           if (paid && (serviceName.includes("colored") || serviceName.includes("colour"))) {
             bucket.coloredRevenue += lineAmount > 0 ? lineAmount : amount;
@@ -665,6 +715,13 @@ export default function DashboardAnalytics() {
         });
       } else {
         bucket.serviceItems += Math.max(1, safeNum(txn?.piece_count || txn?.quantity || 1));
+        const fallbackService = String(txn?.service_name || "").trim();
+        if (fallbackService) {
+          bucket.serviceItemTotals.set(
+            fallbackService,
+            Number(bucket.serviceItemTotals.get(fallbackService) || 0) + amount
+          );
+        }
         const marker = `${lower(txn?.service_name)} ${lower(txn?.notes)}`;
         if (paid && marker.includes("white")) bucket.whiteRevenue += amount;
         if (paid && (marker.includes("colored") || marker.includes("colour"))) bucket.coloredRevenue += amount;
@@ -712,6 +769,10 @@ export default function DashboardAnalytics() {
       const rushTotal = b.rushRevenue + b.regularRevenue;
       const whiteTotal = b.whiteRevenue + b.coloredRevenue;
       const netProfit = b.totalRevenue - b.totalLosses;
+      const serviceItemTop = Array.from((b.serviceItemTotals as Map<string, number>).entries())
+        .map(([name, value]) => ({ name, value: Number(value || 0) }))
+        .sort((a, c) => c.value - a.value)
+        .slice(0, 6);
 
       const metrics: Record<BranchCompareMetricKey, number> = {
         totalRevenue: Number(b.totalRevenue.toFixed(2)),
@@ -746,6 +807,8 @@ export default function DashboardAnalytics() {
           whiteVsColored: [Number(b.whiteRevenue.toFixed(2)), Number(b.coloredRevenue.toFixed(2))],
           backjobVsOtherLoss: [Number(b.backjobLoss.toFixed(2)), Number((b.totalLosses - b.backjobLoss).toFixed(2))],
           serviceItemsVsOrders: [Number(b.serviceItems.toFixed(0)), b.totalOrders],
+          serviceItemsBreakdownLabels: serviceItemTop.length > 0 ? serviceItemTop.map((row) => shortLabel(row.name, 14)) : ["No data"],
+          serviceItemsBreakdownValues: serviceItemTop.length > 0 ? serviceItemTop.map((row) => Number(row.value.toFixed(2))) : [0],
         },
         counts: {
           resolved: b.resolved,
@@ -844,84 +907,88 @@ export default function DashboardAnalytics() {
 
   const renderMiniLine = (values: number[], color: string) => (
     <View style={styles.detailMiniChartContainer}>
-      <LineChart
-        data={{
-          labels: miniLineDateLabels(values.length),
-          datasets: [{ data: values.length ? values : [0] }],
-        }}
-        width={detailMiniChartWidth}
-        height={156}
-        withDots={false}
-        withInnerLines
-        withOuterLines={false}
-        withVerticalLines={false}
-        withVerticalLabels
-        withHorizontalLabels
-        yLabelsOffset={10}
-        xLabelsOffset={2}
-        fromZero
-        segments={4}
-        chartConfig={{
-          backgroundColor: "#f8fafc",
-          backgroundGradientFrom: "#f8fafc",
-          backgroundGradientTo: "#f8fafc",
-          decimalPlaces: 0,
-          color: () => color,
-          labelColor: () => "rgba(71,85,105,1)",
-          propsForLabels: { fontSize: 10 },
-          propsForBackgroundLines: {
-            stroke: "#cbd5e1",
-            strokeDasharray: "4 5",
-            strokeWidth: 1,
-          },
-          fillShadowGradientFrom: color,
-          fillShadowGradientFromOpacity: 0.16,
-          fillShadowGradientTo: color,
-          fillShadowGradientToOpacity: 0.04,
-        }}
-        formatYLabel={(yValue) => compactAxisLabel(Number(yValue))}
-        bezier
-        style={styles.detailMiniChart}
-      />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <LineChart
+          data={{
+            labels: miniLineDateLabels(values.length),
+            datasets: [{ data: values.length ? values : [0] }],
+          }}
+          width={detailMiniChartWidth}
+          height={192}
+          withDots={false}
+          withInnerLines
+          withOuterLines={false}
+          withVerticalLines={false}
+          withVerticalLabels
+          withHorizontalLabels
+          yLabelsOffset={10}
+          xLabelsOffset={8}
+          fromZero
+          segments={4}
+          chartConfig={{
+            backgroundColor: "#f8fafc",
+            backgroundGradientFrom: "#f8fafc",
+            backgroundGradientTo: "#f8fafc",
+            decimalPlaces: 0,
+            color: () => color,
+            labelColor: () => "rgba(71,85,105,1)",
+            propsForLabels: { fontSize: 10 },
+            propsForBackgroundLines: {
+              stroke: "#cbd5e1",
+              strokeDasharray: "4 5",
+              strokeWidth: 1,
+            },
+            fillShadowGradientFrom: color,
+            fillShadowGradientFromOpacity: 0.16,
+            fillShadowGradientTo: color,
+            fillShadowGradientToOpacity: 0.04,
+          }}
+          formatYLabel={(yValue) => compactAxisLabel(Number(yValue))}
+          bezier
+          style={styles.detailMiniChart}
+        />
+      </ScrollView>
     </View>
   );
 
   const renderMiniBar = (labels: string[], values: number[], color: string) => (
     <View style={styles.detailMiniChartContainer}>
-      <BarChart
-        data={{ labels, datasets: [{ data: values.length ? values : [0] }] }}
-        width={Math.max(detailMiniChartWidth, labels.reduce((sum, label) => sum + Math.max(label.length * 9, 72), 0))}
-        height={182}
-        withHorizontalLabels
-        withVerticalLabels
-        yLabelsOffset={10}
-        xLabelsOffset={2}
-        fromZero
-        segments={4}
-        yAxisLabel=""
-        showValuesOnTopOfBars
-        chartConfig={{
-          backgroundColor: "#f8fafc",
-          backgroundGradientFrom: "#f8fafc",
-          backgroundGradientTo: "#f8fafc",
-          decimalPlaces: 0,
-          color: () => color,
-          labelColor: () => "rgba(71,85,105,1)",
-          barPercentage: 0.95,
-          propsForLabels: { fontSize: 10 },
-          propsForBackgroundLines: {
-            stroke: "#cbd5e1",
-            strokeDasharray: "4 5",
-            strokeWidth: 1,
-          },
-          fillShadowGradientFrom: color,
-          fillShadowGradientFromOpacity: 0.16,
-          fillShadowGradientTo: color,
-          fillShadowGradientToOpacity: 0.06,
-        }}
-        formatYLabel={(yValue) => compactAxisLabel(Number(yValue))}
-        style={styles.detailMiniChart}
-      />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <BarChart
+          data={{ labels, datasets: [{ data: values.length ? values : [0] }] }}
+          width={Math.max(detailMiniChartWidth, labels.reduce((sum, label) => sum + Math.max(label.length * 9, 72), 0))}
+          height={220}
+          withHorizontalLabels
+          withVerticalLabels
+          yLabelsOffset={10}
+          xLabelsOffset={8}
+          fromZero
+          segments={4}
+          yAxisLabel=""
+          showValuesOnTopOfBars
+          chartConfig={{
+            backgroundColor: "#f8fafc",
+            backgroundGradientFrom: "#f8fafc",
+            backgroundGradientTo: "#f8fafc",
+            decimalPlaces: 0,
+            color: () => color,
+            labelColor: () => "rgba(71,85,105,1)",
+            barPercentage: 0.95,
+            propsForLabels: { fontSize: 10 },
+            propsForBackgroundLines: {
+              stroke: "#cbd5e1",
+              strokeDasharray: "4 5",
+              strokeWidth: 1,
+            },
+            fillShadowGradientFrom: color,
+            fillShadowGradientFromOpacity: 0.16,
+            fillShadowGradientTo: color,
+            fillShadowGradientToOpacity: 0.06,
+          }}
+          formatYLabel={(yValue) => compactAxisLabel(Number(yValue))}
+          style={styles.detailMiniChart}
+        />
+      </ScrollView>
     </View>
   );
 
@@ -2168,7 +2235,11 @@ export default function DashboardAnalytics() {
               <View style={styles.branchMetricCard}>
                 <Text style={styles.branchMetricTitle}>Service Items</Text>
                 <Text style={styles.branchMetricValue}>{formatMetricValue(selectedBranchReport.metrics.serviceItems, "count")}</Text>
-                {renderMiniBar(["Items", "Orders"], selectedBranchReport.trends.serviceItemsVsOrders, "rgba(22,163,74,1)")}
+                {renderMiniBar(
+                  selectedBranchReport.trends.serviceItemsBreakdownLabels,
+                  selectedBranchReport.trends.serviceItemsBreakdownValues,
+                  "rgba(22,163,74,1)"
+                )}
               </View>
             </ScrollView>
           ) : null}
@@ -2639,7 +2710,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingTop: 12,
-    paddingBottom: 14,
+    paddingBottom: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -2664,14 +2735,15 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
     backgroundColor: "#f8fafc",
     overflow: "visible",
-    paddingTop: 6,
+    paddingTop: 12,
     paddingLeft: 10,
     paddingRight: 8,
-    paddingBottom: 24,
+    paddingBottom: 42,
   },
   detailMiniChart: {
     marginLeft: 0,
     marginRight: 0,
+    marginBottom: 10,
     borderRadius: 10,
   },
   branchPerformanceBox: {
