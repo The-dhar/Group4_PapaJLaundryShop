@@ -819,11 +819,26 @@ export default function DashboardAnalytics() {
     setBranchDetailVisible(true);
   };
 
+  const miniLineDateLabels = useCallback(
+    (count: number) => {
+      const points = Math.max(1, count);
+      const safeEndYmd = rangeFrom <= rangeTo ? rangeTo : rangeFrom;
+      const endDate = parseYmd(safeEndYmd);
+
+      return Array.from({ length: points }, (_, idx) => {
+        const d = new Date(endDate);
+        d.setDate(endDate.getDate() - (points - 1 - idx));
+        return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      });
+    },
+    [rangeFrom, rangeTo]
+  );
+
   const renderMiniLine = (values: number[], color: string) => (
     <View style={styles.detailMiniChartContainer}>
       <LineChart
         data={{
-          labels: values.map((_, idx) => `P${idx + 1}`),
+          labels: miniLineDateLabels(values.length),
           datasets: [{ data: values.length ? values : [0] }],
         }}
         width={detailMiniChartWidth}
