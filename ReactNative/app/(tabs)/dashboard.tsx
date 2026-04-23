@@ -2,7 +2,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
-  Dimensions,
   Modal,
   Platform,
   Pressable,
@@ -10,6 +9,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -297,13 +297,10 @@ function rangeForPreset(preset: Exclude<PeriodPreset, "range">): [string, string
   return [`${y}-01-01`, `${y}-12-31`];
 }
 
-const { width: screenWidth } = Dimensions.get("window");
-const isSmallScreen = screenWidth < 375;
-const chartPadding = isSmallScreen ? 40 : 60;
-const chartWidth = screenWidth - chartPadding;
-
 // Responsive chart width helper: ensures enough horizontal space for x-axis labels on small screens
-const getResponsiveChartWidth = (labels: string[]) => {
+const getResponsiveChartWidth = (labels: string[], screenWidth: number, isSmallScreen: boolean) => {
+  const chartPadding = isSmallScreen ? 40 : 60;
+  const chartWidth = Math.max(screenWidth - chartPadding, 220);
   const basePadding = 100;
   const estimated = labels.reduce((sum, label) => {
     const len = label.length;
@@ -314,6 +311,8 @@ const getResponsiveChartWidth = (labels: string[]) => {
 };
 
 export default function DashboardAnalytics() {
+  const { width: screenWidth } = useWindowDimensions();
+  const isSmallScreen = screenWidth < 375;
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("range");
   const [rangeFrom, setRangeFrom] = useState<string>(defaultRangeStartYmd);
   const [rangeTo, setRangeTo] = useState<string>(() => toYmd(new Date()));
@@ -476,9 +475,9 @@ export default function DashboardAnalytics() {
   );
 
   // Compute responsive chart widths so x-axis labels fit on narrow screens
-  const revenueChartWidth = getResponsiveChartWidth(currentLabels);
-  const branchComparisonChartWidth = getResponsiveChartWidth(currentBranchLabels);
-  const branchPerformanceChartWidth = getResponsiveChartWidth(currentBranchLabels);
+  const revenueChartWidth = getResponsiveChartWidth(currentLabels, screenWidth, isSmallScreen);
+  const branchComparisonChartWidth = getResponsiveChartWidth(currentBranchLabels, screenWidth, isSmallScreen);
+  const branchPerformanceChartWidth = getResponsiveChartWidth(currentBranchLabels, screenWidth, isSmallScreen);
 
   const filteredResolvedDisputes = useMemo(() => {
     const from = parseYmd(rangeFrom <= rangeTo ? rangeFrom : rangeTo);
@@ -561,7 +560,7 @@ export default function DashboardAnalytics() {
     };
   }, [filteredResolvedDisputes, periodPreset, rangeFrom, rangeTo]);
 
-  const disputeChartWidth = getResponsiveChartWidth(disputeSeries.labels);
+  const disputeChartWidth = getResponsiveChartWidth(disputeSeries.labels, screenWidth, isSmallScreen);
   const disputeKpiAmount = useMemo(
     () => filteredResolvedDisputes.reduce((sum, r) => sum + disputeChartAmountFromReport(r), 0),
     [filteredResolvedDisputes]
@@ -767,7 +766,10 @@ export default function DashboardAnalytics() {
   );
 
   const branchCompareLabels = useMemo(
-    () => (branchAnalytics.length > 0 ? branchAnalytics.map((b) => b.name) : ["No Branches"]),
+    () =>
+      branchAnalytics.length > 0
+        ? branchAnalytics.map((b) => shortLabel(b.shortName || b.name, isSmallScreen ? 10 : 14))
+        : ["No Branches"],
     [branchAnalytics]
   );
 
@@ -782,12 +784,12 @@ export default function DashboardAnalytics() {
   );
 
   const branchCompareChartWidth = useMemo(() => {
-    const minWidth = isSmallScreen ? 190 : 230;
+    const minWidth = isSmallScreen ? 220 : 260;
     const longestLabel = branchCompareLabels.reduce((longest, label) => Math.max(longest, label.length), 0);
-    const labelWidth = Math.max(isSmallScreen ? 62 : 74, longestLabel * (isSmallScreen ? 6.2 : 6.8));
-    const slotWidth = Math.max(isSmallScreen ? 42 : 50, labelWidth + 4);
+    const labelWidth = Math.max(isSmallScreen ? 74 : 88, longestLabel * (isSmallScreen ? 7.4 : 8.2));
+    const slotWidth = Math.max(isSmallScreen ? 62 : 74, labelWidth + 12);
     return Math.max(minWidth, branchCompareLabels.length * slotWidth);
-  }, [branchCompareLabels]);
+  }, [branchCompareLabels, isSmallScreen]);
   const branchCompareChartKey = useMemo(
     () => `branch-kpi-${branchCompareMetric}-${branchCompareNormalizedValues.join(",")}`,
     [branchCompareMetric, branchCompareNormalizedValues]
@@ -825,13 +827,19 @@ export default function DashboardAnalytics() {
       const safeEndYmd = rangeFrom <= rangeTo ? rangeTo : rangeFrom;
       const endDate = parseYmd(safeEndYmd);
 
+      const maxVisibleLabels = isSmallScreen ? 4 : 6;
+      const step = Math.max(1, Math.ceil(points / maxVisibleLabels));
+
       return Array.from({ length: points }, (_, idx) => {
         const d = new Date(endDate);
         d.setDate(endDate.getDate() - (points - 1 - idx));
-        return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        const isEdge = idx === 0 || idx === points - 1;
+        const shouldShow = isEdge || idx % step === 0;
+        return shouldShow ? label : "";
       });
     },
-    [rangeFrom, rangeTo]
+    [isSmallScreen, rangeFrom, rangeTo]
   );
 
   const renderMiniLine = (values: number[], color: string) => (
@@ -850,7 +858,7 @@ export default function DashboardAnalytics() {
         withVerticalLabels
         withHorizontalLabels
         yLabelsOffset={10}
-        xLabelsOffset={-6}
+        xLabelsOffset={2}
         fromZero
         segments={4}
         chartConfig={{
@@ -882,12 +890,12 @@ export default function DashboardAnalytics() {
     <View style={styles.detailMiniChartContainer}>
       <BarChart
         data={{ labels, datasets: [{ data: values.length ? values : [0] }] }}
-        width={Math.max(180, labels.length * 72)}
+        width={Math.max(detailMiniChartWidth, labels.reduce((sum, label) => sum + Math.max(label.length * 9, 72), 0))}
         height={182}
         withHorizontalLabels
         withVerticalLabels
         yLabelsOffset={10}
-        xLabelsOffset={-6}
+        xLabelsOffset={2}
         fromZero
         segments={4}
         yAxisLabel=""
@@ -1429,7 +1437,7 @@ export default function DashboardAnalytics() {
               ))}
             </View>
             <Text style={styles.dateRangeSummary}>{formatRangeSummary(rangeFrom, rangeTo)}</Text>
-            <View style={styles.dateRangeRow}>
+            <View style={[styles.dateRangeRow, isSmallScreen && styles.dateRangeRowCompact]}>
               <TouchableOpacity style={styles.dateChip} onPress={() => openDatePicker("from")} activeOpacity={0.85}>
                 <Text style={styles.dateChipLabel}>From</Text>
                 <Text style={styles.dateChipValue}>
@@ -1446,9 +1454,9 @@ export default function DashboardAnalytics() {
           </View>
 
         {/* CARDS */}
-        <View style={styles.cardRow}>
+        <View style={[styles.cardRow, isSmallScreen && styles.cardRowCompact]}>
           {/* Total Sales Card */}
-          <View style={styles.card}>
+          <View style={[styles.card, isSmallScreen && styles.cardCompact]}>
             <Text style={styles.cardTitle}>Total Sales</Text>
             <Text style={styles.cardValue}>
               ₱{totalSales.toLocaleString(undefined, { 
@@ -1465,7 +1473,7 @@ export default function DashboardAnalytics() {
           </View>
 
           {/* Total Orders Card */}
-          <View style={styles.card}>
+          <View style={[styles.card, isSmallScreen && styles.cardCompact]}>
             <Text style={styles.cardTitle}>Total Orders</Text>
             <Text style={styles.cardValue}>
               {totalOrders.toLocaleString()}
@@ -1829,8 +1837,8 @@ export default function DashboardAnalytics() {
                   fromZero
                   yAxisSuffix=""
                   showValuesOnTopOfBars
-                  verticalLabelRotation={38}
-                  xLabelsOffset={0}
+                  verticalLabelRotation={28}
+                  xLabelsOffset={8}
                   chartConfig={{
                     backgroundColor: "#ffffff",
                     backgroundGradientFrom: "#ffffff",
@@ -1841,7 +1849,7 @@ export default function DashboardAnalytics() {
                     propsForLabels: {
                       fontSize: isSmallScreen ? 8 : 10,
                     },
-                    barPercentage: 1,
+                    barPercentage: 0.72,
                     propsForBackgroundLines: {
                       stroke: "#0000002d",
                       strokeWidth: 1,
@@ -2253,6 +2261,10 @@ const styles = StyleSheet.create({
     gap: 16,
     zIndex: 1, // Lower z-index for cards
   },
+  cardRowCompact: {
+    flexDirection: "column",
+    gap: 12,
+  },
   card: {
     flex: 1,
     padding: 24,
@@ -2263,6 +2275,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 16,
     elevation: 12,
+  },
+  cardCompact: {
+    padding: 18,
   },
   cardTitle: {
     fontSize: 14,
@@ -2344,6 +2359,9 @@ const styles = StyleSheet.create({
   dateRangeRow: {
     flexDirection: "row",
     gap: 12,
+  },
+  dateRangeRowCompact: {
+    flexDirection: "column",
   },
   dateChip: {
     flex: 1,
