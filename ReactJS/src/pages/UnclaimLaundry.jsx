@@ -176,6 +176,10 @@ const UnclaimLaundry = () => {
 
   return (
     <DashboardLayout>
+      <div className="page-header-block page-header-block--table">
+        <h2 className="page-header-title">Unclaimed Items</h2>
+        <p className="page-header-subtitle">Laundry items still in shop 7 or more days past due date</p>
+      </div>
       <div className="unclaimed-page">
         <div className="unclaimed-table-container">
           <div className="unclaimed-background-table">

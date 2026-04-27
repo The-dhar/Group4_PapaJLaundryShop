@@ -68,6 +68,10 @@ const Archive = () => {
 
   return (
     <DashboardLayout>
+      <div className="page-header-block page-header-block--table">
+        <h2 className="page-header-title">Archive</h2>
+        <p className="page-header-subtitle">View and restore previously archived transactions</p>
+      </div>
       <div className="archive-page">
         <div className="table-container">
           <div className="background-table">

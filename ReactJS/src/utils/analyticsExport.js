@@ -102,7 +102,11 @@ export function buildAnalyticsCsv(payload) {
     newCustomersByMonth12 = [],
     customersGrowthByMonth = [],
     rushRegularChartData = [],
+    includedSections = null,
   } = payload;
+
+  /** Helper: check if a section should be included */
+  const inc = (key) => !includedSections || includedSections.has(key);
 
   const revenue = Number(totalRevenue ?? paidTotal);
   const losses =
@@ -136,6 +140,7 @@ export function buildAnalyticsCsv(payload) {
   lines.push([]);
 
   // SECTION 1 — Executive summary (key metrics)
+  if (inc('executive_summary')) {
   lines.push(csvRow(['SECTION 1 – Executive summary']));
   lines.push(csvRow(['Metric', 'Value']));
   lines.push(csvRow(['Total revenue, paid orders (PHP)', revenue.toFixed(2)]));
@@ -150,8 +155,10 @@ export function buildAnalyticsCsv(payload) {
   lines.push([]);
   lines.push(csvRuleLine());
   lines.push([]);
+  }
 
   // SECTION 2 — Revenue by period
+  if (inc('executive_summary')) {
   lines.push(csvRow(['SECTION 2 – Revenue by period (same as chart)']));
   lines.push(csvRow(['Period', 'Revenue (PHP)', 'Debit amount (PHP)']));
   (chartData || []).forEach((row) => {
@@ -160,8 +167,10 @@ export function buildAnalyticsCsv(payload) {
   lines.push([]);
   lines.push(csvRuleLine());
   lines.push([]);
+  }
 
   // SECTION 3 — Disputes
+  if (inc('disputes')) {
   lines.push(csvRow(['SECTION 3 – Disputes (resolved)']));
   lines.push(csvRow(['Description', 'Value']));
   lines.push(csvRow(['Scope', String(disputeTypeLabel ?? '—')]));
@@ -176,8 +185,10 @@ export function buildAnalyticsCsv(payload) {
   lines.push([]);
   lines.push(csvRuleLine());
   lines.push([]);
+  }
 
   // SECTION 4 — Loss & quality
+  if (inc('loss_quality')) {
   lines.push(csvRow(['SECTION 4 – Loss and quality, monthly totals (PHP)']));
   lines.push(csvRow(['Month', 'Refunds (PHP)', 'Backjobs / replacement (PHP)']));
   (monthlyLossStack12 || []).forEach((row) => {
@@ -214,6 +225,7 @@ export function buildAnalyticsCsv(payload) {
   lines.push([]);
   lines.push(csvRuleLine());
   lines.push([]);
+  }
 
   const growthRows =
     customersGrowthByMonth && customersGrowthByMonth.length
@@ -225,6 +237,7 @@ export function buildAnalyticsCsv(payload) {
         }));
 
   // SECTION 5 — Growth
+  if (inc('growth')) {
   lines.push(csvRow(['SECTION 5 – Customer growth (by month)']));
   lines.push(csvRow(['Month', 'New customers', 'Active returning customers']));
   growthRows.forEach((row) => {
@@ -233,8 +246,10 @@ export function buildAnalyticsCsv(payload) {
   lines.push([]);
   lines.push(csvRuleLine());
   lines.push([]);
+  }
 
   // SECTION 6 — Rush vs regular
+  if (inc('rush_regular')) {
   lines.push(csvRow(['SECTION 6 – Rush vs regular paid revenue (PHP)']));
   lines.push(csvRow(['Period', 'Rush (PHP)', 'Regular (PHP)']));
   (rushRegularChartData || []).forEach((row) => {
@@ -245,8 +260,10 @@ export function buildAnalyticsCsv(payload) {
   lines.push([]);
   lines.push(csvRuleLine());
   lines.push([]);
+  }
 
   // SECTION 7 — Recent transactions
+  if (inc('recent_transactions')) {
   lines.push(csvRow(['SECTION 7 – Recent transactions (on screen)']));
   lines.push(csvRow(['Receipt ID', 'Customer', 'Payment', 'Inventory status', 'Amount (PHP)', 'Created']));
   (recentTransactions || []).forEach((t) => {
@@ -263,6 +280,7 @@ export function buildAnalyticsCsv(payload) {
   });
   lines.push([]);
   lines.push(csvRuleLine());
+  }
   lines.push(csvRow(['End of report']));
 
   const body = lines.map((line) => (Array.isArray(line) ? csvRow(line) : line)).join('\r\n');
@@ -501,7 +519,11 @@ export async function exportAnalyticsPdf(payload, chartImages = {}, mode = 'down
     newCustomersByMonth12 = [],
     customersGrowthByMonth = [],
     rushRegularChartData = [],
+    includedSections = null,
   } = payload;
+
+  /** Helper: check if a section should be included */
+  const inc = (key) => !includedSections || includedSections.has(key);
 
   const revenue = Number(totalRevenue ?? paidTotal);
   const losses =
@@ -558,6 +580,7 @@ export async function exportAnalyticsPdf(payload, chartImages = {}, mode = 'down
   doc.text(`Custom range: ${customRangeLabel}`, margin + 2, y + 20);
   y += 24;
 
+  if (inc('executive_summary')) {
   y = drawSectionTitle(doc, 'Summary', y, margin, maxW, pageH);
   y = drawTable(doc, {
     y,
@@ -598,7 +621,9 @@ export async function exportAnalyticsPdf(payload, chartImages = {}, mode = 'down
       debit: Number(row.unpaid || 0).toFixed(2),
     })),
   });
+  }
 
+  if (inc('disputes')) {
   y = drawSectionTitle(doc, `Disputes (${disputeTypeLabel})`, y, margin, maxW, pageH);
   y = drawTable(doc, {
     y,
@@ -622,7 +647,9 @@ export async function exportAnalyticsPdf(payload, chartImages = {}, mode = 'down
       })),
     ],
   });
+  }
 
+  if (inc('loss_quality') || inc('loss_refund_reasons') || inc('loss_backjob_reasons')) {
   y = drawSectionTitle(doc, 'Loss & Quality — totals', y, margin, maxW, pageH);
   // Embed refund + backjob charts side by side
   y = embedChartImagePair(doc, chartImages.refundChart, chartImages.backjobChart, y, margin, maxW, pageH, 55);
@@ -679,7 +706,9 @@ export async function exportAnalyticsPdf(payload, chartImages = {}, mode = 'down
       other: Number(row.Other || 0).toFixed(2),
     })),
   });
+  }
 
+  if (inc('growth')) {
   y = drawSectionTitle(doc, 'Growth (new vs returning)', y, margin, maxW, pageH);
   // Embed growth chart image if provided
   y = embedChartImage(doc, chartImages.growthChart, y, margin, maxW, pageH, 60);
@@ -698,7 +727,9 @@ export async function exportAnalyticsPdf(payload, chartImages = {}, mode = 'down
       retC: String(Number(row.returningCustomers ?? 0)),
     })),
   });
+  }
 
+  if (inc('rush_regular')) {
   y = drawSectionTitle(doc, 'Rush vs regular (paid)', y, margin, maxW, pageH);
   // Embed rush vs regular chart image if provided
   y = embedChartImage(doc, chartImages.rushChart, y, margin, maxW, pageH, 60);
@@ -717,7 +748,9 @@ export async function exportAnalyticsPdf(payload, chartImages = {}, mode = 'down
       reg: Number(row.regular || 0).toFixed(2),
     })),
   });
+  }
 
+  if (inc('recent_transactions')) {
   y = drawSectionTitle(doc, 'Recent Transactions', y, margin, maxW, pageH);
   y = drawTable(doc, {
     y,
@@ -741,6 +774,7 @@ export async function exportAnalyticsPdf(payload, chartImages = {}, mode = 'down
     })),
     rowH: 6,
   });
+  }
 
   const pages = doc.getNumberOfPages();
   for (let i = 1; i <= pages; i += 1) {

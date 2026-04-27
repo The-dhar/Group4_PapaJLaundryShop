@@ -15,12 +15,17 @@
 
 .reports-header h2 {
   font-family: 'Poppins', sans-serif;
-  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 2px;
 }
 
 .reports-header p {
-  margin: 6px 0 0;
-  color: #475467;
+  margin: 0;
+  color: #64748b;
+  font-size: 0.95rem;
+  font-weight: 400;
 }
 
 .reports-refresh {

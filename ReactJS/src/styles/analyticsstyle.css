@@ -39,6 +39,12 @@
   color: #0f172a;
 }
 
+.analytics-exec-header .analytics-section-title {
+  font-weight: 400;
+  font-size: 1.1rem;
+  color: #334155;
+}
+
 .analytics-header p {
   margin: 4px 0 0;
   color: #64748b;
@@ -211,7 +217,7 @@
   color: #ffffff;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
-  font-family: "Segoe UI", Roboto, sans-serif;
+  font-family: 'Poppins', sans-serif;
 }
 
 .analytics-export-toggle:hover {
@@ -265,7 +271,7 @@
   cursor: pointer;
   text-align: left;
   transition: background 0.12s ease;
-  font-family: "Segoe UI", Roboto, sans-serif;
+  font-family: 'Poppins', sans-serif;
 }
 
 .analytics-export-menu-item:hover {
@@ -340,6 +346,70 @@
   letter-spacing: -0.02em;
 }
 
+/* ─── Report filter dropdowns (beside datepicker) ─── */
+.analytics-report-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.analytics-filter-select {
+  padding: 6px 32px 6px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 99px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  background: #f8fafc;
+  cursor: pointer;
+  font-family: 'Poppins', sans-serif;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  min-width: 120px;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2364748b' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 10px 6px;
+}
+
+.analytics-filter-select:hover {
+  border-color: #94a3b8;
+}
+
+.analytics-filter-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
+}
+
+.analytics-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.analytics-filter-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .analytics-report-filters {
+    width: 100%;
+  }
+
+  .analytics-filter-select {
+    flex: 1 1 120px;
+    min-width: 0;
+  }
+}
+
 /* Revenue chart filters live next to Executive summary; override dashboard `div:has(.chart-controls) { order: 2 }`. */
 .main-cards.analytics-page > .analytics-exec-header {
   order: 0;
@@ -403,7 +473,7 @@
   font-weight: 400;
   color: #000000;
   margin-bottom: 12px;
-  font-family: "Segoe UI", Roboto, sans-serif;
+  font-family: 'Poppins', sans-serif;
   text-align: left;
 }
 
@@ -411,7 +481,7 @@
   font-size: 28px;
   font-weight: 700;
   color: #000000;
-  font-family: "Segoe UI", Roboto, sans-serif;
+  font-family: 'Poppins', sans-serif;
 }
 
 .analytics-kpi-tile .icon-value .icon {

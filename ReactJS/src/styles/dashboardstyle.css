@@ -77,8 +77,34 @@
     font-weight: 400;
     color: #000000;
     margin-bottom: 16px;
-    font-family: "Segoe UI", Roboto, sans-serif;
+    font-family: 'Poppins', sans-serif;
     text-align: left;
+}
+
+/* ── Shared page header (title + sublabel) ───────────────── */
+.page-header-block {
+    margin-bottom: 0;
+}
+
+/* For pages whose content starts inside table-container (padding 20px) */
+.page-header-block--table {
+    padding-left: 20px;
+}
+
+.page-header-title {
+    font-family: 'Poppins', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0 0 2px;
+}
+
+.page-header-subtitle {
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 400;
+    color: #64748b;
+    margin: 0;
 }
 
 .card-total .icon,
@@ -106,7 +132,7 @@
     font-size: 28px;
     font-weight: 700;
     color: #000000;
-    font-family: "Segoe UI", Roboto, sans-serif;
+    font-family: 'Poppins', sans-serif;
 }
 
 .card-total>*:not(.chart-title):not(.icon),
@@ -159,7 +185,7 @@
     font-weight: 700;
     color: #000000;
     margin: 0;
-    font-family: "Segoe UI", Roboto, sans-serif;
+    font-family: 'Poppins', sans-serif;
 }
 
 .card-content {
@@ -185,7 +211,7 @@
     font-size: 14px;
     font-weight: 600;
     transition: all 0.3s ease;
-    font-family: "Segoe UI", Roboto, sans-serif;
+    font-family: 'Poppins', sans-serif;
 }
 
 .chart-toggle-btn:hover {
@@ -410,7 +436,7 @@
     font-weight: 700;
     color: #000000;
     margin-bottom: 20px;
-    font-family: "Segoe UI", Roboto, sans-serif;
+    font-family: 'Poppins', sans-serif;
 }
 
 table {
@@ -425,7 +451,7 @@ td {
     border-bottom: 1px solid #e0e0e0;
     text-align: left;
     font-size: 14px;
-    font-family: "Segoe UI", Roboto, sans-serif;
+    font-family: 'Poppins', sans-serif;
 }
 
 th {

@@ -723,6 +723,10 @@ const Receiptmanagement = () => {
 
   return (
     <DashboardLayout>
+      <div className="page-header-block page-header-block--table">
+        <h2 className="page-header-title">Receipt Management</h2>
+        <p className="page-header-subtitle">Print, archive, and manage paid transaction receipts</p>
+      </div>
       <div className="receipt-container">
         <div className="receipt-background">
           <div className="receipt-filter-row">

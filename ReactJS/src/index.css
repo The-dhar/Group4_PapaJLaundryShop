@@ -21,7 +21,7 @@
 
 body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Poppins", 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    font-family: 'Poppins', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
@@ -125,7 +125,7 @@ nav.scrolled {
 }
 
 .nav-name {
-    font-family: 'DM Serif Display', serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 1.5rem;
     /* larger brand text */
     color: var(--ink);
@@ -199,7 +199,7 @@ nav.scrolled {
 }
 
 h1 {
-    font-family: 'DM Serif Display', serif;
+    font-family: 'Poppins', sans-serif;
     font-size: clamp(2.5rem, 4.2vw, 3.8rem);
     line-height: 1.1;
     letter-spacing: -0.02em;
@@ -273,7 +273,7 @@ h1 em {
 }
 
 .metric-val {
-    font-family: 'DM Serif Display', serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 1.9rem;
     color: var(--ink);
     line-height: 1;
@@ -418,7 +418,7 @@ h1 em {
 }
 
 h2 {
-    font-family: 'DM Serif Display', serif;
+    font-family: 'Poppins', sans-serif;
     font-size: clamp(1.85rem, 2.8vw, 2.6rem);
     line-height: 1.18;
     letter-spacing: -0.02em;
@@ -479,7 +479,7 @@ h2 {
 }
 
 .about-num {
-    font-family: 'DM Serif Display', serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 0.8rem;
     color: var(--sky);
     padding-top: 2px;
@@ -524,7 +524,7 @@ h2 {
 }
 
 .stat-box-val {
-    font-family: 'DM Serif Display', serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 1.6rem;
     color: var(--sky);
     line-height: 1;
@@ -606,7 +606,7 @@ h2 {
 }
 
 .feat-title {
-    font-family: 'DM Serif Display', serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 1.05rem;
     color: var(--ink);
     margin-bottom: 8px;
@@ -675,7 +675,7 @@ h2 {
     align-items: center;
     justify-content: center;
     margin: 0 auto 18px;
-    font-family: 'DM Serif Display', serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 1.1rem;
     color: var(--sky);
     position: relative;
@@ -816,7 +816,7 @@ h2 {
 }
 
 .ben-title {
-    font-family: 'DM Serif Display', serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 1rem;
     color: var(--ink);
     margin-bottom: 4px;
@@ -840,7 +840,7 @@ h2 {
 }
 
 .perf-title {
-    font-family: 'DM Serif Display', serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 1rem;
     color: var(--ink);
     margin-bottom: 24px;
@@ -1037,7 +1037,7 @@ h2 {
 }
 
 .team-name {
-    font-family: 'DM Serif Display', serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 1.03rem;
     color: var(--ink);
     letter-spacing: -0.01em;
@@ -1189,7 +1189,7 @@ footer {
 }
 
 .footer-brand {
-    font-family: 'DM Serif Display', serif;
+    font-family: 'Poppins', sans-serif;
     font-size: 1.1rem;
     color: white;
 }

@@ -333,6 +333,10 @@ const Inventorymanagement = () => {
 
   return (
     <DashboardLayout>
+      <div className="page-header-block page-header-block--table">
+        <h2 className="page-header-title">Transaction Logs</h2>
+        <p className="page-header-subtitle">View and manage all laundry transactions and payments</p>
+      </div>
       <div className="inventory-page">
         <div className="table-container">
           <div className="background-table">

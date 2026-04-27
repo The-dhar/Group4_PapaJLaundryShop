@@ -620,6 +620,10 @@ const Dashboard = () => {
 
   return (
     <DashboardLayout>
+      <div className="page-header-block">
+        <h2 className="page-header-title">Dashboard</h2>
+        <p className="page-header-subtitle">Overview of sales, inventory, and dispute activity</p>
+      </div>
       <div className='main-cards'>
 
         {/* SMALL CARDS */}

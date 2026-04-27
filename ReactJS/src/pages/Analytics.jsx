@@ -315,6 +315,25 @@ export default function AnalyticsPage() {
   const [rangeEndDate, setRangeEndDate] = useState('');
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
+  // ─── Report filters (beside datepicker) ───
+  const [sectionFilter, setSectionFilter] = useState('all');
+  const [paymentFilter, setPaymentFilter] = useState('all');
+  const [disputeFilter, setDisputeFilter] = useState('all');
+
+  const SECTION_OPTIONS = [
+    { value: 'all', label: 'All Sections' },
+    { value: 'executive', label: 'Executive Summary' },
+    { value: 'loss_quality', label: 'Loss & Quality' },
+    { value: 'disputes', label: 'Disputes' },
+    { value: 'growth', label: 'Growth Trends' },
+    { value: 'rush_regular', label: 'Rush vs Regular' },
+    { value: 'white_colored', label: 'White vs Colored' },
+    { value: 'service_items', label: 'Service Items' },
+    { value: 'recent_transactions', label: 'Recent Transactions' },
+  ];
+
+  const showSection = useCallback((key) => sectionFilter === 'all' || sectionFilter === key, [sectionFilter]);
+
   // Refs for chart containers (used to capture chart images for PDF/print)
   const refundChartRef = useRef(null);
   const backjobChartRef = useRef(null);
@@ -434,9 +453,11 @@ export default function AnalyticsPage() {
       if (dt < start || dt > end) return false;
       if (startDate && dt < startDate) return false;
       if (endDate && dt > endDate) return false;
+      // Payment status filter
+      if (paymentFilter !== 'all' && t.payment_status !== paymentFilter) return false;
       return true;
     });
-  }, [activeTransactions, viewBounds, rangeStartDate, rangeEndDate, selectedBranchId]);
+  }, [activeTransactions, viewBounds, rangeStartDate, rangeEndDate, selectedBranchId, paymentFilter]);
 
   /** Resolved disputes (refunds + backjobs / replacement) in the same filtered window as charts. */
   const disputesInView = useMemo(() => {
@@ -450,13 +471,16 @@ export default function AnalyticsPage() {
       if (String(r.status || '').toLowerCase() !== 'resolved') return false;
       const rt = String(r.resolution_type || '').toLowerCase();
       if (rt !== 'refund' && rt !== 'replacement') return false;
+      // Dispute type filter
+      if (disputeFilter === 'refund' && rt !== 'refund') return false;
+      if (disputeFilter === 'backjob' && rt !== 'replacement') return false;
       const dt = new Date(r.resolved_at || r.updated_at || 0);
       if (dt < start || dt > end) return false;
       if (startDate && dt < startDate) return false;
       if (endDate && dt > endDate) return false;
       return true;
     });
-  }, [issueReports, viewBounds, selectedBranchId, rangeStartDate, rangeEndDate]);
+  }, [issueReports, viewBounds, selectedBranchId, rangeStartDate, rangeEndDate, disputeFilter]);
 
   /** Resolved refund disputes in the same date window (for total losses KPI, independent of chart type). */
   const resolvedRefundDisputesInView = useMemo(() => {
@@ -1031,6 +1055,25 @@ export default function AnalyticsPage() {
     setRangeEndDate('');
   }, []);
 
+  // Build set of included sections for export based on current sectionFilter
+  const includedSections = useMemo(() => {
+    if (sectionFilter === 'all') return null; // null = include everything
+    const map = {
+      executive: ['executive_summary'],
+      loss_quality: ['loss_quality', 'loss_refund_reasons', 'loss_backjob_reasons'],
+      disputes: ['disputes'],
+      growth: ['growth'],
+      rush_regular: ['rush_regular'],
+      white_colored: ['white_colored'],
+      service_items: ['service_items'],
+      recent_transactions: ['recent_transactions'],
+    };
+    return new Set([
+      'cover', // always include cover/document info
+      ...(map[sectionFilter] || []),
+    ]);
+  }, [sectionFilter]);
+
   const exportPayload = useMemo(
     () => ({
       branchName: (selectedBranch && selectedBranch.name) || '—',
@@ -1065,6 +1108,7 @@ export default function AnalyticsPage() {
       serviceItemsData,
       customersGrowthByMonth: customersGrowthData,
       rushRegularChartData,
+      includedSections,
     }),
     [
       selectedBranch,
@@ -1098,6 +1142,7 @@ export default function AnalyticsPage() {
       serviceItemsData,
       customersGrowthData,
       rushRegularChartData,
+      includedSections,
     ]
   );
 
@@ -1252,8 +1297,39 @@ export default function AnalyticsPage() {
                     </button>
                   )}
                 </div>
+                <select
+                  className="analytics-filter-select"
+                  value={sectionFilter}
+                  onChange={(e) => setSectionFilter(e.target.value)}
+                  aria-label="Filter report section"
+                >
+                  {SECTION_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <select
+                  className="analytics-filter-select"
+                  value={paymentFilter}
+                  onChange={(e) => setPaymentFilter(e.target.value)}
+                  aria-label="Filter payment status"
+                >
+                  <option value="all">All Payments</option>
+                  <option value="paid">Paid</option>
+                  <option value="unpaid">Unpaid</option>
+                </select>
+                <select
+                  className="analytics-filter-select"
+                  value={disputeFilter}
+                  onChange={(e) => setDisputeFilter(e.target.value)}
+                  aria-label="Filter dispute type"
+                >
+                  <option value="all">All Disputes</option>
+                  <option value="refund">Refunds Only</option>
+                  <option value="backjob">Backjobs Only</option>
+                </select>
               </div>
             </div>
+            {showSection('executive') && (
             <div className="analytics-kpi-primary analytics-kpi-exec">
               <div className="analytics-kpi-tile analytics-kpi-revenue">
                 <div className="chart-title">Total revenue</div>
@@ -1294,7 +1370,9 @@ export default function AnalyticsPage() {
                 <p className="analytics-kpi-caption">Sum of order weights in this period</p>
               </div>
             </div>
+            )}
 
+            {showSection('loss_quality') && (
             <div className="analytics-chart-pair">
                 <Card title="Loss & quality — Refunds">
                   <p className="analytics-card-sub">
@@ -1347,7 +1425,9 @@ export default function AnalyticsPage() {
                   </div>
                 </Card>
             </div>
+            )}
 
+            {showSection('disputes') && (
             <div className="analytics-chart-pair">
               <Card title="Disputes trend">
                 <p className="analytics-card-sub">Dispute amounts follow the selected Today/Weekly/Monthly/Yearly filter.</p>
@@ -1380,15 +1460,17 @@ export default function AnalyticsPage() {
                 </ResponsiveContainer>
               </Card>
             </div>
+            )}
 
+            {(showSection('growth') || showSection('rush_regular')) && (
             <div
               className={
-                showGrowthTrendsSection
+                showGrowthTrendsSection && showSection('growth')
                   ? 'analytics-chart-pair'
                   : 'analytics-chart-pair analytics-chart-pair--single'
               }
             >
-              {showGrowthTrendsSection ? (
+              {showGrowthTrendsSection && showSection('growth') ? (
                 <Card title="Growth trends">
                   <p className="analytics-card-sub">
                     New customers: first order at this branch falls in the period. Active returning customers: had orders
@@ -1430,6 +1512,7 @@ export default function AnalyticsPage() {
                 </Card>
               ) : null}
 
+              {showSection('rush_regular') && (
               <Card title="Rush vs regular (paid revenue)">
                 <p className="analytics-card-sub">
                   Paid rush (express) vs regular for the selected period. Today uses 2-hour slots, Weekly uses Mon–Sun,
@@ -1449,9 +1532,13 @@ export default function AnalyticsPage() {
                 </ResponsiveContainer>
                 </div>
               </Card>
+              )}
             </div>
+            )}
 
+            {(showSection('white_colored') || showSection('service_items')) && (
             <div className="analytics-chart-pair">
+              {showSection('white_colored') && (
               <Card title="White vs Colored">
                 <p className="analytics-card-sub">Breakdown of transaction amount for white vs colored items in the selected filters.</p>
                 <ResponsiveContainer width="100%" height={200}>
@@ -1464,7 +1551,9 @@ export default function AnalyticsPage() {
                   </BarChart>
                 </ResponsiveContainer>
               </Card>
+              )}
 
+              {showSection('service_items') && (
               <Card title="Service items">
                 <p className="analytics-card-sub">Top service items by amount for the selected filters.</p>
                 <ResponsiveContainer width="100%" height={200}>
@@ -1477,8 +1566,11 @@ export default function AnalyticsPage() {
                   </BarChart>
                 </ResponsiveContainer>
               </Card>
+              )}
             </div>
+            )}
 
+            {showSection('recent_transactions') && (
             <Card title={`Recent Transactions`}>
               <div className="analytics-table-wrap">
                 <table className="analytics-table">
@@ -1511,6 +1603,7 @@ export default function AnalyticsPage() {
                 </table>
               </div>
             </Card>
+            )}
           </>
         ) : null}
       </div>

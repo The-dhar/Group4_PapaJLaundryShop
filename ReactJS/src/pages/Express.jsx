@@ -209,6 +209,10 @@ const Express = () => {
 
   return (
     <DashboardLayout>
+      <div className="page-header-block page-header-block--table">
+        <h2 className="page-header-title">Rush Orders</h2>
+        <p className="page-header-subtitle">Track and manage express/rush laundry transactions</p>
+      </div>
       <div className="express-page">
         <div className="table-container">
           <div className="background-table">
