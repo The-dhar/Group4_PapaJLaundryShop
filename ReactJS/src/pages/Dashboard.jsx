@@ -1,69 +1,656 @@
-import React, { useState } from 'react';
-import { BsClockHistory, BsBoxSeam, BsExclamationTriangle } from 'react-icons/bs';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { BsBoxSeam, BsExclamationTriangle, BsCreditCard } from 'react-icons/bs';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import Card from '../components/card';
+import IssueStatusChart from '../components/IssueStatusChart';
 import DashboardLayout from '../components/dashboardlayout';
+import { useTransactions } from '../context/transactionsContext';
+import { API_URL } from '../config/api';
+import { buildResolvedUnresolvedSeries } from '../utils/issueStatusSeries';
 import '../styles/dashboardstyle.css';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+
+const POLL_MS = 45_000;
+
+const BRANCHES_SESSION_KEY = 'dashboard_refunds_branches_v1';
+
+function readBranchesCache() {
+  try {
+    const raw = sessionStorage.getItem(BRANCHES_SESSION_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeBranchesCache(rows) {
+  try {
+    sessionStorage.setItem(BRANCHES_SESSION_KEY, JSON.stringify(rows));
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+const formatPeso = (value) => {
+  const amount = Number(value);
+  const safeAmount = Number.isFinite(amount) ? amount : 0;
+  return `₱${safeAmount.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+};
+
+function parseDateOnlyAsLocal(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const ymd = raw.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+    const [y, m, d] = ymd.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+const DISPUTE_CHART_CONFIG = {
+  refund: {
+    label: 'Refund',
+    pluralLabel: 'Refunds',
+    resolutionType: 'refund',
+    lineColor: '#0d9488',
+  },
+  backjob: {
+    label: 'Backjob',
+    pluralLabel: 'Backjobs',
+    resolutionType: 'replacement',
+    lineColor: '#7c3aed',
+  },
+};
+
+/** Same calendar windows as revenue charts (transaction dates). Refunds use `resolved_at` with the same windows. */
+function getViewDateBounds(viewType, referenceDate = new Date()) {
+  const now = new Date(referenceDate);
+  const start = new Date(now);
+  const end = new Date(now);
+
+  if (viewType === 'today') {
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+  } else if (viewType === 'week') {
+    const dow = now.getDay();
+    const mondayOffset = dow === 0 ? -6 : 1 - dow;
+    start.setDate(now.getDate() + mondayOffset);
+    start.setHours(0, 0, 0, 0);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+  } else if (viewType === 'month') {
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    end.setMonth(now.getMonth() + 1, 0);
+    end.setHours(23, 59, 59, 999);
+  } else if (viewType === 'year') {
+    start.setMonth(0, 1);
+    start.setHours(0, 0, 0, 0);
+    end.setMonth(11, 31);
+    end.setHours(23, 59, 59, 999);
+  }
+
+  return { start, end };
+}
+
+/**
+ * Refund charts: sum actual refund PHP. Replacement/backjob charts: line item total as an operational estimate.
+ * (Do not use full transaction total — it overstates refunds.)
+ */
+function disputeAmountFromReport(row) {
+  const rt = String(row?.resolution_type || '').toLowerCase();
+  if (rt === 'refund') {
+    const n = Number(row?.refund_amount);
+    return Number.isFinite(n) ? n : 0;
+  }
+  if (rt === 'replacement') {
+    const line = Number(row?.transaction_item?.line_total);
+    return Number.isFinite(line) ? line : 0;
+  }
+  return 0;
+}
+
+function buildDisputeSeries(viewType, reports) {
+  if (viewType === 'today') {
+    const labels = ['12AM', '3AM', '6AM', '9AM', '12PM', '3PM', '6PM', '9PM'];
+    const buckets = labels.map((name) => ({ name, amount: 0 }));
+    reports.forEach((r) => {
+      const dt = new Date(r.resolved_at || r.updated_at || Date.now());
+      const idx = Math.min(7, Math.floor(dt.getHours() / 3));
+      buckets[idx].amount += disputeAmountFromReport(r);
+    });
+    return buckets;
+  }
+
+  if (viewType === 'week') {
+    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const n = new Date();
+    const dow = n.getDay();
+    const mondayOffset = dow === 0 ? -6 : 1 - dow;
+    const monday = new Date(n);
+    monday.setDate(n.getDate() + mondayOffset);
+    monday.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(monday);
+    weekEnd.setDate(monday.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const weekRows = Array.from({ length: 7 }).map((_, idx) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + idx);
+      return {
+        name: dayLabels[idx],
+        key: d.toDateString(),
+        amount: 0,
+      };
+    });
+
+    reports.forEach((r) => {
+      const dt = new Date(r.resolved_at || r.updated_at || Date.now());
+      if (dt < monday || dt > weekEnd) return;
+      const key = dt.toDateString();
+      const row = weekRows.find((x) => x.key === key);
+      if (row) row.amount += disputeAmountFromReport(r);
+    });
+
+    return weekRows.map(({ name, amount }) => ({ name, amount }));
+  }
+
+  if (viewType === 'month') {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const weekBuckets = [
+      { name: 'Week 1', amount: 0 },
+      { name: 'Week 2', amount: 0 },
+      { name: 'Week 3', amount: 0 },
+      { name: 'Week 4', amount: 0 },
+    ];
+
+    reports.forEach((r) => {
+      const dt = new Date(r.resolved_at || r.updated_at || Date.now());
+      if (dt.getFullYear() !== currentYear || dt.getMonth() !== currentMonth) return;
+      const day = dt.getDate();
+      const bucketIdx = Math.min(3, Math.floor((day - 1) / 7));
+      weekBuckets[bucketIdx].amount += disputeAmountFromReport(r);
+    });
+
+    return weekBuckets;
+  }
+
+  const yearRows = [
+    { name: 'Jan', amount: 0 },
+    { name: 'Feb', amount: 0 },
+    { name: 'Mar', amount: 0 },
+    { name: 'Apr', amount: 0 },
+    { name: 'May', amount: 0 },
+    { name: 'Jun', amount: 0 },
+    { name: 'Jul', amount: 0 },
+    { name: 'Aug', amount: 0 },
+    { name: 'Sep', amount: 0 },
+    { name: 'Oct', amount: 0 },
+    { name: 'Nov', amount: 0 },
+    { name: 'Dec', amount: 0 },
+  ];
+
+  reports.forEach((r) => {
+    const dt = new Date(r.resolved_at || r.updated_at || Date.now());
+    const monthIdx = dt.getMonth();
+    yearRows[monthIdx].amount += disputeAmountFromReport(r);
+  });
+
+  return yearRows;
+}
+
+const REFUND_CHART_H = 228;
+
+/** Fixed-size LineChart driven by container width — avoids ResponsiveContainer delay/clipping with percentage-height cards. */
+const RefundLineChart = memo(function RefundLineChart({ data, lineLabel, lineColor }) {
+  const wrapRef = useRef(null);
+  const [width, setWidth] = useState(0);
+
+  useLayoutEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return undefined;
+
+    const measure = () => {
+      const w = Math.floor(el.getBoundingClientRect().width);
+      if (w > 0) setWidth((prev) => (prev === w ? prev : w));
+    };
+
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  return (
+    <div ref={wrapRef} className="refund-chart-inner">
+      {width > 0 ? (
+        <LineChart
+          width={width}
+          height={REFUND_CHART_H}
+          data={data}
+          margin={{ top: 12, right: 12, left: 2, bottom: 28 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+          <XAxis
+            dataKey="name"
+            tick={{ fill: '#64748b', fontSize: 12 }}
+            tickLine={false}
+            axisLine={{ stroke: '#cbd5e1' }}
+            tickMargin={12}
+            padding={{ left: 12, right: 12 }}
+            height={44}
+          />
+          <YAxis
+            width={54}
+            tick={{ fill: '#64748b', fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={formatPeso}
+            domain={[0, 'auto']}
+          />
+          <Tooltip
+            formatter={(value) => formatPeso(value)}
+            contentStyle={{
+              borderRadius: 8,
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
+            }}
+          />
+          <Line
+            type="monotone"
+            dataKey="amount"
+            name={lineLabel}
+            stroke={lineColor}
+            strokeWidth={2}
+            dot={{ r: 3, strokeWidth: 2, fill: '#fff' }}
+            activeDot={{ r: 5 }}
+            isAnimationActive={false}
+          />
+        </LineChart>
+      ) : null}
+    </div>
+  );
+}, (prev, next) =>
+  prev.data === next.data &&
+  prev.lineLabel === next.lineLabel &&
+  prev.lineColor === next.lineColor
+);
 
 const Dashboard = () => {
+  const { transactions, fetchTransactions } = useTransactions();
   const [viewType, setViewType] = useState('week');
+  const [rangeStartDate, setRangeStartDate] = useState('');
+  const [rangeEndDate, setRangeEndDate] = useState('');
+  const [branches, setBranches] = useState(() => readBranchesCache());
+  const [issueReports, setIssueReports] = useState([]);
+  const [disputeChartType, setDisputeChartType] = useState('refund');
+  /** False until the first /branches + /issue-reports attempt finishes (success or fail). */
+  const [branchListFetchDone, setBranchListFetchDone] = useState(false);
 
-  // WEEKLY DATA
-  const weekData = [
-    { name: 'Monday', revenue: 4000 },
-    { name: 'Tuesday', revenue: 3000 },
-    { name: 'Wednesday', revenue: 2000 },
-    { name: 'Thursday', revenue: 2780 },
-    { name: 'Friday', revenue: 1890 },
-    { name: 'Saturday', revenue: 2390 },
-    { name: 'Sunday', revenue: 3090 },
-  ];
+  const fetchBranchesAndReports = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
 
-  // MONTHLY DATA (Week 1–4)
-  const monthData = [
-    { name: 'Week 1', revenue: 12000 },
-    { name: 'Week 2', revenue: 15000 },
-    { name: 'Week 3', revenue: 11000 },
-    { name: 'Week 4', revenue: 18000 },
-  ];
+      const headers = {
+        Accept: 'application/json',
+        Authorization: `Bearer ${token}`,
+      };
 
-  const chartData = viewType === 'week' ? weekData : monthData;
+      const [brRes, irRes] = await Promise.all([
+        fetch(`${API_URL}/branches`, { headers }),
+        fetch(`${API_URL}/issue-reports`, { headers }),
+      ]);
 
-  const transactions = [
-    { id: 'RCPT-00123', customer: 'Juan Dela Cruz', amount: 1250, date: 'Oct 20, 2025', status: 'Paid' },
-    { id: 'RCPT-00124', customer: 'Maria Santos', amount: 870, date: 'Oct 21, 2025', status: 'Unpaid' },
-    { id: 'RCPT-00125', customer: 'Jose Ramirez', amount: 1050, date: 'Oct 22, 2025', status: 'Paid' },
-  ];
+      if (brRes.ok) {
+        const ct = String(brRes.headers.get('content-type') || '').toLowerCase();
+        if (ct.includes('application/json')) {
+          const data = await brRes.json();
+          const rows = Array.isArray(data) ? data : [];
+          setBranches(rows);
+          writeBranchesCache(rows);
+        }
+      }
 
-  // Helper to format amount with peso sign
-  const formatPeso = (value) => `₱${value.toLocaleString()}`;
+      if (irRes.ok) {
+        const ct = String(irRes.headers.get('content-type') || '').toLowerCase();
+        if (ct.includes('application/json')) {
+          const data = await irRes.json();
+          setIssueReports(Array.isArray(data) ? data : []);
+        }
+      } else if (irRes.status === 401 || irRes.status === 403) {
+        setIssueReports([]);
+      }
+    } catch (e) {
+      console.error('Dashboard refund data:', e);
+    } finally {
+      setBranchListFetchDone(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTransactions();
+    fetchBranchesAndReports();
+    const intervalId = setInterval(() => {
+      fetchTransactions();
+      fetchBranchesAndReports();
+    }, POLL_MS);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        fetchTransactions();
+        fetchBranchesAndReports();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [fetchTransactions, fetchBranchesAndReports]);
+
+  const activeTransactions = useMemo(
+    () => transactions.filter((t) => !t.archived),
+    [transactions]
+  );
+
+  /** One range object per view — avoids calling getViewDateBounds twice per render. */
+  const viewBounds = useMemo(() => {
+    const parsedYearDate = new Date(rangeStartDate || new Date().toISOString().slice(0, 10));
+    const hasValidYearDate = !Number.isNaN(parsedYearDate.getTime());
+    const referenceDate = viewType === 'year' && hasValidYearDate ? parsedYearDate : new Date();
+    return getViewDateBounds(viewType, referenceDate);
+  }, [viewType, rangeStartDate]);
+
+  const filteredTransactions = useMemo(() => {
+    const { start, end } = viewBounds;
+    const hasStartDate = Boolean(rangeStartDate);
+    const hasEndDate = Boolean(rangeEndDate);
+    const startDate = hasStartDate ? new Date(`${rangeStartDate}T00:00:00`) : null;
+    const endDate = hasEndDate ? new Date(`${rangeEndDate}T23:59:59.999`) : null;
+
+    return activeTransactions.filter((t) => {
+      const dt = new Date(t.created_at || t.updated_at || Date.now());
+      if (dt < start || dt > end) return false;
+      if (startDate && dt < startDate) return false;
+      if (endDate && dt > endDate) return false;
+      return true;
+    });
+  }, [activeTransactions, viewBounds, rangeStartDate, rangeEndDate]);
+
+  const disputesInView = useMemo(() => {
+    const { start, end } = viewBounds;
+    const resolutionType = DISPUTE_CHART_CONFIG[disputeChartType]?.resolutionType || 'refund';
+    return issueReports.filter((r) => {
+      if (String(r.status || '').toLowerCase() !== 'resolved') return false;
+      if (String(r.resolution_type || '').toLowerCase() !== resolutionType) return false;
+      const dt = new Date(r.resolved_at || r.updated_at || 0);
+      return dt >= start && dt <= end;
+    });
+  }, [issueReports, viewBounds, disputeChartType]);
+
+  const sortedBranchesFromApi = useMemo(
+    () => [...branches].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
+    [branches]
+  );
+
+  /**
+   * Prefer GET /branches. If that list is empty (e.g. still loading, or some roles get 403),
+   * derive branch rows from issue reports so refund-by-branch still works.
+   */
+  const branchesForRefunds = useMemo(() => {
+    if (sortedBranchesFromApi.length > 0) return sortedBranchesFromApi;
+    const map = new Map();
+    issueReports.forEach((r) => {
+      const id = Number(r.branch_id);
+      if (!Number.isFinite(id) || id <= 0) return;
+      if (!map.has(id)) {
+        map.set(id, { id, name: String(r.branch_name || `Branch ${id}`) });
+      }
+    });
+    return [...map.values()].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  }, [sortedBranchesFromApi, issueReports]);
+
+  const disputeStatsByBranch = useMemo(() => {
+    const map = new Map();
+    branchesForRefunds.forEach((b) => {
+      const id = Number(b.id);
+      const list = disputesInView.filter((r) => Number(r.branch_id) === id);
+      const total = list.reduce((sum, r) => sum + disputeAmountFromReport(r), 0);
+      map.set(id, { count: list.length, total, chart: buildDisputeSeries(viewType, list) });
+    });
+    return map;
+  }, [branchesForRefunds, disputesInView, viewType]);
+
+  const caseStatusStatsByBranch = useMemo(() => {
+    const map = new Map();
+    branchesForRefunds.forEach((branch) => {
+      const id = Number(branch.id);
+      const list = issueReports.filter((r) => Number(r.branch_id) === id);
+      map.set(id, buildResolvedUnresolvedSeries(viewType, list, viewBounds.start));
+    });
+    return map;
+  }, [branchesForRefunds, issueReports, viewType, viewBounds.start]);
+
+  const paidTotal = useMemo(
+    () =>
+      filteredTransactions
+        .filter((t) => t.payment_status === 'paid')
+        .reduce((sum, t) => sum + (Number(t.amount) || 0), 0),
+    [filteredTransactions]
+  );
+
+  const debitCount = useMemo(
+    () => filteredTransactions.filter((t) => t.payment_status === 'unpaid').length,
+    [filteredTransactions]
+  );
+
+  const inShopCount = useMemo(
+    () => filteredTransactions.filter((t) => t.inventory_status === 'in_shop').length,
+    [filteredTransactions]
+  );
+
+  const overdueCount = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return filteredTransactions.filter((t) => {
+      if (t.inventory_status !== 'in_shop' || !t.due_date) return false;
+      const due = parseDateOnlyAsLocal(t.due_date);
+      if (!due) return false;
+      due.setHours(0, 0, 0, 0);
+      return due < today;
+    }).length;
+  }, [filteredTransactions]);
+
+  const todayData = useMemo(() => {
+    const labels = ['8AM', '10AM', '12PM', '2PM', '4PM', '6PM'];
+    const buckets = labels.map((name) => ({ name, revenue: 0, unpaid: 0 }));
+    const START_HOUR = 8;
+    const END_HOUR = 18;
+
+    filteredTransactions.forEach((t) => {
+      const dt = new Date(t.created_at || t.updated_at || Date.now());
+      const hour = dt.getHours();
+      if (hour < START_HOUR || hour > END_HOUR) return;
+      const idx = Math.min(labels.length - 1, Math.floor((hour - START_HOUR) / 2));
+      const amount = Number(t.amount) || 0;
+      if (t.payment_status === 'paid') buckets[idx].revenue += amount;
+      else buckets[idx].unpaid += amount;
+    });
+
+    return buckets;
+  }, [filteredTransactions]);
+
+  const weekData = useMemo(() => {
+    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const now = new Date();
+    const dow = now.getDay();
+    const mondayOffset = dow === 0 ? -6 : 1 - dow;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + mondayOffset);
+    monday.setHours(0, 0, 0, 0);
+
+    const weekEnd = new Date(monday);
+    weekEnd.setDate(monday.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const rows = Array.from({ length: 7 }).map((_, idx) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + idx);
+      return {
+        name: dayLabels[idx],
+        key: d.toDateString(),
+        revenue: 0,
+        unpaid: 0,
+      };
+    });
+
+    filteredTransactions.forEach((t) => {
+      const dt = new Date(t.created_at || t.updated_at || Date.now());
+      if (dt < monday || dt > weekEnd) return;
+      const key = dt.toDateString();
+      const row = rows.find((r) => r.key === key);
+      if (!row) return;
+      const amount = Number(t.amount) || 0;
+      if (t.payment_status === 'paid') row.revenue += amount;
+      else row.unpaid += amount;
+    });
+
+    return rows.map(({ name, revenue, unpaid }) => ({ name, revenue, unpaid }));
+  }, [filteredTransactions]);
+
+  const monthData = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const weekBuckets = [
+      { name: 'Week 1', revenue: 0, unpaid: 0 },
+      { name: 'Week 2', revenue: 0, unpaid: 0 },
+      { name: 'Week 3', revenue: 0, unpaid: 0 },
+      { name: 'Week 4', revenue: 0, unpaid: 0 },
+    ];
+
+    filteredTransactions.forEach((t) => {
+      const dt = new Date(t.created_at || t.updated_at || Date.now());
+      if (dt.getFullYear() !== currentYear || dt.getMonth() !== currentMonth) return;
+      const day = dt.getDate();
+      const bucketIdx = Math.min(3, Math.floor((day - 1) / 7));
+      const amount = Number(t.amount) || 0;
+      if (t.payment_status === 'paid') weekBuckets[bucketIdx].revenue += amount;
+      else weekBuckets[bucketIdx].unpaid += amount;
+    });
+
+    return weekBuckets;
+  }, [filteredTransactions]);
+
+  const yearData = useMemo(() => {
+    const rows = [
+      { name: 'Jan', revenue: 0, unpaid: 0 },
+      { name: 'Feb', revenue: 0, unpaid: 0 },
+      { name: 'Mar', revenue: 0, unpaid: 0 },
+      { name: 'Apr', revenue: 0, unpaid: 0 },
+      { name: 'May', revenue: 0, unpaid: 0 },
+      { name: 'Jun', revenue: 0, unpaid: 0 },
+      { name: 'Jul', revenue: 0, unpaid: 0 },
+      { name: 'Aug', revenue: 0, unpaid: 0 },
+      { name: 'Sep', revenue: 0, unpaid: 0 },
+      { name: 'Oct', revenue: 0, unpaid: 0 },
+      { name: 'Nov', revenue: 0, unpaid: 0 },
+      { name: 'Dec', revenue: 0, unpaid: 0 },
+    ];
+
+    filteredTransactions.forEach((t) => {
+      const dt = new Date(t.created_at || t.updated_at || Date.now());
+      const monthIdx = dt.getMonth();
+      const amount = Number(t.amount) || 0;
+      if (t.payment_status === 'paid') rows[monthIdx].revenue += amount;
+      else rows[monthIdx].unpaid += amount;
+    });
+
+    return rows;
+  }, [filteredTransactions]);
+
+  const chartData = useMemo(() => {
+    if (viewType === 'today') return todayData;
+    if (viewType === 'week') return weekData;
+    if (viewType === 'month') return monthData;
+    return yearData;
+  }, [viewType, todayData, weekData, monthData, yearData]);
+
+  /** Stable empty series for dispute fallback. */
+  const emptyDisputeChart = useMemo(() => buildDisputeSeries(viewType, []), [viewType]);
+
+  const revenueTooltipFormatter = useCallback((value) => formatPeso(value), []);
+  const revenueYAxisTick = useCallback((value) => formatPeso(value), []);
+  const revenueLegendFormatter = useCallback(
+    (value) => <span style={{ color: '#334155', fontSize: 13 }}>{value}</span>,
+    []
+  );
+
+  const recentTransactions = useMemo(
+    () =>
+      [...filteredTransactions]
+        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+        .slice(0, 5),
+    [filteredTransactions]
+  );
+
+  const setViewToday = useCallback(() => setViewType('today'), []);
+  const setViewWeek = useCallback(() => setViewType('week'), []);
+  const setViewMonth = useCallback(() => setViewType('month'), []);
+  const setViewYear = useCallback(() => setViewType('year'), []);
+  const clearDateRange = useCallback(() => {
+    setRangeStartDate('');
+    setRangeEndDate('');
+  }, []);
+  const onDisputeChartTypeChange = useCallback((e) => {
+    setDisputeChartType(e.target.value);
+  }, []);
 
   return (
     <DashboardLayout>
+      <div className="page-header-block">
+        <h2 className="page-header-title">Dashboard</h2>
+        <p className="page-header-subtitle">Overview of sales, inventory, and dispute activity</p>
+      </div>
       <div className='main-cards'>
 
         {/* SMALL CARDS */}
         <div className='card-small'>
           <div className="card-total">
-            <div className="chart-title">Total Orders</div>
+            <div className="chart-title">Total Sales</div>
             <div className="icon-value">
-              <span>{formatPeso(transactions.reduce((sum, t) => sum + t.amount, 0))}</span>
+              <span>{formatPeso(paidTotal)}</span>
             </div>
           </div>
 
           <div className='chart-pending'>
-            <div className="chart-title">Pending Sales</div>
+            <div className="chart-title"> Debit Sales</div>
             <div className="icon-value">
-              <BsClockHistory className="icon" />
-              <span>{transactions.filter(t => t.status === 'Unpaid').length}</span>
+              <BsCreditCard className="icon" />
+              <span>{debitCount}</span>
             </div>
           </div>
+
+
+
 
           <div className='card-items'>
             <div className="chart-title">Items in Shop</div>
             <div className="icon-value">
               <BsBoxSeam className="icon" />
-              <span>5</span>
+              <span>{inShopCount}</span>
             </div>
           </div>
 
@@ -71,44 +658,182 @@ const Dashboard = () => {
             <div className="chart-title">Overdue Items</div>
             <div className="icon-value">
               <BsExclamationTriangle className="icon" />
-              <span>2</span>
+              <span>{overdueCount}</span>
             </div>
           </div>
         </div>
 
         {/* REVENUE LINE CHART */}
-        <Card title="Revenue">
+        <Card title="Revenue and Debit sales">
           <div className="chart-controls">
-            <button 
+            <button
+              className={`chart-toggle-btn ${viewType === 'today' ? 'active' : ''}`}
+              onClick={setViewToday}
+            >
+              Today
+            </button>
+            <button
               className={`chart-toggle-btn ${viewType === 'week' ? 'active' : ''}`}
-              onClick={() => setViewType('week')}
+              onClick={setViewWeek}
             >
               Weekly
             </button>
-            <button 
+            <button
               className={`chart-toggle-btn ${viewType === 'month' ? 'active' : ''}`}
-              onClick={() => setViewType('month')}
+              onClick={setViewMonth}
             >
               Monthly
             </button>
+            <button
+              className={`chart-toggle-btn ${viewType === 'year' ? 'active' : ''}`}
+              onClick={setViewYear}
+            >
+              Yearly
+            </button>
+            <div className={`chart-date-range${rangeStartDate || rangeEndDate ? ' chart-date-range--active' : ''}`}>
+              <DatePicker
+                selected={rangeStartDate ? new Date(`${rangeStartDate}T00:00:00`) : null}
+                onChange={(date) => {
+                  const v = date ? date.toISOString().slice(0, 10) : '';
+                  setRangeStartDate(v);
+                  if (v && rangeEndDate && v > rangeEndDate) setRangeEndDate('');
+                }}
+                selectsStart
+                startDate={rangeStartDate ? new Date(`${rangeStartDate}T00:00:00`) : null}
+                endDate={rangeEndDate ? new Date(`${rangeEndDate}T00:00:00`) : null}
+                maxDate={rangeEndDate ? new Date(`${rangeEndDate}T00:00:00`) : new Date()}
+                dateFormat="dd/MM/yyyy"
+                placeholderText="dd/mm/yyyy"
+                className="chart-year-date"
+                todayButton="Today"
+                isClearable={false} /* We handle clearing with your custom X button */
+              />
+
+              <span className="chart-date-range-sep">to</span>
+
+              <DatePicker
+                selected={rangeEndDate ? new Date(`${rangeEndDate}T00:00:00`) : null}
+                onChange={(date) => {
+                  const v = date ? date.toISOString().slice(0, 10) : '';
+                  setRangeEndDate(v);
+                  if (v && rangeStartDate && v < rangeStartDate) setRangeStartDate('');
+                }}
+                selectsEnd
+                startDate={rangeStartDate ? new Date(`${rangeStartDate}T00:00:00`) : null}
+                endDate={rangeEndDate ? new Date(`${rangeEndDate}T00:00:00`) : null}
+                minDate={rangeStartDate ? new Date(`${rangeStartDate}T00:00:00`) : undefined}
+                maxDate={new Date()}
+                dateFormat="dd/MM/yyyy"
+                placeholderText="dd/mm/yyyy"
+                className="chart-year-date"
+                todayButton="Today"
+                isClearable={false}
+              />
+              {(rangeStartDate || rangeEndDate) && (
+                <button
+                  type="button"
+                  className="chart-date-range-clear"
+                  onClick={clearDateRange}
+                  title="Clear date range"
+                  aria-label="Clear date range"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           </div>
 
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" />
+              <Legend
+                verticalAlign="top"
+                align="center"
+                iconType="circle"
+                iconSize={10}
+                wrapperStyle={{ paddingBottom: 8 }}
+                formatter={revenueLegendFormatter}
+              />
               <XAxis dataKey="name" />
-              <YAxis tickFormatter={(value) => `₱${value}`} />
-              <Tooltip formatter={(value) => formatPeso(value)} />
-              <Line 
+              <YAxis tickFormatter={revenueYAxisTick} />
+              <Tooltip formatter={revenueTooltipFormatter} />
+              <Line
                 type="monotone"
                 dataKey="revenue"
+                name="Revenue"
                 stroke="#185BCB"
                 strokeWidth={3}
-                dot={{ r: 5 }}
+                dot={{ r: 4 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="unpaid"
+                name="Debit sales"
+                stroke="#E63946"
+                strokeWidth={3}
+                dot={{ r: 4 }}
               />
             </LineChart>
           </ResponsiveContainer>
         </Card>
+
+        <div className="dashboard-refunds-section">
+          {!branchListFetchDone && branchesForRefunds.length === 0 ? (
+            <p className="dashboard-refunds-empty">Loading branch data…</p>
+          ) : branchesForRefunds.length === 0 ? (
+            <p className="dashboard-refunds-empty">No branches available for your account.</p>
+          ) : (
+            branchesForRefunds.map((branch) => {
+              const config = DISPUTE_CHART_CONFIG[disputeChartType] || DISPUTE_CHART_CONFIG.refund;
+              const stats = disputeStatsByBranch.get(Number(branch.id)) || {
+                count: 0,
+                total: 0,
+                chart: emptyDisputeChart,
+              };
+              return (
+                <Card key={`disputes-${disputeChartType}-branch-${branch.id}`}>
+                  <div className="refund-card-header">
+                    <h3 className="refund-card-title">{`${config.pluralLabel} — ${branch.name || `Branch ${branch.id}`}`}</h3>
+                    <div className="refund-type-filter">
+                      <label htmlFor={`dispute-chart-type-${branch.id}`}>Type</label>
+                      <select
+                        id={`dispute-chart-type-${branch.id}`}
+                        value={disputeChartType}
+                        onChange={onDisputeChartTypeChange}
+                      >
+                        <option value="refund">Refund</option>
+                        <option value="backjob">Backjob</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="refund-branch-kpis">
+                    <div className="refund-kpi">
+                      <span className="refund-kpi-label">Total {config.label.toLowerCase()} amount (est.)</span>
+                      <span className="refund-kpi-value">{formatPeso(stats.total)}</span>
+                    </div>
+                    <div className="refund-kpi refund-kpi-chart">
+                      <span className="refund-kpi-label">Resolved vs unresolved</span>
+                      <div className="refund-kpi-chart-wrap">
+                        <IssueStatusChart
+                          data={caseStatusStatsByBranch.get(Number(branch.id)) || []}
+                          height={150}
+                          emptyMessage="No issue cases in this period."
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="refund-chart-wrap">
+                    <RefundLineChart
+                      data={stats.chart}
+                      lineLabel={config.pluralLabel}
+                      lineColor={config.lineColor}
+                    />
+                  </div>
+                </Card>
+              );
+            })
+          )}
+        </div>
 
         {/* RECENT TRANSACTIONS TABLE */}
         <Card title="Recent Transactions">
@@ -124,13 +849,13 @@ const Dashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {transactions.map((t) => (
-                  <tr key={t.id}>
-                    <td>{t.id}</td>
-                    <td>{t.customer}</td>
-                    <td>{formatPeso(t.amount)}</td>
-                    <td>{t.date}</td>
-                    <td>{t.status}</td>
+                {recentTransactions.map((t) => (
+                  <tr key={t.id || t.receipt}>
+                    <td>{t.receipt || 'N/A'}</td>
+                    <td>{t.customer_name || 'N/A'}</td>
+                    <td>{formatPeso(Number(t.amount) || 0)}</td>
+                    <td>{new Date(t.created_at || Date.now()).toLocaleDateString()}</td>
+                    <td>{(t.payment_status || '').toLowerCase() === 'paid' ? 'Paid' : 'Unpaid'}</td>
                   </tr>
                 ))}
               </tbody>

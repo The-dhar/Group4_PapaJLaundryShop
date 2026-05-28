@@ -46,6 +46,11 @@
     color: #075985;
 }
 
+.status-backjob {
+    background: #fef3c7;
+    color: #92400e;
+}
+
 .receipt-warning {
     color: #b91c1c;
     font-weight: 600;
@@ -570,6 +575,371 @@
 
 .confirm-btn.archive:hover {
     background: #4b5563;
+}
+
+.receipt-btn-report {
+    background-color: #0f766e;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s;
+    min-width: 170px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.receipt-btn-report:hover {
+    background-color: #0b5e58;
+}
+
+/** Shown when this transaction already has an issue report (matches hosted Receipt UI). */
+.receipt-report-status-pill {
+    background-color: #7d9a83;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    min-width: 170px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: default;
+    user-select: none;
+}
+
+.receipt-report-status-pill svg {
+    flex-shrink: 0;
+}
+
+.receipt-btn-report-submit {
+    background: #0f766e;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    min-width: 140px;
+}
+
+.receipt-btn-report-submit:disabled,
+.receipt-btn-report:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.receipt-report-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001;
+    padding: 16px;
+}
+
+.receipt-report-modal {
+    width: min(480px, 96vw);
+    max-width: 96vw;
+    background: #fff;
+    border-radius: 12px;
+    padding: 18px;
+    box-shadow: 0 16px 34px rgba(0, 0, 0, 0.28);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: relative;
+}
+
+.receipt-report-modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.receipt-report-modal h3 {
+    margin: 0 0 2px;
+    color: #0f172a;
+}
+
+.receipt-report-modal-header h3 {
+    margin: 0;
+    flex: 1;
+    min-width: 0;
+}
+
+.receipt-report-help-anchor {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.receipt-report-help-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border: none;
+    background: transparent;
+    color: #475569;
+    cursor: pointer;
+    border-radius: 999px;
+    line-height: 0;
+}
+
+.receipt-report-help-btn:hover,
+.receipt-report-help-btn:focus-visible {
+    color: #0f172a;
+    background: #f1f5f9;
+    outline: none;
+}
+
+.receipt-report-help-btn:focus-visible {
+    box-shadow: 0 0 0 2px #fff, 0 0 0 4px #94a3b8;
+}
+
+.receipt-report-help-popover {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    z-index: 3;
+    width: min(340px, calc(95vw - 48px));
+    max-height: min(420px, 65vh);
+    overflow-y: auto;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid #fcd34d;
+    background: #fffbeb;
+    color: #78350f;
+    font-size: 12px;
+    line-height: 1.45;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+    animation: popIn 0.15s ease;
+}
+
+.receipt-report-help-popover-warning {
+    margin: 0 0 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(252, 211, 77, 0.6);
+    font-weight: 600;
+    color: #92400e;
+}
+
+.receipt-report-help-popover-title {
+    display: block;
+    color: #92400e;
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+.receipt-report-help-popover-extra {
+    margin: 10px 0 0;
+    padding-top: 10px;
+    border-top: 1px solid rgba(252, 211, 77, 0.6);
+    color: #78350f;
+}
+
+.receipt-report-inline-alert {
+    margin: 0 0 8px;
+    font-size: 12px;
+    color: #b45309;
+    line-height: 1.4;
+}
+
+.receipt-report-sub {
+    margin: 0 0 8px;
+    color: #475467;
+    font-size: 13px;
+}
+
+.receipt-report-lines-fieldset {
+    border: none;
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+}
+
+.receipt-report-lines-legend {
+    font-size: 12px;
+    font-weight: 600;
+    color: #334155;
+    margin: 6px 0 6px;
+    padding: 0;
+}
+
+.receipt-report-line-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Two columns per row when 2+ service lines: [cell][cell] / [cell][cell] … */
+.receipt-report-line-grid--cols2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 12px;
+    align-items: stretch;
+    width: 100%;
+}
+
+@media (max-width: 420px) {
+    .receipt-report-line-grid--cols2 {
+        grid-template-columns: 1fr;
+    }
+}
+
+.receipt-report-line-cell {
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    border-radius: 10px;
+    padding: 10px 12px;
+    min-width: 0;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.receipt-report-line-cell:focus-within {
+    border-color: #94a3b8;
+    background: #fff;
+}
+
+.receipt-report-line-cell:has(input:checked) {
+    border-color: #5eead4;
+    background: #f0fdfa;
+}
+
+.receipt-report-line-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 0;
+    font-size: 13px;
+    color: #0f172a;
+    cursor: pointer;
+    line-height: 1.4;
+    width: 100%;
+}
+
+.receipt-report-line-check {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 20px;
+    min-height: 1.4em;
+    padding-top: 1px;
+}
+
+.receipt-report-line-check input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: #0d9488;
+}
+
+.receipt-report-line-option-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.receipt-report-line-name {
+    font-weight: 600;
+    color: #0f172a;
+    word-break: break-word;
+}
+
+.receipt-report-line-meta {
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.receipt-report-lines-hint {
+    margin: 8px 0 0;
+    font-size: 11px;
+    color: #64748b;
+    line-height: 1.4;
+}
+
+.receipt-report-policy-option2 {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  font-size: 12px;
+  color: #78350f;
+  line-height: 1.45;
+}
+
+.receipt-report-policy-option2 strong {
+  color: #92400e;
+  font-size: 13px;
+}
+
+.receipt-report-policy-list {
+  margin: 8px 0 0 0;
+  padding-left: 18px;
+}
+
+.receipt-report-policy-list li {
+  margin-bottom: 6px;
+}
+
+.receipt-report-required-mark {
+  color: #b45309;
+  font-weight: 700;
+}
+
+.receipt-report-note {
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #facc15;
+    background: #fffbeb;
+    color: #854d0e;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.receipt-report-modal label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #334155;
+    margin-top: 6px;
+}
+
+.receipt-report-modal select,
+.receipt-report-modal textarea {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 13px;
+    resize: vertical;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+
+.receipt-report-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 10px;
 }
 
 @keyframes popIn {

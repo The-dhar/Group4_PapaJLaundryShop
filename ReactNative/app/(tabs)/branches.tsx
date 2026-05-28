@@ -1,46 +1,49 @@
 import { useRouter } from 'expo-router';
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
+  ActivityIndicator,
+  Alert,
   Modal,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  Alert
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from "@/contexts/AuthContext";
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { API_URL } from "../config/api";
-
-/* -----------------------------
-   Branch Type
-------------------------------*/
+import { API_URL } from "../../config/api";
 
 type Branch = {
   id: number;
   name: string;
-  email: string;
+  clerk_username?: string | null;
+  is_active?: boolean;
   created_at?: string;
 };
 
 const BranchAccountManager = () => {
-
   const router = useRouter();
+  const { token, logout } = useAuth();
   const [open, setOpen] = useState(false);
 
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [isLoadingBranches, setIsLoadingBranches] = useState(true);
+  const [staffUsers, setStaffUsers] = useState<any[]>([]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [branchName, setBranchName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
-  const [formData, setFormData] = useState({
-    branchName: '',
-    email: '',
-    password: '',
-  });
+  const ITEMS_PER_PAGE = 5;
 
   const handleProfile = () => {
     setOpen(false);
@@ -49,107 +52,186 @@ const BranchAccountManager = () => {
 
   const handleLogout = async () => {
     setOpen(false);
-    await AsyncStorage.removeItem("token");
-    router.replace("/login");
+    await logout();
+    router.replace("/(openingApps)/login");
   };
 
-  /* -----------------------------
-     Load Branches
-  ------------------------------*/
-
-  const loadBranches = async () => {
-
+  const loadBranches = useCallback(async () => {
     try {
+      if (!token) {
+        setIsLoadingBranches(false);
+        return;
+      }
 
-      const token = await AsyncStorage.getItem("token");
+      setIsLoadingBranches(true);
+      const headers = { Authorization: `Bearer ${token}`, Accept: "application/json" };
+      const [branchesRes, staffRes] = await Promise.all([
+        fetch(`${API_URL}/branches`, { headers }),
+        fetch(`${API_URL}/staff-accounts`, { headers }).catch(() => ({ ok: false }))
+      ]);
 
-      const response = await fetch(`${API_URL}/branches`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json"
-        }
-      });
+      const brData = branchesRes.ok ? await branchesRes.json() : [];
+      const staffData = staffRes && staffRes.ok ? await staffRes.json() : [];
 
-      const data: Branch[] = await response.json();
-
-      setBranches(data);
-
+      setBranches(Array.isArray(brData) ? brData : []);
+      setStaffUsers(Array.isArray(staffData) ? staffData : []);
     } catch (error) {
       console.log(error);
+    } finally {
+      setIsLoadingBranches(false);
     }
-  };
+  }, [token]);
 
-  useEffect(() => {
-    loadBranches();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadBranches();
+    }, [loadBranches])
+  );
 
-  /* -----------------------------
-     Create Branch
-  ------------------------------*/
+  const branchesSorted = useMemo(() => {
+    return [...branches].sort((a, b) => {
+      const nameA = String(a.name || '').trim();
+      const nameB = String(b.name || '').trim();
+      const compare = nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+      return sortOrder === 'asc' ? compare : -compare;
+    });
+  }, [branches, sortOrder]);
+
+  const paginatedBranches = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return branchesSorted.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [branchesSorted, currentPage]);
+
+  const totalPages = Math.ceil(branchesSorted.length / ITEMS_PER_PAGE);
 
   const handleConfirm = async () => {
-
-    if (!formData.branchName || !formData.email || !formData.password) {
-      Alert.alert("Error", "All fields are required");
+    const name = branchName.trim();
+    if (!name) {
+      Alert.alert("Error", "Branch name is required.");
       return;
     }
 
     try {
+      setIsSaving(true);
+      if (!token) {
+        Alert.alert("Error", "Not signed in.");
+        return;
+      }
 
-      const token = await AsyncStorage.getItem("token");
-
-      const response = await fetch(`${API_URL}/branches`, {
-
-        method: "POST",
-
+      const isEditing = editingBranch !== null;
+      const endpoint = isEditing
+        ? `${API_URL}/branches/${editingBranch.id}`
+        : `${API_URL}/branches`;
+      const response = await fetch(endpoint, {
+        method: isEditing ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
           Accept: "application/json"
         },
-
-        body: JSON.stringify({
-          branchName: formData.branchName,
-          email: formData.email,
-          password: formData.password
-        })
-
+        body: JSON.stringify({ name })
       });
 
-      const newBranch: Branch = await response.json();
+      if (!response.ok) {
+        let msg = isEditing
+          ? `Could not update branch (${response.status}).`
+          : `Could not create branch (${response.status}).`;
+        try {
+          const err = await response.json();
+          if (err?.message) msg = typeof err.message === "string" ? err.message : msg;
+        } catch { /* ignore */ }
+        Alert.alert("Error", msg);
+        return;
+      }
 
-      setBranches([...branches, newBranch]);
-
+      const savedBranch: Branch = await response.json();
+      if (isEditing) {
+        setBranches((prev) =>
+          prev.map((b) => (b.id === editingBranch.id ? { ...b, ...savedBranch, name } : b))
+        );
+      } else {
+        setBranches((prev) => [...prev, savedBranch]);
+      }
       setIsModalOpen(false);
-
-      setFormData({
-        branchName: '',
-        email: '',
-        password: ''
-      });
-
+      setEditingBranch(null);
+      setBranchName('');
+      Alert.alert("Success", isEditing ? "Branch updated successfully." : "Branch created successfully.");
     } catch (error) {
       console.log(error);
-      Alert.alert("Error", "Failed to create branch");
+      Alert.alert("Error", editingBranch ? "Failed to update branch." : "Failed to create branch.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleDelete = () => {
+  const handleClear = () => {
     setIsModalOpen(false);
-    setFormData({ branchName: '', email: '', password: '' });
+    setEditingBranch(null);
+    setBranchName('');
+  };
+
+  const handleEditBranch = (branch: Branch) => {
+    setEditingBranch(branch);
+    setBranchName(branch.name || '');
+    setIsModalOpen(true);
   };
 
   const handleViewBranch = (branch: Branch) => {
-
     router.push({
       pathname: '/dashboardbyaccount',
       params: {
         branchId: branch.id.toString(),
         branchName: branch.name,
-        username: branch.email,
-        createdAt: branch.created_at,
+        createdAt: branch.created_at ?? '',
       },
     });
+  };
+
+  const toggleEditingBranchStatus = async () => {
+    if (!editingBranch || !token) return;
+
+    const isActive = editingBranch.is_active !== false;
+    const endpoint = isActive
+      ? `${API_URL}/branches/${editingBranch.id}/deactivate`
+      : `${API_URL}/branches/${editingBranch.id}/activate`;
+
+    try {
+      setIsUpdatingStatus(true);
+      const response = await fetch(endpoint, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        Alert.alert('Error', `Could not ${isActive ? 'deactivate' : 'reactivate'} branch.`);
+        return;
+      }
+
+      const payload = await response.json().catch(() => ({}));
+      const updatedBranch: Branch = {
+        ...editingBranch,
+        ...(payload?.branch || {}),
+        is_active: payload?.branch?.is_active ?? !isActive,
+      };
+
+      setBranches((prev) =>
+        prev.map((b) =>
+          b.id === editingBranch.id
+            ? updatedBranch
+            : b
+        )
+      );
+      setEditingBranch(updatedBranch);
+      Alert.alert('Success', `Branch ${isActive ? 'deactivated' : 'reactivated'} successfully.`);
+    } catch (error) {
+      console.log(error);
+      Alert.alert('Error', `Failed to ${isActive ? 'deactivate' : 'reactivate'} branch.`);
+    } finally {
+      setIsUpdatingStatus(false);
+    }
   };
 
   return (
@@ -158,7 +240,7 @@ const BranchAccountManager = () => {
       <View style={styles.header}>
 
         <View style={styles.headerLeft}>
-          <Text style={styles.headerText}>Branch Accounts</Text>
+          <Text style={styles.headerText}>Branches</Text>
           <View style={styles.headerAccent} />
         </View>
 
@@ -207,7 +289,7 @@ const BranchAccountManager = () => {
               <View style={styles.iconWrapper}>
                 <Ionicons name="location" size={22} color="#3b82f6" />
               </View>
-              <Text style={styles.listHeaderText}>Branch Name</Text>
+              <Text style={styles.listHeaderText}>Branch name</Text>
             </View>
 
             <TouchableOpacity
@@ -220,52 +302,117 @@ const BranchAccountManager = () => {
 
           </View>
 
+          <View style={styles.filterBar}>
+            <TouchableOpacity
+              style={styles.sortButton}
+              onPress={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+            >
+              <Ionicons
+                name={sortOrder === 'asc' ? 'arrow-up' : 'arrow-down'}
+                size={16}
+                color="#3b82f6"
+              />
+              <Text style={styles.sortButtonText}>
+                {sortOrder === 'asc' ? 'A-Z' : 'Z-A'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.tableContent}>
 
-            {branches.map((branch, index) => (
+            {isLoadingBranches && branchesSorted.length === 0 ? (
+              <View style={styles.loadingState}>
+                <ActivityIndicator size="large" color="#3b82f6" />
+              </View>
+            ) : (
 
-              <View key={branch.id} style={styles.branchRowWrapper}>
+              paginatedBranches.map((branch, index) => (
 
-                <View style={styles.branchRow}>
-
-                  <View style={styles.branchLeft}>
-
-                    <View style={styles.branchIconContainer}>
-                      <Ionicons name="business" size={20} color="#3b82f6" />
-                    </View>
-
-                    <View style={styles.branchInfo}>
-                      <Text style={styles.branchName}>{branch.name}</Text>
-                      <Text style={styles.branchUsername}>@{branch.email}</Text>
-                    </View>
-
-                  </View>
+                <View key={branch.id} style={styles.branchRowWrapper}>
 
                   <TouchableOpacity
+                    style={styles.branchRow}
+                    activeOpacity={0.92}
                     onPress={() => handleViewBranch(branch)}
-                    style={styles.viewButton}
                   >
-                    <Ionicons name="eye" size={16} color="#fff" />
-                    <Text style={styles.viewButtonText}>View</Text>
+
+                    <View style={styles.branchLeft}>
+
+                      <View style={styles.branchIconContainer}>
+                        <Ionicons name="business" size={20} color="#3b82f6" />
+                      </View>
+
+                      <View style={styles.branchInfo}>
+                        <View style={styles.branchTopRow}>
+                          <Text style={styles.branchName} numberOfLines={1}>{branch.name}</Text>
+                          <View style={styles.inlineActions}>
+                            <TouchableOpacity
+                              onPress={(event) => {
+                                event.stopPropagation();
+                                handleEditBranch(branch);
+                              }}
+                              style={styles.editButtonInline}
+                            >
+                              <Ionicons name="create-outline" size={22} color="#3b82f6" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                        <Text style={styles.branchUsername} numberOfLines={1}>
+                          {branch.is_active === false ? 'Inactive · ' : ''}
+                          Clerk: {
+                            (() => {
+                              // Try to resolve clerk to a staff account by username first
+                              const byUsername = staffUsers.find((s) =>
+                                String(s.username || "").toLowerCase() === String(branch.clerk_username || "").toLowerCase()
+                              );
+                              if (byUsername) return byUsername.name || `@${byUsername.username || branch.clerk_username}`;
+                              // Fallback: find staff assigned to this branch
+                              const byBranch = staffUsers.find((s) => Number(s.branch_id) === Number(branch.id));
+                              if (byBranch) return byBranch.name || `@${byBranch.username || byBranch.email?.split('@')[0]}`;
+                              // Last fallback: show clerk_username if present
+                              return branch.clerk_username?.trim() ? `@${branch.clerk_username}` : '—';
+                            })()
+                          }
+                        </Text>
+                      </View>
+
+                    </View>
                   </TouchableOpacity>
+
+                  {index < paginatedBranches.length - 1 && (
+                    <View style={styles.rowDivider} />
+                  )}
 
                 </View>
 
-                {index < branches.length - 1 && (
-                  <View style={styles.rowDivider} />
-                )}
-
-              </View>
-
-            ))}
+              ))
+            )}
 
           </View>
+
+          {totalPages > 1 && (
+            <View style={styles.paginationContainer}>
+              <TouchableOpacity
+                disabled={currentPage === 1}
+                onPress={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                style={[styles.paginationButton, currentPage === 1 && styles.paginationButtonDisabled]}
+              >
+                <Text style={styles.paginationButtonText}>← Previous</Text>
+              </TouchableOpacity>
+              <Text style={styles.paginationText}>Page {currentPage} of {totalPages}</Text>
+              <TouchableOpacity
+                disabled={currentPage === totalPages}
+                onPress={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                style={[styles.paginationButton, currentPage === totalPages && styles.paginationButtonDisabled]}
+              >
+                <Text style={styles.paginationButtonText}>Next →</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
         </View>
 
       </ScrollView>
-
-      {/* CREATE BRANCH MODAL */}
 
       <Modal visible={isModalOpen} transparent animationType="fade">
 
@@ -275,7 +422,9 @@ const BranchAccountManager = () => {
 
             <View style={styles.modalHeader}>
 
-              <Text style={styles.modalTitle}>Create Account</Text>
+              <Text style={styles.modalTitle}>
+                {editingBranch ? 'Edit branch' : 'Create branch'}
+              </Text>
 
               <TouchableOpacity
                 onPress={() => setIsModalOpen(false)}
@@ -286,50 +435,19 @@ const BranchAccountManager = () => {
 
             </View>
 
-            <View style={styles.inputContainer}>
-
-              <Text style={styles.inputLabel}>Branch Name</Text>
-
-              <TextInput
-                placeholder="Enter branch name"
-                placeholderTextColor="#9ca3af"
-                value={formData.branchName}
-                onChangeText={(t) =>
-                  setFormData({ ...formData, branchName: t })
-                }
-                style={styles.input}
-              />
-
-            </View>
+            <Text style={styles.modalHint}>
+              Branches are locations only. Employee logins are created under the Employees tab.
+            </Text>
 
             <View style={styles.inputContainer}>
 
-              <Text style={styles.inputLabel}>Username</Text>
+              <Text style={styles.inputLabel}>Branch name</Text>
 
               <TextInput
-                placeholder="Enter username (branch@gmail.com)"
+                placeholder="e.g. Santa Catalina"
                 placeholderTextColor="#9ca3af"
-                value={formData.email}
-                onChangeText={(t) =>
-                  setFormData({ ...formData, email: t })
-                }
-                style={styles.input}
-              />
-
-            </View>
-
-            <View style={styles.inputContainer}>
-
-              <Text style={styles.inputLabel}>Password</Text>
-
-              <TextInput
-                placeholder="Enter password"
-                placeholderTextColor="#9ca3af"
-                secureTextEntry
-                value={formData.password}
-                onChangeText={(t) =>
-                  setFormData({ ...formData, password: t })
-                }
+                value={branchName}
+                onChangeText={setBranchName}
                 style={styles.input}
               />
 
@@ -338,20 +456,54 @@ const BranchAccountManager = () => {
             <View style={styles.modalButtons}>
 
               <TouchableOpacity
-                onPress={handleDelete}
+                onPress={handleClear}
                 style={styles.clearButton}
               >
-                <Text style={styles.clearButtonText}>Clear</Text>
+                <Text style={styles.clearButtonText}>Cancel</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={handleConfirm}
                 style={styles.confirmButton}
+                disabled={isSaving}
               >
-                <Text style={styles.confirmButtonText}>Confirm</Text>
+                {isSaving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.confirmButtonText}>
+                    {editingBranch ? 'Save changes' : 'Confirm'}
+                  </Text>
+                )}
               </TouchableOpacity>
 
             </View>
+
+            {editingBranch && (
+              <TouchableOpacity
+                onPress={toggleEditingBranchStatus}
+                style={[
+                  editingBranch.is_active === false
+                    ? styles.reactivateBranchButton
+                    : styles.deactivateBranchButton,
+                  isUpdatingStatus && styles.buttonDisabled,
+                ]}
+                disabled={isUpdatingStatus}
+              >
+                {isUpdatingStatus ? (
+                  <ActivityIndicator color={editingBranch.is_active === false ? '#22c55e' : '#ef4444'} />
+                ) : (
+                  <Text
+                    style={
+                      editingBranch.is_active === false
+                        ? styles.reactivateBranchText
+                        : styles.deactivateBranchText
+                    }
+                  >
+                    {editingBranch.is_active === false ? 'Reactivate branch' : 'Deactivate branch'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
 
           </View>
 
@@ -365,14 +517,11 @@ const BranchAccountManager = () => {
 
 export default BranchAccountManager;
 
-/* YOUR STYLES REMAIN EXACTLY THE SAME BELOW */
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
   },
-
   headerContent: {
     position: 'relative',
   },
@@ -458,8 +607,39 @@ const styles = StyleSheet.create({
     fontSize: 15,
     letterSpacing: 0.3,
   },
+  filterBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: '#f8fafc',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#dbeafe',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+  },
+  sortButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#3b82f6',
+  },
   tableContent: {
     paddingVertical: 8,
+  },
+  loadingState: {
+    minHeight: 220,
+    alignItems: "center",
+    justifyContent: "center",
   },
   branchRowWrapper: {
     marginHorizontal: 4,
@@ -506,36 +686,65 @@ const styles = StyleSheet.create({
   branchInfo: {
     flex: 1,
   },
+  branchTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 4,
+  },
   branchName: {
     fontSize: 17,
     fontWeight: '700',
     color: '#1e293b',
-    marginBottom: 4,
     letterSpacing: -0.2,
+    flexShrink: 1,
+  },
+  inlineActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
+  },
+  editButtonInline: {
+    padding: 8,
   },
   branchUsername: {
     fontSize: 13,
     color: '#64748b',
     fontWeight: '500',
   },
-  viewButton: {
+  paginationContainer: {
     flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#3b82f6',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 12,
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 5,
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    backgroundColor: '#f8fafc',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
   },
-  viewButtonText: {
+  paginationButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#3b82f6',
+    minWidth: 104,
+    alignItems: 'center',
+  },
+  paginationButtonDisabled: {
+    backgroundColor: '#cbd5e1',
+  },
+  paginationButtonText: {
     color: '#ffffff',
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 12,
+  },
+  paginationText: {
+    color: '#475569',
+    fontWeight: '700',
+    fontSize: 13,
   },
   modalOverlay: {
     flex: 1,
@@ -571,6 +780,13 @@ const styles = StyleSheet.create({
     color: '#1e293b',
     letterSpacing: -0.5,
   },
+  modalHint: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    fontSize: 13,
+    color: '#64748b',
+    lineHeight: 18,
+  },
   closeButton: {
     width: 36,
     height: 36,
@@ -582,6 +798,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     marginBottom: 20,
     paddingHorizontal: 24,
+    marginTop: 8,
   },
   inputLabel: {
     fontSize: 14,
@@ -630,6 +847,39 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: 0.3,
   },
+  deactivateBranchButton: {
+    marginHorizontal: 24,
+    marginBottom: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#ef4444',
+    alignItems: 'center',
+  },
+  deactivateBranchText: {
+    color: '#ef4444',
+    fontWeight: '700',
+    fontSize: 16,
+    letterSpacing: 0.3,
+  },
+  reactivateBranchButton: {
+    marginHorizontal: 24,
+    marginBottom: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#22c55e',
+    alignItems: 'center',
+  },
+  reactivateBranchText: {
+    color: '#22c55e',
+    fontWeight: '700',
+    fontSize: 16,
+    letterSpacing: 0.3,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
   confirmButton: {
     flex: 1,
     paddingVertical: 16,
@@ -661,7 +911,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 8,
-    zIndex: 1000, // Added high z-index to header
+    zIndex: 1000,
   },
   headerText: {
     fontSize: 24,
@@ -669,7 +919,6 @@ const styles = StyleSheet.create({
     color: "#1e293b",
     letterSpacing: -0.5,
   },
-  
   headerLeft: {
     flexDirection: "column",
     position: "relative",
@@ -684,9 +933,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
-    elevation: 999, // Very high elevation for dropdown
+    elevation: 999,
     minWidth: 120,
-    zIndex: 9999, // Extremely high z-index
+    zIndex: 9999,
   },
   dropdownItem: {
     paddingVertical: 12,
@@ -695,16 +944,16 @@ const styles = StyleSheet.create({
     borderBottomColor: "#e2e8f0",
   },
   dropdownItemLast: {
-    borderBottomWidth: 0, // Remove border from last item
+    borderBottomWidth: 0,
   },
   dropdownText: {
     fontSize: 14,
     color: "#1e293b",
     fontWeight: "600",
   },
-profileContainer: {
+  profileContainer: {
     position: "relative",
-    zIndex: 2000, // Higher z-index for profile container
+    zIndex: 2000,
   },
   profileBtn: {
     padding: 6,

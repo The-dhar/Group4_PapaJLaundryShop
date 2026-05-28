@@ -1,9 +1,18 @@
+import { useAuth } from '@/contexts/AuthContext';
+import { BranchPagesProvider } from '@/contexts/BranchPagesContext';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import React from 'react';
 
 export default function BranchPagesLayout() {
+  const { token } = useAuth();
+
+  if (!token) {
+    return <Redirect href="/(openingApps)/login" />;
+  }
+
   return (
+    <BranchPagesProvider>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -31,6 +40,18 @@ export default function BranchPagesLayout() {
           ),
         }}
       />
+
+      {/* Reports */}
+      <Tabs.Screen
+        name="reports"
+        options={{
+          title: 'Reports',
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="bar-chart-outline" size={26} color={color} />
+          ),
+        }}
+      />
     </Tabs>
+    </BranchPagesProvider>
   );
 }

@@ -1,21 +1,78 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { BsList } from 'react-icons/bs';
 import Sidebar from './sidebar';
-import Header from './header';
 import '../componentstyle/dashboardlayoutstyle.css';
 
+const MOBILE_BREAKPOINT = 768;
+
 const DashboardLayout = ({ children }) => {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false
+  );
+
+  useEffect(() => {
+    const updateViewport = () => {
+      setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
+    };
+
+    updateViewport();
+    window.addEventListener('resize', updateViewport);
+    return () => window.removeEventListener('resize', updateViewport);
+  }, []);
+
+  const sidebarOpen = isMobile ? mobileSidebarOpen : desktopSidebarOpen;
 
   const toggleSidebar = () => {
-    setSidebarOpen(!sidebarOpen);
+    if (isMobile) {
+      setMobileSidebarOpen((prev) => !prev);
+      return;
+    }
+
+    setDesktopSidebarOpen((prev) => !prev);
+  };
+
+  const closeSidebarOnMobile = () => {
+    if (isMobile) {
+      setMobileSidebarOpen(false);
+    }
   };
 
   return (
-    <div className={`dashboard-layout ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
-      <Sidebar sidebarOpen={sidebarOpen} />
+    <div
+      className={`dashboard-layout ${isMobile ? 'is-mobile' : 'is-desktop'} ${
+        sidebarOpen ? 'sidebar-open' : 'sidebar-closed'
+      }`}
+    >
+      {isMobile && !sidebarOpen && (
+        <button
+          type="button"
+          className="mobile-menu-btn"
+          aria-label="Open navigation menu"
+          aria-expanded={sidebarOpen}
+          onClick={toggleSidebar}
+        >
+          <BsList />
+        </button>
+      )}
+
+      <Sidebar
+        sidebarOpen={sidebarOpen}
+        toggleSidebar={toggleSidebar}
+        onNavigate={closeSidebarOnMobile}
+      />
+
+      {isMobile && sidebarOpen && (
+        <button
+          type="button"
+          className="sidebar-overlay"
+          aria-label="Close navigation menu"
+          onClick={closeSidebarOnMobile}
+        />
+      )}
 
       <div className="main-wrapper">
-        <Header toggleSidebar={toggleSidebar} />
         <main className="main-content">
           {children}
         </main>

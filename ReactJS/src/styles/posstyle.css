@@ -10,9 +10,11 @@ body {
     justify-content: center;
     align-items: flex-start;
     width: 100%;
-    padding: 10px;
+    height: 100%;
+    min-height: 0;
+    padding: 12px;
     box-sizing: border-box;
-    height: calc(100vh - 80px);
+    overflow: hidden;
 }
 
 
@@ -25,6 +27,8 @@ body {
     width: 100%;
     max-width: 1800px;
     height: 100%;
+    min-height: 0;
+    align-items: stretch;
 }
 
 
@@ -38,6 +42,7 @@ body {
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -51,6 +56,7 @@ body {
 
 .content-wrapper {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding-right: 8px;
 }
@@ -62,6 +68,39 @@ body {
     width: 100%;
 }
 
+/* POS: service list loading (replaces hardcoded placeholder cards until API returns) */
+.pos-services-loading {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    min-height: 200px;
+    padding: 24px;
+}
+
+.pos-services-loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #e2e8f0;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: posServiceSpin 0.85s linear infinite;
+}
+
+@keyframes posServiceSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.pos-services-loading-text {
+    font-size: 14px;
+    color: #64748b;
+    font-weight: 600;
+}
+
 .small-card {
     border-radius: 10px;
     padding: 15px;
@@ -69,7 +108,7 @@ body {
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
     cursor: pointer;
-    background: #87b5d5;
+    background: #ffffff;
     text-align: center;
 }
 
@@ -108,7 +147,10 @@ body {
     border-radius: 15px;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
     height: 100%;
+    min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
 }
 
 .for-receipt-information {
@@ -134,6 +176,12 @@ body {
     width: 100%;
 }
 
+.for-receipt-search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+}
+
 .for-receipt-searchbar {
     display: flex;
     align-items: center;
@@ -143,6 +191,46 @@ body {
     flex: 1;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     border: 1px solid #aaa;
+}
+
+.pos-customer-suggestions {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 4px);
+    z-index: 20;
+    max-height: 220px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+    margin: 0;
+    padding: 4px 0;
+    list-style: none;
+}
+
+.pos-customer-suggestions li button {
+    width: 100%;
+    text-align: left;
+    padding: 10px 14px;
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    cursor: pointer;
+    color: #222;
+}
+
+.pos-customer-suggestions li button:hover {
+    background: #e8f0fe;
+}
+
+.pos-customer-suggestions .pos-suggestion-meta {
+    display: block;
+    font-size: 12px;
+    color: #666;
+    font-weight: 400;
+    margin-top: 2px;
 }
 
 .for-receipt-searchicon {
@@ -181,17 +269,6 @@ body {
     justify-content: space-between;
     align-items: center;
     gap: 10px;
-}
-
-.for-receipt-generator {
-    font-weight: 600;
-    font-size: 14px;
-    color: #333;
-    background-color: rgb(199, 199, 199);
-    flex: 1;
-    border-radius: 10px;
-    padding: 10px 15px;
-    border: 1px solid #aaa;
 }
 
 .for-receipt-calendar {
@@ -276,7 +353,8 @@ body {
     color: #333;
 }
 
-.payment-option input[type="radio"] {
+.payment-option input[type="radio"],
+.payment-option input[type="checkbox"] {
     cursor: pointer;
 }
 
@@ -327,15 +405,25 @@ body {
     display: flex;
     flex-direction: column;
     height: 100%;
-    overflow-y: auto;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .for-receipt-totalitems {
-    flex: 1;
+    flex: 0 0 auto;
+    max-height: 320px;
     overflow-y: auto;
+    overflow-x: auto;
     border-top: 2px solid #e3e8f0;
     padding-top: 10px;
-    margin-bottom: 15px;
+    margin-bottom: 0;
+}
+
+.pos-empty-services {
+    padding: 14px 10px;
+    text-align: center;
+    font-size: 13px;
+    color: #64748b;
 }
 
 .mini-item-row {
@@ -425,6 +513,7 @@ body {
 .for-receipt-button {
     display: flex;
     gap: 10px;
+    margin-top: 10px;
     width: 100%;
 }
 
@@ -458,6 +547,11 @@ body {
     background: #166534;
 }
 
+.for-receipt-savebtn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
 .error-text {
     color: #dc2626;
     font-weight: 600;
@@ -474,33 +568,196 @@ body {
         grid-template-columns: 1fr 1fr;
         grid-template-rows: auto auto;
     }
+
     .Service-item {
         grid-column: 1 / 2;
         grid-row: 1 / 2;
     }
+
     .receipt-section {
         grid-column: 2 / 3;
         grid-row: 1 / 2;
     }
+
     .total-section {
         grid-column: 1 / 3;
         grid-row: 2 / 3;
-        max-height: 500px;
+        max-height: none;
     }
 }
 
 @media (max-width: 768px) {
+    .pos-wrapper {
+        padding: 8px 6px;
+        height: auto;
+        overflow: visible;
+        overflow-x: hidden;
+    }
+
     .pos-grid {
         grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto;
+        grid-auto-flow: row;
+        gap: 14px;
+        height: auto;
+        width: 100%;
+        max-width: 100%;
     }
+
     .Service-item,
     .receipt-section,
     .total-section {
-        grid-column: 1 / 2;
+        grid-column: 1 / -1;
+        grid-row: auto !important;
         max-height: none;
+        height: auto;
+        overflow: visible;
+        min-height: auto;
+        width: 100%;
     }
+
+    .Service-item,
+    .receipt-section,
+    .total-section {
+        padding: 12px;
+    }
+
+    .content-wrapper {
+        overflow: visible;
+        padding-right: 0;
+    }
+
+    .laundry-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .for-receipt,
+    .payment-box,
+    .extras-box {
+        padding: 12px;
+    }
+
+    .for-receipt-top {
+        flex-wrap: wrap;
+    }
+
+    .for-receipt-add-customer {
+        width: 100%;
+    }
+
     .payment-extras-row {
         grid-template-columns: 1fr;
+    }
+
+    .for-receipt-output-customername > div {
+        flex-wrap: wrap;
+    }
+
+    .for-receipt-output-customername label,
+    .payment-option,
+    .payment-option span,
+    .for-receipt-customerinput,
+    .for-receipt-date,
+    .for-receipt-add-customer,
+    .for-receipt-searchbar {
+        max-width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+    }
+
+    .payment-option span {
+        overflow-wrap: anywhere;
+    }
+
+    .for-receipt-totalitems {
+        max-height: none;
+        overflow-x: hidden;
+    }
+
+    .container-information {
+        margin-top: auto;
+    }
+
+    .for-receipt-totals {
+        margin-bottom: 10px;
+    }
+
+    .mini-item-row,
+    .mini-item-header {
+        min-width: 0;
+        grid-template-columns: 1.4fr 1fr 0.9fr 0.8fr auto;
+        gap: 8px;
+        font-size: 11px;
+    }
+
+    .mini-item-notes {
+        display: none;
+    }
+
+    .for-receipt-button {
+        flex-direction: column;
+        margin-top: 8px;
+    }
+}
+
+@media (max-width: 480px) {
+    .Service-item-title {
+        font-size: 18px;
+        margin-bottom: 10px;
+    }
+
+    .small-card {
+        padding: 10px;
+    }
+
+    .small-card h4 {
+        font-size: 12px;
+    }
+
+    .for-receipt-top,
+    .for-receipt-bottom,
+    .for-receipt,
+    .payment-extras-row {
+        gap: 8px;
+    }
+
+    .for-receipt-add-customer,
+    .for-receipt-date,
+    .for-receipt-customerinput,
+    .for-receipt-clear,
+    .for-receipt-savebtn {
+        font-size: 13px;
+    }
+
+    .total-row {
+        font-size: 13px;
+    }
+
+    .total-row:last-child {
+        font-size: 15px;
+    }
+}
+
+@media (max-width: 390px) {
+    .pos-wrapper {
+        padding: 6px 4px;
+    }
+
+    .Service-item,
+    .receipt-section,
+    .total-section {
+        padding: 10px;
+    }
+
+    .mini-item-row,
+    .mini-item-header {
+        grid-template-columns: 1.5fr 0.9fr 0.8fr auto;
+        gap: 6px;
+        font-size: 10px;
+    }
+
+    .mini-item-laundryType {
+        display: none;
     }
 }
 
@@ -537,27 +794,42 @@ body {
     background: #555;
 }
 
-.for-receipt-searchbar{
-position:relative;
+.mini-item-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
 }
 
-.search-results{
-position:absolute;
-top:40px;
-left:0;
-width:100%;
-background:white;
-border-radius:10px;
-box-shadow:0 4px 10px rgba(0,0,0,0.1);
-z-index:100;
+.mini-item-edit {
+    color: #2e7d32;
+    /* Green */
+    border: 1px solid #2e7d32;
+    background: none;
+    padding: 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: 0.2s;
 }
 
-.search-result-item{
-padding:10px 14px;
-cursor:pointer;
-font-size:14px;
+.mini-item-edit:hover {
+    background-color: #e8f5e9;
 }
 
-.search-result-item:hover{
-background:#f5f5f5;
+.mini-item-remove {
+    color: #d32f2f;
+    /* Red */
+    border: 1px solid #d32f2f;
+    background: none;
+    padding: 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: 0.2s;
+}
+
+.mini-item-remove:hover {
+    background-color: #ffebee;
 }

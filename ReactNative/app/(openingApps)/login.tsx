@@ -1,28 +1,38 @@
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "expo-router";
+import React, { useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
+  Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  Image,
-  Alert
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from "../config/api";
+import { API_URL } from "../../config/api";
+
+/** Shop owner only on mobile; clerks/staff use the web app. */
+const MOBILE_ALLOWED_ROLES = ['owner'];
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [restrictedModalVisible, setRestrictedModalVisible] = useState(false);
   const router = useRouter();
+  const { setSession } = useAuth();
 
   const handleLogin = async () => {
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
     try {
 
       const response = await fetch(`${API_URL}/login`, {
@@ -40,15 +50,20 @@ export default function LoginScreen() {
       const data = await response.json();
 
       if (response.ok) {
+        const u = data.user as Record<string, unknown> | undefined;
+        const role = String(u?.role ?? '').toLowerCase();
 
-        // Save Sanctum token
-        await AsyncStorage.setItem('token', data.token);
+        if (!MOBILE_ALLOWED_ROLES.includes(role)) {
+          setRestrictedModalVisible(true);
+          return;
+        }
 
-        // Optional: save user info
-        await AsyncStorage.setItem('user', JSON.stringify(data.user));
+        setSession(
+          data.token,
+          u && typeof u === 'object' ? u : {}
+        );
 
         router.replace('/(tabs)/dashboard');
-
       } else {
         Alert.alert('Login Failed', data.message);
       }
@@ -56,6 +71,8 @@ export default function LoginScreen() {
     } catch (error) {
       console.error(error);
       Alert.alert('Error', 'Cannot connect to server');
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -69,65 +86,101 @@ export default function LoginScreen() {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
 
-          {/* Logo */}
-          <View style={styles.logoContainer}>
-            <View style={styles.logoCircle}>
+          <View style={styles.headerContainer}>
+            <View style={styles.logoWrapper}>
               <Image
                 source={require('../../assets/images/papaj logo.png')}
                 style={styles.logoImage}
               />
             </View>
+            <Text style={styles.brandName}>PAPA J&apos;s</Text>
+            <Text style={styles.brandSubtitle}>Laundry Shop</Text>
+          </View>
 
-            <View style={styles.logoTextContainer}>
-              <Text style={styles.brandName}>PAPA J's</Text>
-              <Text style={styles.brandSubtitle}>Laundry Shop</Text>
+          <View style={styles.card}>
+            <Text style={styles.welcomeText}>Welcome Back!</Text>
+            <Text style={styles.welcomeSubtext}>Please sign in to continue</Text>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Email</Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email"
+                  placeholderTextColor="#A0ABC0"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!isLoggingIn}
+                />
+              </View>
             </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Password"
+                  placeholderTextColor="#A0ABC0"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!isLoggingIn}
+                />
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.loginButton, isLoggingIn && styles.loginButtonDisabled]}
+              onPress={handleLogin}
+              disabled={isLoggingIn}
+              activeOpacity={0.85}
+            >
+              {isLoggingIn ? (
+                <View style={styles.loginButtonInner}>
+                  <ActivityIndicator color="#fff" size="small" style={styles.loginSpinner} />
+                  <Text style={styles.loginButtonText}>Logging in...</Text>
+                </View>
+              ) : (
+                <Text style={styles.loginButtonText}>Log In</Text>
+              )}
+            </TouchableOpacity>
           </View>
-
-          {/* Welcome */}
-          <Text style={styles.welcomeText}>Welcome Back</Text>
-          <Text style={styles.welcomeSubtext}>to Papa J's</Text>
-
-          {/* Email */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Email..."
-              placeholderTextColor="#999"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-
-          {/* Password */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Password..."
-              placeholderTextColor="#999"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-
-          {/* Button */}
-          <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-            <Text style={styles.loginButtonText}>Log In</Text>
-          </TouchableOpacity>
 
         </ScrollView>
 
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={restrictedModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRestrictedModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Mobile app</Text>
+            <Text style={styles.modalBody}>
+              Only the shop owner can sign in here. Clerk and staff accounts should use the web application.
+            </Text>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => setRestrictedModalVisible(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -135,35 +188,46 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#E6F0FA',
   },
 
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#E6F0FA',
   },
 
   scrollContent: {
     flexGrow: 1,
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 40,
   },
 
-  logoContainer: {
-    flexDirection: 'row',
+  headerContainer: {
     alignItems: 'center',
-    marginBottom: 50,
+    marginBottom: 40,
   },
 
-  logoCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    overflow: 'hidden',
+  logoWrapper: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#005AAA',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 15,
+    marginBottom: 15,
+    borderWidth: 4,
+    borderColor: '#E6F0FA',
+    overflow: 'hidden',
   },
 
   logoImage: {
@@ -172,34 +236,50 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
   },
 
-  logoTextContainer: {
-    justifyContent: 'center',
-  },
-
   brandName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2c3e50',
+    fontSize: 32,
+    fontWeight: '900',
+    color: '#005AAA',
+    letterSpacing: 2,
+    textShadowColor: 'rgba(0, 90, 170, 0.15)',
+    textShadowOffset: { width: 1, height: 2 },
+    textShadowRadius: 4,
   },
 
   brandSubtitle: {
-    fontSize: 14,
-    color: '#4169E1',
-    marginTop: -2,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#3498DB',
+    letterSpacing: 3,
+    textTransform: 'uppercase',
+    marginTop: 4,
+  },
+
+  card: {
+    width: '100%',
+    maxWidth: 460,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 30,
+    padding: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 15 },
+    shadowOpacity: 0.1,
+    shadowRadius: 30,
+    elevation: 20,
   },
 
   welcomeText: {
-    fontSize: 32,
-    fontWeight: '600',
-    color: '#2c3e50',
-    marginBottom: 4,
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#1A365D',
+    marginBottom: 5,
   },
 
   welcomeSubtext: {
-    fontSize: 32,
-    fontWeight: '600',
-    color: '#2c3e50',
-    marginBottom: 40,
+    fontSize: 15,
+    color: '#718096',
+    marginBottom: 30,
+    fontWeight: '500',
   },
 
   inputContainer: {
@@ -208,37 +288,114 @@ const styles = StyleSheet.create({
   },
 
   label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2c3e50',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4A5568',
     marginBottom: 8,
+    marginLeft: 4,
+  },
+
+  inputWrapper: {
+    backgroundColor: '#F7FAFC',
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
   },
 
   input: {
     width: '100%',
-    height: 50,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 16,
+    height: 55,
+    paddingHorizontal: 20,
     fontSize: 16,
-    backgroundColor: '#fff',
-    color: '#2c3e50',
+    color: '#2D3748',
+    fontWeight: '500',
   },
 
   loginButton: {
     width: '100%',
-    height: 50,
-    backgroundColor: '#4169E1',
-    borderRadius: 8,
+    height: 60,
+    backgroundColor: '#005AAA',
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 10,
+    shadowColor: '#005AAA',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 15,
+    elevation: 10,
+  },
+
+  loginButtonDisabled: {
+    opacity: 0.85,
+  },
+
+  loginButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  loginSpinner: {
+    marginRight: 10,
   },
 
   loginButtonText: {
     color: '#fff',
     fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+
+  modalCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1A365D',
+    marginBottom: 12,
+  },
+
+  modalBody: {
+    fontSize: 15,
+    color: '#475569',
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+
+  modalButton: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#005AAA',
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    borderRadius: 10,
+  },
+
+  modalButtonText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '600',
   },
 });

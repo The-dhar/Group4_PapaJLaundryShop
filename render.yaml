@@ -17,3 +17,5 @@ services:
         value: pgsql
       - key: DB_PORT
         value: "5432"
+
+      

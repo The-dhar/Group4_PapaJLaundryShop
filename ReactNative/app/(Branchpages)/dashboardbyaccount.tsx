@@ -1,23 +1,26 @@
-import { useRouter } from "expo-router";
-import React, { useState } from 'react';
-import { Dimensions, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Pressable } from 'react-native';
+import { useAuth } from "@/contexts/AuthContext";
+import { useBranchPages } from "@/contexts/BranchPagesContext";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Pressable, useWindowDimensions } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LineChart } from 'react-native-chart-kit';
-
-const { width } = Dimensions.get('window');
+import { useFocusEffect } from "@react-navigation/native";
+import { API_URL } from "../../config/api";
 
 export default function RevenueDashboard() {
+  const { width } = useWindowDimensions();
   const [revenueView, setRevenueView] = useState("weekly");
-  const router = useRouter(); 
+  const router = useRouter();
+  const { token } = useAuth();
+  const { setBranch } = useBranchPages();
+  const { branchId, branchName } = useLocalSearchParams<{ branchId?: string; branchName?: string }>();
 
-  const receipts = [
-    { id: 'ORD-100', name: 'Johnny', status: 'Completed', total: '₱250.00' },
-    { id: 'ORD-101', name: 'Khymer', status: 'Completed', total: '₱250.00' },
-    { id: 'ORD-102', name: 'Rashdy', status: 'Completed', total: '₱250.00' },
-    { id: 'ORD-103', name: 'Paul', status: 'Completed', total: '₱250.00' },
-    { id: 'ORD-104', name: 'Shadla', status: 'Completed', total: '₱250.00' },
-    { id: 'ORD-105', name: 'Amani', status: 'Completed', total: '₱250.00' },
-    { id: 'ORD-106', name: 'Dharelle', status: 'Completed', total: '₱250.00' }
-  ];
+  useEffect(() => {
+    setBranch(branchId ?? null, branchName ?? null);
+  }, [branchId, branchName, setBranch]);
+  const [receipts, setReceipts] = useState<any[]>([]);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const [tooltipPos, setTooltipPos] = useState({
     x: 0,
@@ -26,15 +29,137 @@ export default function RevenueDashboard() {
     visible: false
   });
 
-  const weeklyRevenueData = [20000, 85000, 45000, 15000, 5000, 35000, 55000];
-  const monthlyRevenueData = [100000, 200000, 300000, 400000];
+  const loadBranchTransactions = useCallback(async () => {
+    setFetchError(null);
+    try {
+      if (!token) {
+        setReceipts([]);
+        setFetchError("You are not signed in. Please log in again.");
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/transactions?include_archived=1`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        setReceipts([]);
+        setFetchError(`Could not load branch data (error ${response.status}).`);
+        return;
+      }
+
+      let data: unknown;
+      try {
+        data = await response.json();
+      } catch {
+        setReceipts([]);
+        setFetchError("Received an invalid response from the server.");
+        return;
+      }
+
+      const list = Array.isArray(data) ? data : [];
+      const branchTx = list.filter(
+        (txn: any) => String(txn.branch_id) === String(branchId || "")
+      );
+      setReceipts(branchTx);
+    } catch (error) {
+      console.log(error);
+      setReceipts([]);
+      setFetchError("Something went wrong. Check your connection and try again.");
+    }
+  }, [branchId, token]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadBranchTransactions();
+    }, [loadBranchTransactions])
+  );
+
+  const now = new Date();
+  const weeklyRevenueData = [0, 0, 0, 0, 0, 0, 0];
+  const monthlyRevenueData = [0, 0, 0, 0];
+
+  receipts.forEach((txn) => {
+    const created = new Date(txn.created_at || now);
+    const amount = Number(txn.amount || 0);
+
+    const monday = new Date(now);
+    const day = monday.getDay();
+    const diffToMonday = (day + 6) % 7;
+    monday.setDate(monday.getDate() - diffToMonday);
+    monday.setHours(0, 0, 0, 0);
+    const diffDays = Math.floor((created.getTime() - monday.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays >= 0 && diffDays < 7) {
+      weeklyRevenueData[diffDays] += amount;
+    }
+
+    if (created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear()) {
+      const bucket = Math.min(3, Math.floor((created.getDate() - 1) / 7));
+      monthlyRevenueData[bucket] += amount;
+    }
+  });
+
+  const dailyRevenueData = useMemo(() => {
+    const dailyData = [0, 0, 0, 0, 0, 0, 0];
+    receipts.forEach((txn) => {
+      const created = new Date(txn.created_at || now);
+      const amount = Number(txn.amount || 0);
+      const dayDiff = Math.ceil((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
+      if (dayDiff >= 0 && dayDiff < 7) {
+        dailyData[6 - dayDiff] += amount;
+      }
+    });
+    return dailyData;
+  }, [receipts]);
+
+  const yearlyRevenueData = useMemo(() => {
+    const yearlyData = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    receipts.forEach((txn) => {
+      const created = new Date(txn.created_at || now);
+      const amount = Number(txn.amount || 0);
+      if (created.getFullYear() === now.getFullYear()) {
+        yearlyData[created.getMonth()] += amount;
+      }
+    });
+    return yearlyData;
+  }, [receipts]);
+
+  const recentReceiptsForTable = useMemo(
+    () =>
+      [...receipts]
+        .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+        .slice(0, 5),
+    [receipts]
+  );
 
   const currentRevenue = revenueView === "weekly" ? weeklyRevenueData : monthlyRevenueData;
   const currentLabels = revenueView === "weekly" 
     ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] 
     : ["W1", "W2", "W3", "W4"];
 
-  const chartWidth = width - 32;
+    const finalRevenue = revenueView === "daily" 
+      ? dailyRevenueData 
+      : revenueView === "yearly" 
+        ? yearlyRevenueData 
+        : currentRevenue;
+
+    const finalLabels = revenueView === "daily"
+      ? ["7d", "6d", "5d", "4d", "3d", "2d", "1d"]
+      : revenueView === "yearly"
+        ? ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        : currentLabels;
+
+  const chartBaseWidth = Math.max(220, width - 80);
+  const chartWidthForLabels = useCallback(
+    (labels: string[]) => {
+      const minPerLabel = revenueView === "yearly" ? 48 : 40;
+      return Math.max(chartBaseWidth, Math.max(1, labels.length) * minPerLabel);
+    },
+    [chartBaseWidth, revenueView]
+  );
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -48,10 +173,23 @@ export default function RevenueDashboard() {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <View style={styles.headerContent}>
-            <Text style={styles.headerTitle}>Branch Dashboard</Text>
+            <Text style={styles.headerTitle}>{branchName ? `${branchName} Dashboard` : "Branch Dashboard"}</Text>
             <View style={styles.headerAccent} />
           </View>
            </View>
+
+        {fetchError ? (
+          <View style={styles.errorBanner} accessibilityRole="alert">
+            <Text style={styles.errorBannerText}>{fetchError}</Text>
+            <TouchableOpacity
+              style={styles.errorRetryButton}
+              onPress={() => loadBranchTransactions()}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.errorRetryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {/* Revenue Card */}
         <View style={styles.revenueCard}>
@@ -74,51 +212,75 @@ export default function RevenueDashboard() {
                   Monthly
                 </Text>
               </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.filterButton, revenueView === "daily" && styles.filterBtnActive]}
+                  onPress={() => setRevenueView("daily")}
+                >
+                  <Text style={[styles.filterText, revenueView === "daily" && styles.filterTextActive]}>
+                    Daily
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.filterButton, revenueView === "yearly" && styles.filterBtnActive]}
+                  onPress={() => setRevenueView("yearly")}
+                >
+                  <Text style={[styles.filterText, revenueView === "yearly" && styles.filterTextActive]}>
+                    Yearly
+                  </Text>
+                </TouchableOpacity>
             </View>
           </View>
 
           <View style={styles.chartWrapper}>
-            <Pressable
-              onPressIn={() => setTooltipPos(prev => ({ ...prev, visible: true }))}
-              onPressOut={() => setTooltipPos(prev => ({ ...prev, visible: false }))}
-            >
-              {tooltipPos.visible && (
-                <View style={[styles.tooltip, { left: tooltipPos.x - 40, top: tooltipPos.y - 50 }]}>
-                  <Text style={styles.tooltipText}>
-                    ₱{tooltipPos.value.toLocaleString()}
-                  </Text>
-                </View>
-              )}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <Pressable
+                onPressIn={() => setTooltipPos(prev => ({ ...prev, visible: true }))}
+                onPressOut={() => setTooltipPos(prev => ({ ...prev, visible: false }))}
+              >
+                {tooltipPos.visible && (
+                  <View style={[styles.tooltip, { left: tooltipPos.x - 40, top: tooltipPos.y - 50 }]}>
+                    <Text style={styles.tooltipText}>
+                      ₱{Number(tooltipPos.value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                )}
 
-              <LineChart
-                data={{
-                  labels: currentLabels,
-                  datasets: [{ data: currentRevenue }],
-                }}
-                width={chartWidth - 48}
-                height={220}
-                yAxisLabel="₱"
-                yAxisSuffix=""
-                yLabelsOffset={10}
-                chartConfig={{
-                  backgroundColor: "#ffffff",
-                  backgroundGradientFrom: "#ffffff",
-                  backgroundGradientTo: "#ffffff",
-                  decimalPlaces: 0,
-                  color: () => `rgba(59, 130, 246, 1)`,
-                  labelColor: () => `#64748b`,
-                  propsForBackgroundLines: { stroke: "#e2e8f0", strokeWidth: 1 },
-                  propsForDots: {
-                    r: "5",
-                    strokeWidth: "2",
-                    stroke: "#3b82f6"
-                  }
-                }}
-                bezier
-                style={styles.chart}
-                onDataPointClick={(data) => setTooltipPos({ x: data.x, y: data.y, value: data.value, visible: true })}
-              />
-            </Pressable>
+                <LineChart
+                  data={{
+                      labels: finalLabels,
+                      datasets: [{ data: finalRevenue }],
+                  }}
+                  width={chartWidthForLabels(finalLabels)}
+                  height={220}
+                  yAxisLabel="₱"
+                  yAxisSuffix=""
+                  yLabelsOffset={10}
+                  xLabelsOffset={revenueView === "yearly" ? 8 : 2}
+                  chartConfig={{
+                    backgroundColor: "#ffffff",
+                    backgroundGradientFrom: "#ffffff",
+                    backgroundGradientTo: "#ffffff",
+                    decimalPlaces: 2,
+                    color: () => `rgba(59, 130, 246, 1)`,
+                    labelColor: () => `#64748b`,
+                    propsForBackgroundLines: { stroke: "#e2e8f0", strokeWidth: 1 },
+                    propsForDots: {
+                      r: "5",
+                      strokeWidth: "2",
+                      stroke: "#3b82f6"
+                    },
+                    propsForLabels: {
+                      fontSize: revenueView === "yearly" ? 10 : 11,
+                    },
+                    formatYLabel: (y: string) => `₱${Number(y).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  }}
+                  bezier
+                  formatYLabel={(yValue) => `₱${Number(yValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  style={styles.chart}
+                  onDataPointClick={(data) => setTooltipPos({ x: data.x, y: data.y, value: data.value, visible: true })}
+                />
+              </Pressable>
+            </ScrollView>
           </View>
         </View>
 
@@ -138,15 +300,15 @@ export default function RevenueDashboard() {
           </View>
 
           {/* Table Rows */}
-          {receipts?.map((r, i) => (
+          {recentReceiptsForTable.map((r, i) => (
             <View
-              key={r.id}
-              style={[styles.tableRow, i !== receipts.length - 1 && styles.tableRowBorder]}
+              key={String(r.id)}
+              style={[styles.tableRow, i !== recentReceiptsForTable.length - 1 && styles.tableRowBorder]}
             >
-              <Text style={[styles.tableCell, { flex: 1 }]}>{r.id}</Text>
-              <Text style={[styles.tableCell, { flex: 2 }]}>{r.name}</Text>
-              <Text style={[styles.tableCell, { flex: 1 }]}>{r.status}</Text>
-              <Text style={[styles.tableCell, { flex: 1, textAlign: 'right' }]}>{r.total}</Text>
+              <Text style={[styles.tableCell, { flex: 1 }]}>{r.receipt || r.id}</Text>
+              <Text style={[styles.tableCell, { flex: 2 }]}>{r.customer_name || 'Unknown'}</Text>
+              <Text style={[styles.tableCell, { flex: 1 }]}>{String(r.payment_status || '').toUpperCase()}</Text>
+              <Text style={[styles.tableCell, { flex: 1, textAlign: 'right' }]}>₱{Number(r.amount || 0).toFixed(2)}</Text>
             </View>
           ))}
         </View>
@@ -222,6 +384,34 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
 
+  errorBanner: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: '#fef2f2',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  errorBannerText: {
+    fontSize: 14,
+    color: '#991b1b',
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  errorRetryButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  errorRetryText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+
   revenueCard: {
     marginHorizontal: 16,
     marginTop: 20,
@@ -241,7 +431,9 @@ const styles = StyleSheet.create({
   revenueHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    gap: 12,
     marginBottom: 20,
   },
 
@@ -254,7 +446,10 @@ const styles = StyleSheet.create({
 
   filterRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
     gap: 8,
+    minWidth: 0,
   },
 
   filterButton: {

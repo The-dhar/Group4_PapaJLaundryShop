@@ -1,13 +1,18 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
-
 import { HapticTab } from '@/components/haptic-tab';
 import { Colors } from '@/constants/theme';
+import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Redirect, Tabs } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import React from 'react';
 
 export default function TabLayout() {
+  const { token } = useAuth();
   const colorScheme = useColorScheme();
+
+  if (!token) {
+    return <Redirect href="/(openingApps)/login" />;
+  }
 
   return (
     <Tabs
@@ -40,7 +45,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Settings',
+          title: 'Emp. Settings',
           tabBarIcon: ({ color }) => (
             <Ionicons size={28} name="settings-outline" color={color} />
           ),
@@ -53,6 +58,16 @@ export default function TabLayout() {
           title: 'Clerk',
           tabBarIcon: ({ color }) => (
             <Ionicons size={28} name="person-outline" color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="employees"
+        options={{
+          title: 'Employees',
+          tabBarIcon: ({ color }) => (
+            <Ionicons size={28} name="people-outline" color={color} />
           ),
         }}
       />

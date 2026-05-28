@@ -1,31 +1,47 @@
 import React, { useState, useEffect } from 'react';
 import '../componentstyle/smallcardModal.css';
+import Swal from 'sweetalert2';
 
 const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
   const [kilos, setKilos] = useState(1);
   const [laundryType, setLaundryType] = useState("wash-and-fold");
   const [notes, setNotes] = useState("");
+  const [pieceCount, setPieceCount] = useState("");
   const [selectedTier, setSelectedTier] = useState(null);
 
   useEffect(() => {
     if (isOpen && item) {
-      setKilos(1);
-      setNotes("");
+      setKilos(item.initialKilos || 1);
+      setNotes(item.initialNotes || "");
+      setPieceCount(
+        item.initialPieceCount != null && item.initialPieceCount !== ""
+          ? String(item.initialPieceCount)
+          : ""
+      );
 
-      // AUTO-SET LAUNDRY TYPE BASED ON CARD NAME
-      if (item.name.toLowerCase().includes("dry")) {
+      if (item.initialType) {
+        setLaundryType(item.initialType);
+      } else if (item.name.toLowerCase().includes("dry")) {
         setLaundryType("dry-only");
       } else {
         setLaundryType("wash-and-fold");
       }
 
       // INITIAL PRICE
-      const initialInfo = calculatePriceInfo(1);
+      const initialInfo = calculatePriceInfo(item.initialKilos || 1);
       setSelectedTier(initialInfo);
     }
   }, [isOpen, item]);
 
   if (!isOpen || !item) return null;
+
+  const parseTierRange = (text) => {
+    const normalized = String(text || '').toLowerCase().replace(/[–—]/g, '-');
+    const nums = normalized.match(/(\d+(\.\d+)?)/g)?.map(Number) || [];
+    if (nums.length >= 2) return { min: nums[0], max: nums[1] };
+    if (nums.length === 1) return { min: nums[0], max: nums[0] };
+    return null;
+  };
 
   /** =======================
    * MAIN PRICING LOGIC
@@ -37,6 +53,27 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
     const name = item.name.toLowerCase();
 
     if (isNaN(kv)) return null;
+
+    // Prefer API-configured tiers when available.
+    if (Array.isArray(item.pricing) && item.pricing.length > 0) {
+      const matched = item.pricing.find((tier) => {
+        const r = parseTierRange(tier.weight);
+        return r ? kv >= r.min && kv <= r.max : false;
+      });
+      if (matched) {
+        return {
+          computedTotal: Number(matched.price || 0),
+          label: `₱${Number(matched.price || 0).toFixed(2)} (${matched.weight})`,
+        };
+      }
+      const last = item.pricing[item.pricing.length - 1];
+      if (last) {
+        return {
+          computedTotal: Number(last.price || 0),
+          label: `₱${Number(last.price || 0).toFixed(2)} (${last.weight})`,
+        };
+      }
+    }
 
     /** ------------------------------
      * FIXED: DRYING SERVICE CARD
@@ -109,6 +146,31 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
     }
 
     /** ----------------------------------------
+     * COMFORTERS
+     * ---------------------------------------- */
+    if (name.includes("comforter")) {
+      if (kv <= 3) return { computedTotal: 150, label: "₱150 (1–3 kg)" };
+
+      if (kv > 3 && kv <= 5) {
+        const extra = (kv - 3) * 50;
+        const total = 150 + extra;
+        return {
+          computedTotal: total,
+          label: `₱${total.toFixed(2)} (₱50 per succeeding kg)`
+        };
+      }
+
+      if (kv > 5) {
+        const cycles = Math.ceil(kv / 5);
+        const total = cycles * 150;
+        return {
+          computedTotal: total,
+          label: `₱${total.toFixed(2)} (${cycles} cycles)`
+        };
+      }
+    }
+
+    /** ----------------------------------------
      * REGULAR CLOTHES
      * ---------------------------------------- */
     if (name.includes("regular")) {
@@ -153,16 +215,28 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
 
   const handleAdd = () => {
     if (!selectedTier) {
-      alert("Invalid pricing");
+      Swal.fire({
+        title: 'Invalid pricing',
+        text: 'Please enter a valid kilos value first.',
+        icon: 'warning',
+        width: 360,
+      });
       return;
     }
+
+    const parsedPieces =
+      pieceCount === "" || pieceCount == null
+        ? null
+        : Math.max(0, parseInt(String(pieceCount).replace(/\D/g, ""), 10) || 0);
 
     onAdd(
       item,
       null,
       kilos,
       laundryType,
-      { computedTotal: selectedTier.computedTotal, unit: "computed" }
+      { computedTotal: selectedTier.computedTotal, unit: "computed" },
+      notes,
+      parsedPieces && parsedPieces > 0 ? parsedPieces : null
     );
 
     handleCancel();
@@ -172,6 +246,7 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
     setKilos(1);
     setLaundryType("wash-and-fold");
     setNotes("");
+    setPieceCount("");
     setSelectedTier(null);
     onClose();
   };
@@ -221,6 +296,19 @@ const SmallcardModal = ({ isOpen, onClose, item, onAdd }) => {
             <div className="modal-select total-box">
               ₱{selectedTier ? selectedTier.computedTotal.toFixed(2) : "0.00"}
             </div>
+          </div>
+
+          <div className="modal-input-group">
+            <label className="modal-label">Piece count (optional):</label>
+            <input
+              type="number"
+              className="modal-kilos-input"
+              min="0"
+              step="1"
+              placeholder="e.g. shirts / items in this line"
+              value={pieceCount}
+              onChange={(e) => setPieceCount(e.target.value)}
+            />
           </div>
 
           <div className="modal-input-group">

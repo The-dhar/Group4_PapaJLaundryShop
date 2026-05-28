@@ -2,6 +2,14 @@
    📋 UNCLAIMED ITEMS STYLES
    ============================ */
 
+/* Center the eye / action button in the Action column */
+.unclaimed-action-cell {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    min-height: 36px;
+}
 
 /* ====== Unclaimed Table Container ====== */
 
@@ -126,26 +134,43 @@
 }
 
 
-/* ====== Overdue Rows ====== */
+/* ====== Overdue Rows (must match JS: warning = 7–29 days, critical = 30+ days) ====== */
 
-.rdt_TableRow.overdue-row {
-    background-color: #fecaca !important;
+.rdt_TableRow.overdue-row--critical {
+    background-color: rgba(254, 202, 202, 0.92) !important;
     border-left: 4px solid #dc2626;
 }
 
-.rdt_TableRow.overdue-row:hover {
+.rdt_TableRow.overdue-row--critical:hover {
     background-color: #fca5a5 !important;
 }
 
-.rdt_TableRow.overdue-row .rdt_TableCell {
+.rdt_TableRow.overdue-row--warning {
+    background-color: rgba(254, 249, 195, 0.75) !important;
+    border-left: 4px solid #ca8a04;
+}
+
+.rdt_TableRow.overdue-row--warning:hover {
+    background-color: rgba(253, 224, 71, 0.5) !important;
+}
+
+.rdt_TableRow.overdue-row--critical .rdt_TableCell,
+.rdt_TableRow.overdue-row--warning .rdt_TableCell {
     background-color: transparent !important;
 }
 
 .overdue-alert-icon {
-    color: #dc2626;
     font-size: 18px;
     margin-left: 8px;
     animation: pulse 2s infinite;
+}
+
+.overdue-alert-icon--critical {
+    color: #dc2626;
+}
+
+.overdue-alert-icon--warning {
+    color: #ca8a04;
 }
 
 @keyframes pulse {
